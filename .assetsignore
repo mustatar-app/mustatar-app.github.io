@@ -1,0 +1,12 @@
+# Files that are part of the project but are not the app itself: never published on Cloudflare.
+.git
+.github
+.gitignore
+.nojekyll
+.assetsignore
+android
+server
+site
+tests
+node_modules
+*.md

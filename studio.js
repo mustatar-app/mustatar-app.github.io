@@ -1,4 +1,4 @@
-/* Jund Notes — Studio: put Arabic and English text on a photo, a video or a colour, in ready Instagram-style looks.
+/* Mustatar — Studio: put Arabic and English text on a photo, a video or a colour, in ready Instagram-style looks.
    Every text can be saved with its look and put back with one tap. Also: post ideas from the week's notes.
    Everything runs on the phone; only "Post ideas" uses the internet. */
 (() => {

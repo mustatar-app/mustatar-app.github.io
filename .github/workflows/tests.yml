@@ -1,0 +1,33 @@
+name: Check the app
+# Runs on every proposed change and on every change to main: the code must be valid and the app
+# must open, show every screen, turn a transcript into a note and send its task to the calendar.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: tests-${{ github.ref }}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: The code is valid
+        run: |
+          for f in *.js server/*.js; do node --check "$f" || exit 1; done
+          for f in *.json .well-known/*.json manifest.webmanifest; do python3 -m json.tool "$f" > /dev/null || { echo "Broken: $f"; exit 1; }; done
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Get the test browser
+        run: pip install playwright==1.* && python -m playwright install --with-deps chromium
+      - name: The app works in a phone-sized browser
+        run: |
+          python3 -m http.server 8765 > /dev/null 2>&1 &
+          sleep 1
+          python3 tests/app_test.py http://localhost:8765/

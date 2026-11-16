@@ -10,6 +10,7 @@
 //   POST /ask-voice   a short spoken question (+ the file being discussed) → what was heard and the answer
 
 const ALLOWED = ['https://mustatar-app.github.io', 'https://dawajund-1.github.io'];
+const CLOUDFLARE_SITE = /^https:\/\/mustatar\.[a-z0-9-]+\.workers\.dev$/;   // the app's own copy on Cloudflare
 let G = 'https://generativelanguage.googleapis.com';  // GEMINI_BASE replaces it only in local tests
 const WRITE_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
 const HEAR_MODELS = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-flash-lite-latest'];
@@ -21,7 +22,7 @@ const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
 const GROQ_STUDY_MODELS = [GROQ_VISION_MODEL, 'openai/gpt-oss-120b'];
 const OPENROUTER_ROUTE = { require_parameters: true, data_collection: 'deny', zdr: true, max_price: { prompt: 0, completion: 0, request: 0 } };
 const VOICE_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
-const OWNER_HASH = 'acbe7ee98a566ab6ed2537fc1d67662eddda3739d19aedde6ee8f89f223fe602';   // sha-256 of the owner code (the code itself is not stored here)
+const OWNER_HASH = '8a5e60651062c57c33c620aa1cae7f15b0581db7d824c80a3357fdc74ef88bf1';   // sha-256 of the owner code (the code itself is not stored here)
 const MAX_BODY = 900_000;            // characters of text: about 150 pages
 const MAX_AUDIO = 95 * 1024 * 1024;  // bytes per audio piece
 const MAX_FILE = 60_000_000;
@@ -53,7 +54,7 @@ const READ = `Read all the text in this photo exactly as it is written, in its o
 Return only the text.`;
 
 function cors(origin) {
-  const ok = ALLOWED.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
+  const ok = ALLOWED.includes(origin) || CLOUDFLARE_SITE.test(origin || '') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',

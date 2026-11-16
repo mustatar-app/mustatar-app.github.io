@@ -35,20 +35,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Is the signing key in place?
+        id: key
+        env:
+          K: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          P: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$K" ] && [ -n "$P" ]; then
+            printf %s "$K" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/mustatar.keystore"
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The signing key is not in GitHub's secrets yet (ANDROID_KEYSTORE_BASE64, ANDROID_KEY_PASSWORD). No app was published."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-java@v4
+        if: steps.key.outputs.ok == 'true'
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.key.outputs.ok == 'true'
         with: { gradle-version: '8.9' }
       - name: Build release APK
+        if: steps.key.outputs.ok == 'true'
         working-directory: android
         env:
           BUILD_NUMBER: ${{ github.run_number }}
+          MUSTATAR_KEYSTORE: ${{ runner.temp }}/mustatar.keystore
+          MUSTATAR_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle --no-daemon assembleRelease
       - name: Publish as a download
+        if: steps.key.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk JundNotes.apk
-          gh release create "apk-${{ github.run_number }}" JundNotes.apk --latest \
-            --title "ملاحظاتي — Android app ${{ github.run_number }}" \
-            --notes "Download JundNotes.apk on your phone and open it to install."
+          cp android/app/build/outputs/apk/release/app-release.apk Mustatar.apk
+          gh release create "apk-${{ github.run_number }}" Mustatar.apk --latest \
+            --title "Mustatar — Android app ${{ github.run_number }}" \
+            --notes "Download Mustatar.apk on your phone and open it to install."
+      - name: Remove the key copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mustatar.keystore"

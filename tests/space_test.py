@@ -11,7 +11,7 @@ Run:  (cd server && npx wrangler dev --port 8787) &   python3 -m http.server 876
 import asyncio, json, sys
 from playwright.async_api import async_playwright
 
-PAGE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8765/"
+PAGE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8765/").rstrip("/") + "/tests/blank.html"
 API = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8787"
 
 HELPERS = """

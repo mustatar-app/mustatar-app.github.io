@@ -10,6 +10,12 @@ if (lang !== 'ar') return;
 document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
 
 const T = {
+'Your account': 'حسابك', 'Your name': 'اسمك', 'Create my account': 'أنشئ حسابي', 'I already have an account': 'لدي حساب',
+'Sign in to keep your notes, calendar and habits in your own private space. They come back on any phone, and nobody else can see them. No password: your fingerprint or face is the key (a passkey).': 'سجّل الدخول لتُحفظ ملاحظاتك وتقويمك وعاداتك في مساحتك الخاصة. تعود إليك على أي جوال، ولا يراها أحد غيرك. بلا كلمة مرور: بصمتك أو وجهك هو المفتاح (مفتاح مرور).',
+'Signed in as': 'مسجّل الدخول باسم', 'Your notes are kept in your own private space.': 'ملاحظاتك محفوظة في مساحتك الخاصة.',
+'Sync now': 'زامِن الآن', 'Add a passkey for another phone': 'أضف مفتاح مرور لجوال آخر', 'Sign out': 'تسجيل الخروج', 'Delete my data': 'احذف بياناتي',
+'This removes your account and everything in your private space, for good. Notes on this phone stay until you remove them.': 'يحذف هذا حسابك وكل ما في مساحتك الخاصة نهائيًا. تبقى الملاحظات على هذا الجوال حتى تحذفها.',
+'Delete my account and data': 'احذف حسابي وبياناتي',
 '+ Add': '+ إضافة', '+ Add text': '+ إضافة نص', '+ New notes': '+ ملاحظات جديدة', '+ habit': '+ عادة',
 '1 day before': 'قبل يوم', '1 hour before': 'قبل ساعة', '10 min before': 'قبل ١٠ دقائق', '10 minutes before': 'قبل ١٠ دقائق', '30 min before': 'قبل ٣٠ دقيقة', '30 minutes before': 'قبل ٣٠ دقيقة',
 '1 · Add what you heard or read': '١ · أضف ما سمعته أو قرأته', '2 · Details': '٢ · التفاصيل', '25 min': '٢٥ دقيقة', '45 min': '٤٥ دقيقة', '60 min': '٦٠ دقيقة',

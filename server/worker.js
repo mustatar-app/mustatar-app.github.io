@@ -9,6 +9,9 @@
 //   POST /ask-file    a question about one attached file (inline JSON or binary multipart)
 //   POST /ask-voice   a short spoken question (+ the file being discussed) → what was heard and the answer
 
+import { UserSpace, Accounts, accountRoutes } from './space.js';
+export { UserSpace, Accounts };   // each person's own database, and the sign-in database (see space.js)
+
 const ALLOWED = ['https://mustatar-app.github.io', 'https://dawajund-1.github.io'];
 const CLOUDFLARE_SITE = /^https:\/\/mustatar\.[a-z0-9-]+\.workers\.dev$/;   // the app's own copy on Cloudflare
 let G = 'https://generativelanguage.googleapis.com';  // GEMINI_BASE replaces it only in local tests
@@ -58,7 +61,7 @@ function cors(origin) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, x-user-key',
+    'Access-Control-Allow-Headers': 'content-type, x-user-key, authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -663,6 +666,10 @@ export default {
     if (path === '/widget' || path.startsWith('/widget/')) return widgetRoutes(req, env, h, path, url);
     if (req.method === 'GET' && /^\/ics\/[a-f0-9]{16,64}\.ics$/.test(path)) return icsFeed(env, path.slice(5, -4));
     if (origin && h['Access-Control-Allow-Origin'] !== origin) return json({ error: 'forbidden' }, 403, h);
+
+    /* ----- accounts and each person's own private space (space.js) ----- */
+    if (path.startsWith('/auth/') || path.startsWith('/space/'))
+      return accountRoutes(req, env, h, path, url, json, o => !!o && cors(o)['Access-Control-Allow-Origin'] === o);
 
     /* ----- read another calendar (Google, Outlook, iCloud…) from its private iCal link ----- */
     if (path === '/ical' && req.method === 'POST') {

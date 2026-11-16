@@ -59,6 +59,10 @@ jobs:
           s=re.sub(r'\[\[kv_namespaces\]\][^\[]*', '', s); open(p,'w').write(s)
           PY
           fi
+      - name: Get the server's libraries
+        if: steps.chk.outputs.ok == 'true'
+        working-directory: server
+        run: npm ci
       - name: Deploy to Cloudflare
         if: steps.chk.outputs.ok == 'true'
         id: wr

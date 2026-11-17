@@ -43,6 +43,10 @@ jobs:
         run: |
           if [ -n "$K" ] && [ -n "$P" ]; then
             printf %s "$K" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/mustatar.keystore"
+            # a password pasted on a phone can carry a hidden line break or space; the real one has none
+            CLEAN=$(printf %s "$P" | tr -d '[:space:]')
+            echo "::add-mask::$CLEAN"
+            echo "MUSTATAR_KEY_PASSWORD=$CLEAN" >> "$GITHUB_ENV"
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::The signing key is not in GitHub's secrets yet (ANDROID_KEYSTORE_BASE64, ANDROID_KEY_PASSWORD). No app was published."
@@ -60,7 +64,6 @@ jobs:
         env:
           BUILD_NUMBER: ${{ github.run_number }}
           MUSTATAR_KEYSTORE: ${{ runner.temp }}/mustatar.keystore
-          MUSTATAR_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle --no-daemon assembleRelease
       - name: Publish as a download
         if: steps.key.outputs.ok == 'true'

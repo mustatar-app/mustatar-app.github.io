@@ -1,0 +1,70 @@
+name: Probe the free AI services
+on:
+  push:
+    branches: [probe-ai]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg >/dev/null
+      - name: Make test sounds
+        run: |
+          espeak-ng -v en -w en.wav "Good morning everyone. Today we will talk about the meeting minutes and the tasks for next week."
+          espeak-ng -v ar -w ar.wav "السلام عليكم ورحمة الله. موضوع درس اليوم هو آداب طالب العلم."
+          ffmpeg -loglevel error -f lavfi -i anullsrc=r=16000:cl=mono -t 20 silence.wav
+          for b in en ar; do
+            ffmpeg -loglevel error -i $b.wav -c:a libmp3lame -b:a 64k $b.mp3
+            ffmpeg -loglevel error -i $b.wav -c:a aac -b:a 64k -f adts $b.aac
+            cp $b.aac $b-adts-named.m4a
+            ffmpeg -loglevel error -i $b.wav -c:a aac -b:a 64k $b.m4a
+            ffmpeg -loglevel error -i $b.wav -c:a libopus -b:a 32k $b.webm
+            ffmpeg -loglevel error -i $b.wav -c:a libopus -b:a 32k $b.ogg
+          done
+          ls -la
+      - name: Groq models
+        env: { K: "${{ secrets.GROQ_API_KEY }}" }
+        run: |
+          K=$(printf %s "$K" | tr -d '[:space:]')
+          test -n "$K" || { echo "NO GROQ KEY"; exit 1; }
+          curl -sS https://api.groq.com/openai/v1/models -H "Authorization: Bearer $K" | jq -r '.data[] | "\(.id)  ctx=\(.context_window) out=\(.max_completion_tokens // "-")"' | sort
+      - name: Groq hearing, each format
+        env: { K: "${{ secrets.GROQ_API_KEY }}" }
+        run: |
+          K=$(printf %s "$K" | tr -d '[:space:]')
+          for f in en.wav en.mp3 en.aac en-adts-named.m4a en.m4a en.webm en.ogg ar.mp3 ar.aac ar.webm silence.wav; do
+            for m in whisper-large-v3-turbo; do
+              code=$(curl -sS -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/audio/transcriptions -H "Authorization: Bearer $K" -F model=$m -F file=@$f -F response_format=verbose_json -F temperature=0)
+              echo "$f $m -> $code: $(jq -c '{text, lang: .language, nsp: [.segments[]?.no_speech_prob], err: .error.message}' out.json 2>/dev/null || head -c 300 out.json)"
+            done
+          done
+          # an aac piece sent with a content type but a neutral name
+          code=$(curl -sS -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/audio/transcriptions -H "Authorization: Bearer $K" -F model=whisper-large-v3 -F "file=@ar.aac;filename=audio.aac;type=audio/aac" -F language=ar -F response_format=verbose_json)
+          echo "ar.aac large-v3 lang=ar -> $code: $(jq -c '{text, err: .error.message}' out.json)"
+      - name: Groq writing
+        env: { K: "${{ secrets.GROQ_API_KEY }}" }
+        run: |
+          K=$(printf %s "$K" | tr -d '[:space:]')
+          for m in openai/gpt-oss-120b openai/gpt-oss-20b qwen/qwen3.8-27b llama-3.3-70b-versatile; do
+            body=$(jq -n --arg m "$m" '{model:$m, max_completion_tokens:300, stream:false, messages:[{role:"user",content:"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}]}')
+            code=$(curl -sS -D h.txt -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/chat/completions -H "Authorization: Bearer $K" -H 'content-type: application/json' -d "$body")
+            echo "$m -> $code: $(jq -c '{c: .choices[0].message.content, f: .choices[0].finish_reason, u: .usage.total_tokens, err: .error.message}' out.json)"
+            grep -i '^x-ratelimit' h.txt | tr -d '\r' | tr '\n' ' '; echo
+          done
+      - name: Cloudflare Workers AI by the account token
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          T=$(printf %s "$T" | tr -d '[:space:]'); A=$(printf %s "$A" | tr -d '[:space:]')
+          b64=$(base64 -w0 ar.mp3)
+          printf '{"audio":"%s","language":"ar"}' "$b64" > w.json
+          code=$(curl -sS -o out.json -w "%{http_code}" "https://api.cloudflare.com/client/v4/accounts/$A/ai/run/@cf/openai/whisper-large-v3-turbo" -H "Authorization: Bearer $T" -H 'content-type: application/json' --data-binary @w.json)
+          echo "cf whisper ar.mp3 -> $code: $(jq -c '{t: .result.text, e: .errors}' out.json)"
+          b64=$(base64 -w0 en.aac); printf '{"audio":"%s"}' "$b64" > w.json
+          code=$(curl -sS -o out.json -w "%{http_code}" "https://api.cloudflare.com/client/v4/accounts/$A/ai/run/@cf/openai/whisper-large-v3-turbo" -H "Authorization: Bearer $T" -H 'content-type: application/json' --data-binary @w.json)
+          echo "cf whisper en.aac -> $code: $(jq -c '{t: .result.text, e: .errors}' out.json)"
+          body='{"model":"@cf/google/gemma-4-26b-a4b-it","max_tokens":300,"messages":[{"role":"user","content":"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}]}'
+          code=$(curl -sS -o out.json -w "%{http_code}" "https://api.cloudflare.com/client/v4/accounts/$A/ai/v1/chat/completions" -H "Authorization: Bearer $T" -H 'content-type: application/json' -d "$body")
+          echo "cf gemma -> $code: $(jq -c '{c: .choices[0].message.content, u: .usage, e: .errors}' out.json)"
+          curl -sS "https://api.cloudflare.com/client/v4/accounts/$A/ai/models/search?task=Text%20Generation&per_page=100" -H "Authorization: Bearer $T" | jq -r '.result[]?.name' | sort | head -80

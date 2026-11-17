@@ -1,4 +1,4 @@
-/* Jund Notes — the app. Plain JS, no build step. */
+/* Mustatar — the app. Plain JS, no build step. */
 (() => {
 'use strict';
 

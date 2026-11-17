@@ -1,0 +1,10 @@
+# The app itself on Cloudflare: the same files GitHub Pages serves, from Cloudflare's network.
+# Only files are served here; the AI and reminders stay in the separate server (../server).
+name = "mustatar"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[assets]
+directory = "../"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"

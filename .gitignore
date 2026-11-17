@@ -1,1 +1,4 @@
 server/.wrangler/
+node_modules/
+site/.wrangler/
+tests/shots/

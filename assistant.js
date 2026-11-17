@@ -1,4 +1,4 @@
-/* Jund Notes — the Assistant: talk to it in Arabic or English, by typing or by voice.
+/* Mustatar — the Assistant: talk to it in Arabic or English, by typing or by voice.
    It knows your calendar and your notes, adds and finishes tasks for you, and answers from your lessons. */
 (() => {
 'use strict';

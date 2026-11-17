@@ -4,23 +4,32 @@ android {
     namespace 'sa.jund.notes'
     compileSdk 34
     defaultConfig {
-        applicationId 'sa.jund.notes'
+        // the app's permanent id: Android and Google Play know the app by it
+        applicationId 'app.mustatar'
         minSdk 23
         targetSdk 34
         versionCode = Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName '5.2'
     }
+    // The signing key is private. It never lives in this public code: the build reads it from
+    // GitHub's secret store (ANDROID_KEYSTORE_BASE64 and ANDROID_KEY_PASSWORD, see build-apk.yml).
+    def keyFile = System.getenv('MUSTATAR_KEYSTORE')
+    def keyPass = System.getenv('MUSTATAR_KEY_PASSWORD')
     signingConfigs {
-        release {
-            // a personal key for installing on your own phone; Google Play will use its own signing later
-            storeFile file('../jund-notes.keystore')
-            storePassword 'jundnotes2026'
-            keyAlias 'jundnotes'
-            keyPassword 'jundnotes2026'
+        if (keyFile && keyPass) {
+            release {
+                storeFile file(keyFile)
+                storePassword keyPass
+                keyAlias 'mustatar'
+                keyPassword keyPass
+            }
         }
     }
     buildTypes {
-        release { minifyEnabled false; signingConfig signingConfigs.release }
+        release {
+            minifyEnabled false
+            if (keyFile && keyPass) signingConfig signingConfigs.release
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { checkReleaseBuilds false; abortOnError false }

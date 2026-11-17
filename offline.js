@@ -1,4 +1,4 @@
-/* Jund Notes — offline transcription. Whisper is downloaded once to the phone, then audio and video are
+/* Mustatar — offline transcription. Whisper is downloaded once to the phone, then audio and video are
    transcribed with no internet at all (slower, and Arabic a little less accurate than online). */
 (() => {
 'use strict';

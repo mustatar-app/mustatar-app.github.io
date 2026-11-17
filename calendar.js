@@ -1,4 +1,4 @@
-/* Jund Notes — your own calendar: tasks, homework, exams, classes (timetable), reminders and the weekly review. */
+/* Mustatar — your own calendar: tasks, homework, exams, classes (timetable), reminders and the weekly review. */
 (() => {
 'use strict';
 const J = window.JN; if (!J) return;
@@ -378,7 +378,7 @@ async function widgetConnect() {
   store.set('widgetOn', true);
   await widgetSync();
   const base = (await (await fetch('server.json', { cache: 'no-cache' })).json()).url.replace(/\/$/, '');
-  location.href = `intent://widget?id=${widgetId()}&server=${encodeURIComponent(base)}#Intent;scheme=daftar;package=sa.jund.notes;end`;
+  location.href = `intent://widget?id=${widgetId()}&server=${encodeURIComponent(base)}#Intent;scheme=daftar;package=app.mustatar;end`;
 }
 if ($('#widget-connect')) $('#widget-connect').onclick = widgetConnect;
 if ($('#widget-style')) { $('#widget-style').value = store.get('widgetStyle', 'clear'); $('#widget-style').onchange = () => { store.set('widgetStyle', $('#widget-style').value); widgetSync(); toast('Widget style saved. It changes on your home screen within a few minutes, or tap the widget once.'); }; }

@@ -10,3 +10,16 @@ id = "KV_ID_PLACEHOLDER"
 
 [triggers]
 crons = ["* * * * *"]
+
+# each person's own private database, and the sign-in database (see space.js)
+[[durable_objects.bindings]]
+name = "SPACE"
+class_name = "UserSpace"
+
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "Accounts"
+
+[[migrations]]
+tag = "v1-accounts-and-spaces"
+new_sqlite_classes = ["UserSpace", "Accounts"]

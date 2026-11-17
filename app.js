@@ -52,8 +52,8 @@ const idb = (() => {
   };
 })();
 
-/* ---------- cloud copy in the private GitHub storage ---------- */
-const cloud = (() => {
+/* ---------- cloud copy in the private GitHub storage (the old way; used only when not signed in) ---------- */
+const ghCloud = (() => {
   const repo = () => store.get('ghRepo', 'dawajund-1/jund-notes-data');
   const token = () => store.get('ghKey', '');
   const shas = () => store.get('ghShas', {});
@@ -125,7 +125,7 @@ const cloud = (() => {
         store.set('ghDirty', false);
         const all = await idb.all();
         const k = shas();
-        all.filter(l => !k[l.id]).forEach(l => cloud.push(l));
+        all.filter(l => !k[l.id]).forEach(l => ghCloud.push(l));
       }
       setStatus('☁ In sync with your private GitHub storage.');
       return added;
@@ -156,6 +156,133 @@ const cloud = (() => {
     },
   };
 })();
+/* ---------- your own private space on Mustatar's server (when signed in) ----------
+   Every lesson and every piece of app data (calendar, habits, assistant…) is copied to the person's own
+   private database. Changes wait on the phone until they reach the server, so nothing is lost offline,
+   and changes made on other devices come down here. The newest change of each item wins. */
+const space = (() => {
+  const DATA_NAMES = ['calendar', 'habits', 'hifz', 'studio', 'captions', 'assistant'];
+  const MAX_ITEM = 1_900_000;
+  const tok = () => store.get('mstToken', '');
+  const pending = () => store.get('mstPending', {});         // id → { kind, updated, deleted }
+  const setPending = m => store.set('mstPending', m);
+  let status = '', timer = null, flushing = null, pulling = null, lastPull = 0, seen = new Set();
+  const setStatus = t => { status = t; const el = $('#cloud-status'); if (el) el.textContent = t; const a = $('#acct-status'); if (a) a.textContent = t; };
+  async function call(path, init = {}) {
+    const base = await getServer(init.signal);
+    const r = await fetch(base + path, { ...init, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tok(), ...(init.headers || {}) } });
+    if (r.status === 401) { forget(); throw Object.assign(new Error('Please sign in again.'), { code: 'signin' }); }
+    return r;
+  }
+  function forget() { store.set('mstToken', ''); store.set('mstUser', null); window.dispatchEvent(new Event('mustatar-account')); }
+  function mark(id, kind, deleted = false) {
+    const m = pending(); m[id] = { kind, updated: Date.now(), deleted }; setPending(m);
+    clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500);
+  }
+  async function flush() {
+    if (!tok()) return;
+    if (flushing) return flushing;
+    flushing = (async () => {
+      let m = pending(), ids = Object.keys(m);
+      while (ids.length) {
+        const batch = [], sent = {}; let bytes = 0;
+        for (const id of ids) {
+          const p = m[id];
+          let data = null;
+          if (!p.deleted) {
+            if (p.kind === 'lesson') { const l = await idb.get(id.slice(7)).catch(() => null); if (!l) { p.deleted = true; } else data = JSON.stringify(l); }
+            else data = JSON.stringify(store.get('mstData:' + id.slice(5), null));
+          }
+          if (data && new TextEncoder().encode(data).length > MAX_ITEM) { delete m[id]; setStatus('⚠ One lesson is too big to save to your space; it stays on this phone.'); continue; }
+          batch.push({ id, kind: p.kind, updated: p.updated, deleted: !!p.deleted, ...(p.deleted ? {} : { data }) });
+          sent[id] = p.updated; bytes += data ? data.length : 0;
+          if (batch.length >= 50 || bytes > 4_000_000) break;
+        }
+        if (!batch.length) break;
+        const r = await call('/space/push', { method: 'POST', body: JSON.stringify({ changes: batch }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.status === 413) { setStatus('⚠ Your space is full. Delete old lessons to keep saving.'); break; }
+        if (!r.ok) throw new Error(j.error || r.status);
+        m = pending();
+        for (const [id, u] of Object.entries(sent)) if (m[id] && m[id].updated === u) delete m[id];
+        setPending(m); ids = Object.keys(m).filter(id => !(id in sent));
+      }
+      if (!Object.keys(pending()).length) setStatus('☁ Saved in your own private space.');
+    })();
+    try { await flushing; } catch (e) { setStatus(navigator.onLine === false ? '⏳ Waiting for internet to save your changes.' : '⚠ Not saved yet; it will retry.'); throw e; }
+    finally { flushing = null; }
+  }
+  async function pull() {
+    if (!tok()) return 0;
+    if (pulling) return pulling;
+    pulling = (async () => {
+      let since = store.get('mstSeq', 0), changed = 0, more = true;
+      while (more) {
+        const r = await call('/space/pull?since=' + since);
+        if (!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        const m = pending();
+        for (const it of j.items) {
+          seen.add(it.id);
+          if (m[it.id] && m[it.id].updated > it.updated) continue;   // this phone has a newer change
+          if (it.kind === 'lesson') {
+            const id = it.id.slice(7);
+            if (it.deleted) await idb.del(id).catch(() => {}); else await idb.put(JSON.parse(it.data));
+            changed++;
+          } else if (it.kind === 'data') store.set('mstData:' + it.id.slice(5), it.deleted ? null : JSON.parse(it.data));
+        }
+        since = j.seq; more = j.more; store.set('mstSeq', since);
+      }
+      lastPull = Date.now();
+      await flush().catch(() => {});
+      return changed;
+    })();
+    try { return await pulling; } finally { pulling = null; }
+  }
+  // first sign-in on this phone: first bring down what the space already has, then add what is only here
+  async function moveIn() {
+    seen = new Set(); store.set('mstSeq', 0);
+    await pull();
+    const m = pending(), now = Date.now();
+    for (const l of await idb.all().catch(() => [])) if (!seen.has('lesson:' + l.id)) m['lesson:' + l.id] = { kind: 'lesson', updated: now };
+    const snap = {
+      calendar: { saved: store.get('eventsSaved', now), events: store.get('events', []) },
+      habits: { saved: now, habits: store.get('habits', []) }, hifz: { saved: now, hifz: store.get('hifz', []) },
+      studio: { saved: now, list: store.get('studioSaved', []) }, captions: { saved: now, list: store.get('captions', []) },
+      assistant: { saved: now, log: store.get('assistantLog', []).slice(-60) },
+    };
+    for (const n of DATA_NAMES) if (store.get('mstData:' + n) == null) { store.set('mstData:' + n, snap[n]); m['data:' + n] = { kind: 'data', updated: now }; }
+    setPending(m);
+    await flush();
+  }
+  return {
+    on: () => !!tok(),
+    user: () => store.get('mstUser', null),
+    call, forget, pull, flush, moveIn,
+    signOut() { forget(); store.set('mstSeq', 0); store.set('mstPending', {}); for (const n of DATA_NAMES) store.set('mstData:' + n, null); },
+    push(l) { if (tok()) mark('lesson:' + l.id, 'lesson'); },
+    remove(id) { if (tok()) mark('lesson:' + id, 'lesson', true); },
+    async putData(name, obj) { if (!tok()) return; store.set('mstData:' + name, obj); mark('data:' + name, 'data'); },
+    async getData(name) {
+      if (!tok()) return null;
+      if (Date.now() - lastPull > 30000) await pull().catch(() => {});
+      return store.get('mstData:' + name, null);
+    },
+    status: () => status,
+  };
+})();
+// the rest of the app talks to "cloud": the person's own space when signed in, otherwise the old GitHub copy
+const cloud = {
+  on: () => space.on() || ghCloud.on(),
+  push: l => space.on() ? space.push(l) : ghCloud.push(l),
+  remove: id => space.on() ? space.remove(id) : ghCloud.remove(id),
+  pull: () => space.on() ? space.pull() : ghCloud.pull(),
+  test: () => ghCloud.test(),
+  status: () => space.on() ? space.status() : ghCloud.status(),
+  putData: (n, o) => space.on() ? space.putData(n, o) : ghCloud.putData(n, o),
+  getData: n => space.on() ? space.getData(n) : ghCloud.getData(n),
+};
+window.addEventListener('online', () => { if (space.on()) space.flush().catch(() => {}); });
 async function saveLesson(l) { await idb.put(l); cloud.push(l); }
 async function removeLesson(id) { await idb.del(id); cloud.remove(id); }
 
@@ -323,6 +450,87 @@ function initSettings() {
   $('#lang').value = store.get('langDefault', 'auto');
   $('#find-tasks').checked = store.get('findTasks', true);
   $('#find-tasks').onchange = () => store.set('findTasks', $('#find-tasks').checked);
+  /* ----- your account (passkey sign-in) ----- */
+  const pkOk = !!window.PublicKeyCredential && (/\.workers\.dev$/.test(location.hostname) || /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || store.get('acctAnyHost', false));
+  const b64u = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+  const createOpts = o => PublicKeyCredential.parseCreationOptionsFromJSON ? PublicKeyCredential.parseCreationOptionsFromJSON(o)
+    : { ...o, challenge: unb64u(o.challenge), user: { ...o.user, id: unb64u(o.user.id) }, excludeCredentials: (o.excludeCredentials || []).map(c => ({ ...c, id: unb64u(c.id) })) };
+  const getOpts = o => PublicKeyCredential.parseRequestOptionsFromJSON ? PublicKeyCredential.parseRequestOptionsFromJSON(o)
+    : { ...o, challenge: unb64u(o.challenge), allowCredentials: (o.allowCredentials || []).map(c => ({ ...c, id: unb64u(c.id) })) };
+  const credJSON = c => c.toJSON ? c.toJSON() : {
+    id: c.id, rawId: b64u(c.rawId), type: c.type, clientExtensionResults: c.getClientExtensionResults?.() || {}, authenticatorAttachment: c.authenticatorAttachment,
+    response: c.response.attestationObject
+      ? { clientDataJSON: b64u(c.response.clientDataJSON), attestationObject: b64u(c.response.attestationObject), transports: c.response.getTransports?.() || [] }
+      : { clientDataJSON: b64u(c.response.clientDataJSON), authenticatorData: b64u(c.response.authenticatorData), signature: b64u(c.response.signature), userHandle: c.response.userHandle ? b64u(c.response.userHandle) : undefined },
+  };
+  async function acctPost(path, body) {
+    const base = await getServer();
+    const tokn = store.get('mstToken', '');
+    const r = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...(tokn ? { authorization: 'Bearer ' + tokn } : {}) }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Something went wrong (' + r.status + ')');
+    return j;
+  }
+  const acctSay = t => { $('#acct-status').textContent = t; };
+  function acctRender() {
+    const u = space.user(), inn = space.on() && u;
+    $('#acct-out').hidden = !!inn; $('#acct-in').hidden = !inn;
+    if (inn) $('#acct-who').textContent = u.name || 'you';
+    if (!pkOk && !inn) { $('#acct-create').disabled = $('#acct-signin').disabled = true; acctSay('Sign-in opens on Mustatar’s new address soon. Your notes stay safe on this phone meanwhile.'); }
+  }
+  async function signedIn(j, first) {
+    store.set('mstToken', j.token); store.set('mstUser', j.user);
+    acctRender(); acctSay('✓ Signed in. Moving your notes into your space…');
+    try { await space.moveIn(); acctSay(first ? '✓ Your account is ready, and your notes are in your own private space.' : '✓ Signed in. Your notes are in sync.'); renderLibrary(); window.JundCal?.render?.(); }
+    catch (e) { acctSay('✓ Signed in. Your notes will move in when the internet is back.'); }
+  }
+  $('#acct-create').onclick = async () => {
+    const name = $('#acct-name').value.trim();
+    if (!name) { acctSay('Write your name first.'); $('#acct-name').focus(); return; }
+    acctSay('Follow your phone: use your fingerprint, face or screen lock…');
+    try {
+      const s = await acctPost('/auth/passkey/register/start', { name });
+      const c = await navigator.credentials.create({ publicKey: createOpts(s.options) });
+      await signedIn(await acctPost('/auth/passkey/register/finish', { flow: s.flow, response: credJSON(c) }), true);
+    } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled. Nothing was made.' : '✗ ' + e.message); }
+  };
+  $('#acct-signin').onclick = async () => {
+    acctSay('Choose your Mustatar passkey…');
+    try {
+      const s = await acctPost('/auth/passkey/login/start', {});
+      const c = await navigator.credentials.get({ publicKey: getOpts(s.options) });
+      await signedIn(await acctPost('/auth/passkey/login/finish', { flow: s.flow, response: credJSON(c) }), false);
+    } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled.' : '✗ ' + e.message); }
+  };
+  $('#acct-device').onclick = async () => {
+    acctSay('Follow your phone to make a passkey for this account…');
+    try {
+      const s = await acctPost('/auth/passkey/register/start', { name: space.user()?.name || '' });
+      const c = await navigator.credentials.create({ publicKey: createOpts(s.options) });
+      await acctPost('/auth/passkey/register/finish', { flow: s.flow, response: credJSON(c) });
+      acctSay('✓ Passkey added. You can now sign in with it on the other device.');
+    } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled.' : '✗ ' + e.message); }
+  };
+  $('#acct-sync').onclick = async () => {
+    acctSay('⏳ Syncing…');
+    try { const n = await space.pull(); acctSay('✓ In sync.' + (n ? ' ' + ar(n) + ' lessons updated.' : '')); renderLibrary(); }
+    catch (e) { acctSay('✗ ' + e.message); }
+  };
+  $('#acct-signout').onclick = () => {
+    if (!confirm('Sign out on this phone? Your notes stay here and in your space.')) return;
+    space.signOut(); acctRender(); acctSay('Signed out.');
+  };
+  $('#acct-delete').onclick = async () => {
+    const t = prompt('To delete your account and everything in your space for good, type DELETE');
+    if (t !== 'DELETE') { acctSay('Nothing was deleted.'); return; }
+    try { await acctPost('/space/delete-all', { confirm: 'DELETE' }); space.signOut(); acctRender(); acctSay('✓ Your account and your space were deleted.'); }
+    catch (e) { acctSay('✗ ' + e.message); }
+  };
+  window.addEventListener('mustatar-account', acctRender);
+  acctRender();
+  if (space.on()) space.pull().then(n => { if (n) renderLibrary(); }).catch(() => {});
+
   $('#server-check').onclick = checkServer;
   $('#gh-key').value = store.get('ghKey', '');
   $('#save-gh').onclick = async () => {
@@ -2389,7 +2597,7 @@ async function renderLibrary() {
   const list = $('#library-list');
   if (cloud.on() && Date.now() - lastPull > 60000) {
     lastPull = Date.now();
-    cloud.pull().then(n => { if (n) renderLibrary(); }).catch(() => { const el = $('#cloud-status'); if (el) el.textContent = '⚠ Could not reach your GitHub storage right now.'; });
+    cloud.pull().then(n => { if (n) renderLibrary(); }).catch(() => { const el = $('#cloud-status'); if (el) el.textContent = space.on() ? '⚠ Could not reach your space right now; your changes wait on this phone.' : '⚠ Could not reach your GitHub storage right now.'; });
   }
   const q = norm($('#lib-search')?.value || '').toLowerCase();
   const all = (await allLessons()).filter(l => !q || norm([l.subject.name, l.unit, l.notes?.title, l.notes?.subtitle].join(' ')).toLowerCase().includes(q));
@@ -2678,12 +2886,18 @@ fillSubjects();
 initSettings();
 initMe();
 // Settings: each section folds, so the page stays short
-setTimeout(() => document.querySelectorAll('#screen-settings > .card').forEach((c, i) => {
-  const h = c.querySelector(':scope > .card-h'); if (!h) return;
-  const d = document.createElement('details'); d.className = 'set-sec';
-  const s = document.createElement('summary'); s.textContent = h.textContent; d.appendChild(s);
-  c.replaceWith(d); d.appendChild(c);
-}), 0);
+setTimeout(() => {
+  // "Your account" comes first, and starts open
+  const first = $('#screen-settings > .card'), acct = $('#acct-card');
+  if (acct && first && first !== acct) first.before(acct);
+  document.querySelectorAll('#screen-settings > .card').forEach((c, i) => {
+    const h = c.querySelector(':scope > .card-h'); if (!h) return;
+    const d = document.createElement('details'); d.className = 'set-sec';
+    const s = document.createElement('summary'); s.textContent = h.textContent; d.appendChild(s);
+    c.replaceWith(d); d.appendChild(c);
+  });
+  $('#acct-card')?.closest('details')?.setAttribute('open', '');
+}, 0);
 document.querySelectorAll('#screen-settings > details.card').forEach(d => { d.classList.add('set-sec'); d.classList.remove('card'); });
 show('assistant');
 receiveShared();

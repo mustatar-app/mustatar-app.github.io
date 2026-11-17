@@ -387,6 +387,31 @@
       <div id="server-status" class="muted"></div>
     </div>
 
+    <div class="card" id="acct-card">
+      <div class="card-h">Your account</div>
+      <div id="acct-out">
+        <p class="muted" style="margin-top:0">Sign in to keep your notes, calendar and habits in your own private space. They come back on any phone, and nobody else can see them. No password: your fingerprint or face is the key (a passkey).</p>
+        <label class="field"><span>Your name</span><input id="acct-name" autocomplete="name" maxlength="60" dir="auto"></label>
+        <div class="row-gap">
+          <button type="button" class="primary" id="acct-create">Create my account</button>
+          <button type="button" class="ghost" id="acct-signin">I already have an account</button>
+        </div>
+      </div>
+      <div id="acct-in" hidden>
+        <p style="margin-top:0">Signed in as <b id="acct-who" dir="auto"></b>. Your notes are kept in your own private space.</p>
+        <div class="row-gap">
+          <button type="button" class="ghost" id="acct-sync">Sync now</button>
+          <button type="button" class="ghost" id="acct-device">Add a passkey for another phone</button>
+          <button type="button" class="ghost" id="acct-signout">Sign out</button>
+        </div>
+        <details style="margin-top:10px"><summary class="muted">Delete my data</summary>
+          <p class="muted">This removes your account and everything in your private space, for good. Notes on this phone stay until you remove them.</p>
+          <button type="button" class="ghost" id="acct-delete">Delete my account and data</button>
+        </details>
+      </div>
+      <div id="acct-status" class="muted"></div>
+    </div>
+
     <div class="card">
       <div class="card-h">Saving and backup</div>
       <label class="field">

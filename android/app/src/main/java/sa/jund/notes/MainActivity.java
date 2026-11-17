@@ -191,10 +191,13 @@ public class MainActivity extends Activity {
             else {
                 // first start at the new address: collect the notes kept at the old one, then open the new one
                 web.loadUrl(OLD_ORIGIN + "/?move=export");
+                // if the old address does not answer (offline, or not updated yet), open the new one and
+                // try again at the next start; after three tries, stop asking
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    if (!getSharedPreferences("mustatar", MODE_PRIVATE).getBoolean("moved", false)
-                        && !new java.io.File(getFilesDir(), "move.json").exists()) {
-                        getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply();
+                    android.content.SharedPreferences prefs = getSharedPreferences("mustatar", MODE_PRIVATE);
+                    if (!prefs.getBoolean("moved", false) && !new java.io.File(getFilesDir(), "move.json").exists()) {
+                        int tries = prefs.getInt("moveTries", 0) + 1;
+                        prefs.edit().putInt("moveTries", tries).putBoolean("moved", tries >= 3).apply();
                         web.loadUrl(ORIGIN + "/");
                     }
                 }, 25000);

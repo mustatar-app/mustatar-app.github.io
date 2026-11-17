@@ -22,6 +22,18 @@ jobs:
             ffmpeg -loglevel error -i $b.wav -c:a libopus -b:a 32k $b.ogg
           done
           ls -la
+      - name: Which keys are there
+        env:
+          A1: ${{ secrets.GROQ_API_KEY }}
+          A2: ${{ secrets.GROQ_FREE_API_KEY }}
+          A3: ${{ secrets.GROQ_KEY }}
+          A4: ${{ vars.GROQ_API_KEY }}
+          A5: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A6: ${{ secrets.GEMINI_API_KEY }}
+          A7: ${{ secrets.GROQ }}
+          A8: ${{ secrets.GROQ_API }}
+        run: |
+          for v in A1 A2 A3 A4 A5 A6 A7 A8; do x=${!v}; echo "$v length=${#x} starts_gsk=$([[ "$x" == gsk_* ]] && echo yes || echo no)"; done
       - name: Groq models
         env: { K: "${{ secrets.GROQ_API_KEY }}" }
         run: |

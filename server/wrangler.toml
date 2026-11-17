@@ -26,4 +26,4 @@ new_sqlite_classes = ["UserSpace", "Accounts"]
 
 # "Continue with Google": the public client id from Google Cloud (empty = the button is hidden)
 [vars]
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "667190468571-f4rph9bnbjh6kko3vq4lb54pufbfm9lb.apps.googleusercontent.com"

@@ -17,9 +17,8 @@ jobs:
         env:
           A: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           B: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          C: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [ -n "$A" ] && [ -n "$B" ] && [ -n "$C" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "Keys not added yet; skipping."; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$A" ] && [ -n "$B" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "Keys not added yet; skipping."; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
       - name: Claim a free workers.dev address (first time only)
         if: steps.chk.outputs.ok == 'true'
         continue-on-error: true
@@ -72,10 +71,21 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: server
-          secrets: |
-            GEMINI_API_KEY
+      - name: Hand the AI keys to the server (only the ones that are added)
+        if: steps.chk.outputs.ok == 'true'
+        working-directory: server
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GROQ: ${{ secrets.GROQ_API_KEY }}
+          GEMINI: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          GROQ=$(printf %s "$GROQ" | tr -d '[:space:]'); GEMINI=$(printf %s "$GEMINI" | tr -d '[:space:]')   # a pasted key may end with a new line
+          jq -n --arg g "$GROQ" --arg m "$GEMINI" '{} + (if $g != "" then {GROQ_API_KEY: $g} else {} end) + (if $m != "" then {GEMINI_API_KEY: $m} else {} end)' > keys.json
+          echo "Keys handed over: $(jq -r 'keys | join(", ")' keys.json)"
+          if [ "$(jq length keys.json)" -gt 0 ]; then npx --yes wrangler@4.163.0 secret bulk keys.json; fi
+          rm -f keys.json
+          [ -n "$GROQ" ] || echo "::warning::GROQ_API_KEY is not in the GitHub secrets yet: hearing uses Cloudflare only."
       - name: Tell the app where its server is
         if: steps.chk.outputs.ok == 'true'
         run: |
@@ -93,3 +103,15 @@ jobs:
         run: |
           URL=$(sed -E 's/.*"url":"([^"]+)".*/\1/' server.json)
           for i in 1 2 3 4 5 6; do curl -fsS "$URL/" && exit 0; sleep 5; done; exit 1
+      - name: Check the free AI answers (a short sentence, and a short sound)
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          URL=$(sed -E 's/.*"url":"([^"]+)".*/\1/' server.json); O=https://mustatar.dawajund.workers.dev
+          sleep 5
+          curl -sS -X POST "$URL/write" -H "origin: $O" -H 'content-type: application/json' \
+            -d '{"system":"Answer in one short sentence.","user":"Say hello in Arabic.","json":false,"assistant":true,"maxTokens":200}' | head -c 600; echo
+          sudo apt-get install -y -qq espeak-ng ffmpeg > /dev/null 2>&1 || true
+          if command -v espeak-ng > /dev/null; then
+            espeak-ng -v en -w t.wav "Good morning. This is a short test of the meeting notes." && ffmpeg -loglevel error -i t.wav -b:a 64k t.mp3
+            curl -sS -X POST "$URL/transcribe?mime=audio/mpeg&langs=en" -H "origin: $O" -H 'content-type: audio/mpeg' --data-binary @t.mp3 | head -c 600; echo
+          fi

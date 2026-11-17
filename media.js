@@ -8,6 +8,7 @@
 const PIECE_SEC = 600;                  // about 10 minutes of speech per piece
 const WHOLE_MAX = 18 * 1024 * 1024;     // smaller files are sent as they are
 const HARD_MAX = 95 * 1024 * 1024;      // the server accepts up to this per piece
+const FAST_MAX = 23 * 1024 * 1024;      // pieces up to this go to the fastest free hearing service (Groq takes 25 MB)
 const READ_STEP = 8 * 1024 * 1024;      // read big files 8 MB at a time
 
 const ext = f => ((f.name || '').match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
@@ -107,7 +108,7 @@ async function fromMp4(file, onStatus, signal) {
   let parts = [], pieceStart = 0, bytes = 0;
   const close = (endT) => { if (parts.length) pieces.push({ blob: new Blob(parts, { type: 'audio/aac' }), mime: 'audio/aac', start: pieceStart, end: endT }); parts = []; bytes = 0; };
   const add = (s, data) => {
-    if (parts.length && (s.t >= pieceStart + PIECE_SEC || bytes > HARD_MAX * 0.8)) { close(s.t); pieceStart = s.t; }
+    if (parts.length && (s.t >= pieceStart + PIECE_SEC || bytes > FAST_MAX)) { close(s.t); pieceStart = s.t; }
     parts.push(adtsHeader(data.length, cfg), data); bytes += data.length + 7;
   };
   let i = 0;

@@ -93,10 +93,10 @@ async function owner() {
   document.body.appendChild(ov); document.body.classList.add('vx-open');
   const closeIt = () => { ov.remove(); document.body.classList.remove('vx-open'); };
   $('.vx-x', ov).onclick = closeIt;
-  let data;
+  let data, meterData = null;
   try {
-    const r = await J.serverFetch('/owner/reports', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) });
-    data = await r.json();
+    const ask = path => J.serverFetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) }).then(r => r.json());
+    [data, meterData] = await Promise.all([ask('/owner/reports'), ask('/owner/meter').catch(() => null)]);
   } catch (e) {
     if (e.code === 'owner') store.set('ownerCode', '');
     $('.ow-body', ov).textContent = e.code === 'owner' ? L('That code is not right.', 'الرمز غير صحيح.') : J.errText(e); return;
@@ -115,6 +115,7 @@ async function owner() {
   $('.ow-body', ov).classList.remove('muted');
   $('.ow-body', ov).innerHTML = `
     <div class="ow-stats"><div><b>${people.size}</b>${L('people', 'أشخاص')}</div><div><b>${active}</b>${L('active this week', 'نشطون هذا الأسبوع')}</div><div><b>${groups.size}</b>${L('kinds of problem', 'أنواع المشاكل')}</div><div><b>${fbs.length}</b>${L('messages', 'رسائل')}</div></div>
+    ${meterHtml(meterData)}
     <button type="button" class="primary small ow-copy">${L('Copy everything for Claude to review', 'انسخ الكل ليراجعه Claude')}</button>
     <h3>${L('Messages from people', 'رسائل الناس')}</h3>
     ${fbs.map(x => `<div class="ow-item"><div class="ow-meta">${esc(x.n || x.a)} · ${esc({ problem: L('Problem', 'مشكلة'), idea: L('Idea', 'فكرة'), missing: L('Missing', 'ناقص') }[x.m] || x.m)} · ${when(x.t)}</div><div dir="auto">${esc(x.full?.text || x.m)}</div></div>`).join('') || `<p class="muted">${L('None yet.', 'لا شيء بعد.')}</p>`}
@@ -125,6 +126,13 @@ async function owner() {
     <h3>${L('People', 'الأشخاص')}</h3>
     ${[...people.values()].sort((a, z) => z.last - a.last).map(p => `<div class="ow-item"><div class="ow-meta">${esc(p.name || L('(no name)', '(بلا اسم)'))} · ${esc(p.roles || '')} · ${esc(p.ua || '')} · v${esc(p.v || '')}</div><div>${L('last seen', 'آخر ظهور')} ${when(p.last)}</div></div>`).join('')}
     <button type="button" class="ghost small ow-clear">${L('Clear the problems list', 'امسح قائمة المشاكل')}</button>`;
+  const save = $('.ow-brake-save', ov);
+  if (save) save.onclick = async () => {
+    const brake = { cfLimit: Number($('.ow-cf-limit', ov).value) || 9500, paid: $('.ow-cf-paid', ov).checked };
+    if (brake.paid && !confirm(L('Allow Cloudflare to charge past its free daily allowance? (About $0.011 per 1,000 units; it works only once the Cloudflare paid plan is on.)', 'السماح لـ Cloudflare بالمحاسبة بعد الحصة المجانية اليومية؟ (نحو ٠٫٠١١ دولار لكل ١٠٠٠ وحدة، ويعمل فقط بعد تفعيل خطة Cloudflare المدفوعة.)'))) return;
+    try { await J.serverFetch('/owner/brake', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, brake }) }); save.textContent = L('✓ Saved', '✓ حُفظ'); }
+    catch (e) { save.textContent = J.errText(e); }
+  };
   $('.ow-copy', ov).onclick = async () => {
     const txt = [`Mustatar — reports (${new Date().toISOString().slice(0, 10)})`, `People: ${people.size}, active this week: ${active}`, '', 'MESSAGES:',
       ...fbs.map(x => `- [${x.m}] ${x.n || x.a} (${new Date(x.t).toISOString().slice(0, 16)}): ${x.full?.text || x.m}`), '', 'PROBLEMS:',
@@ -138,6 +146,34 @@ async function owner() {
     await J.serverFetch('/owner/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, keys: errs.map(x => x.key) }) });
     closeIt(); owner();
   };
+}
+
+/* ---------- the AI meter: how much of each free allowance was used, and the brake ---------- */
+function meterHtml(m) {
+  if (!m?.rows) return '';
+  const day = new Date().toISOString().slice(0, 10);
+  const byDay = new Map();
+  for (const r of m.rows) { const d = byDay.get(r.day) || {}; d[r.k] = (d[r.k] || 0) + Number(r.n); byDay.set(r.day, d); }
+  const t = byDay.get(day) || {};
+  const num = n => Math.round(n || 0).toLocaleString(AR ? 'ar-SA' : 'en-GB');
+  const bar = (used, free, label, unit) => {
+    const pc = Math.min(100, Math.round((used || 0) / free * 100));
+    return `<div class="ow-item"><div class="ow-meta">${label}</div><div class="ow-bar"><i style="width:${pc}%;background:${pc >= 90 ? '#c0392b' : pc >= 70 ? '#d68910' : '#1e8449'}"></i></div><div>${num(used)} / ${num(free)} ${unit} · ${pc}%</div></div>`;
+  };
+  const over = Math.max(0, (t['cf.neurons'] || 0) - m.free.cfNeurons);
+  const rows = [...byDay.entries()].sort((a, z) => z[0].localeCompare(a[0])).slice(0, 14).map(([d, v]) =>
+    `<tr><td>${esc(d.slice(5))}</td><td>${num(v['hear.groq'])}+${num(v['hear.cf'])}</td><td>${num(v['write.cf'])}+${num(v['write.groq'])}</td><td>${num(v['cf.neurons'])}</td><td>${num((v['groq.audio_sec'] || 0) / 60)}</td></tr>`).join('');
+  return `<h3>${L('Free AI today', 'الذكاء الاصطناعي المجاني اليوم')}</h3>
+    ${m.sources?.groq ? '' : `<p class="muted fine">⚠ ${L('Groq is not connected yet (GROQ_API_KEY is missing): hearing uses Cloudflare only.', 'Groq غير متصل بعد (لا يوجد GROQ_API_KEY): التفريغ عبر Cloudflare فقط.')}</p>`}
+    ${bar(t['cf.neurons'], m.free.cfNeurons, L('Cloudflare (Whisper and Gemma)', 'Cloudflare (Whisper وGemma)'), L('units', 'وحدة'))}
+    ${bar((t['groq.audio_sec'] || 0) / 60, m.free.groqAudioSec / 60 * 2, L('Groq hearing (two Whisper models, 8 hours each)', 'تفريغ Groq (نموذجا Whisper، ٨ ساعات لكل منهما)'), L('minutes', 'دقيقة'))}
+    ${bar(t['groq.tokens'], m.free.groqTokens * 2, L('Groq writing (two gpt-oss models)', 'كتابة Groq (نموذجا gpt-oss)'), L('tokens', 'رمز'))}
+    <p class="muted fine">${L('Cost today', 'تكلفة اليوم')}: <b>$${(over * 0.011 / 1000).toFixed(2)}</b> · ${L('the free allowances start again at 03:00 Makkah time.', 'تتجدد الحصص المجانية الساعة ٣ فجرًا بتوقيت مكة.')}</p>
+    <div class="ow-item"><div class="ow-meta">${L('The brake', 'المكابح')}</div>
+      <label>${L('Stop Cloudflare at', 'أوقف Cloudflare عند')} <input class="ow-cf-limit" type="number" min="0" step="100" value="${esc(m.brake.cfLimit)}" style="width:7em"> ${L('units a day', 'وحدة يوميًا')}</label><br>
+      <label><input class="ow-cf-paid" type="checkbox"${m.brake.paid ? ' checked' : ''}> ${L('Allow paying past the free allowance', 'اسمح بالدفع بعد الحصة المجانية')}</label><br>
+      <button type="button" class="ghost small ow-brake-save">${L('Save the brake', 'احفظ المكابح')}</button></div>
+    <table class="ow-table"><tr><th>${L('Day', 'اليوم')}</th><th>${L('Hearing G+C', 'تفريغ G+C')}</th><th>${L('Writing C+G', 'كتابة C+G')}</th><th>${L('CF units', 'وحدات CF')}</th><th>${L('Groq min', 'دقائق Groq')}</th></tr>${rows}</table>`;
 }
 
 window.JundReport = { problem, event, count, owner };

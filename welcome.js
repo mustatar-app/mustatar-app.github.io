@@ -1,4 +1,5 @@
-/* Mustatar — the first-open welcome: language, name, what you do, and the AI (shared, or your own free Google key in one minute). */
+/* Mustatar — the first-open welcome: language, name and what you do, your day (languages, hours, what is hard),
+   and your tools (only the ones that fit you; the rest can be switched on later in Settings). */
 (() => {
 'use strict';
 const J = window.JN; if (!J) return;
@@ -11,7 +12,9 @@ const ROLES = [
   ['developer', '💻', 'Developer', 'مبرمج', 'work'], ['business', '🏪', 'Business owner', 'صاحب عمل', 'work'],
   ['creator', '🎬', 'Content creator', 'صانع محتوى', 'work'], ['other', '✨', 'Something else', 'غير ذلك', 'work'],
 ];
-const KEY_URL = 'https://aistudio.google.com/apikey';
+const LANGS = [['Arabic', 'العربية'], ['English', 'English'], ['Urdu', 'اردو'], ['Hindi', 'हिन्दी'], ['French', 'Français'], ['Turkish', 'Türkçe'], ['Malay / Indonesian', 'Melayu'], ['Spanish', 'Español']];
+const HARD_AR = { forget: 'نسيان المهام', meetings: 'كثرة الاجتماعات', start: 'البدء في العمل', focus: 'التركيز', habits: 'الاستمرار على العادات', revise: 'المراجعة والحفظ', organise: 'ترتيب الملاحظات' };
+const TOOLS_AR = { habits: 'متابعة العادات', prayer: 'أوقات الصلاة', study: 'أدوات المذاكرة (بطاقات، اختبارات، امتحانات)', meetings: 'التسجيلات والاجتماعات', studio: 'الاستوديو (نص على الصور والفيديو)' };
 let box;
 
 function start(force) {
@@ -29,7 +32,7 @@ function finish() {
 }
 function frame(n, html) {
   box.innerHTML = `<div class="wl-card">
-    <div class="wl-top"><img src="icon-192.png" alt="" width="44" height="44"><div class="wl-dots">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="wl-top"><img src="icon-192.png" alt="" width="44" height="44"><div class="wl-dots">${[1, 2, 3, 4].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>
       <button type="button" class="ghost small wl-skip">${L('Skip', 'تخطَّ')}</button></div>${html}</div>`;
   box.querySelector('.wl-skip').onclick = finish;
 }
@@ -64,55 +67,51 @@ function step(n) {
     };
   }
   if (n === 3) {
-    const has = store.get('userKey', '');
-    frame(3, `<h1 class="wl-h">${L('The AI', 'الذكاء الاصطناعي')}</h1>
-      <p class="muted">${L('Mustatar uses Google’s free AI (Gemini) to write notes, transcribe and answer you.', 'يستخدم مستطر ذكاء Google المجاني (Gemini) لكتابة الملاحظات والتفريغ والإجابة.')}</p>
-      <div class="wl-ai">
-        <div class="wl-box wl-best"><b>${L('★ Your own free key — recommended (1 minute)', '★ مفتاحك المجاني — الأفضل (دقيقة واحدة)')}</b>
-          <p class="muted">${L('Your own daily limit, never shared with anyone. Free; no card needed.', 'حد يومي خاص بك وحدك. مجاني ولا يحتاج بطاقة.')}</p>
-          <ol class="wl-steps">
-            <li>${L('Tap the button — Google opens. Sign in with your Google account if asked.', 'اضغط الزر — تفتح صفحة Google. سجّل الدخول بحساب Google إن طُلب.')}</li>
-            <li>${L('Tap <b>Create API key</b>, then the copy button next to the key.', 'اضغط <b>Create API key</b> ثم زر النسخ بجانب المفتاح.')}</li>
-            <li>${L('Come back here and tap <b>Paste my key</b>.', 'ارجع هنا واضغط <b>الصق مفتاحي</b>.')}</li></ol>
-          <a class="primary wl-go" href="${KEY_URL}" target="_blank" rel="noopener">${L('1 · Get my free key from Google', '١ · احصل على مفتاحي المجاني من Google')}</a>
-          <button type="button" class="ghost wl-paste">${L('2 · Paste my key', '٢ · الصق مفتاحي')}</button>
-          <input id="wl-key" type="password" dir="ltr" autocomplete="off" spellcheck="false" placeholder="AIza… / AQ.…" value="${esc(has)}">
-          <div class="wl-msg muted" aria-live="polite"></div>
-          <button type="button" class="primary wl-cont">${L('Continue →', 'متابعة ←')}</button>
-        </div>
-        <button type="button" class="wl-box wl-shared"><b>${L('Start now with the shared AI', 'ابدأ الآن بالذكاء المشترك')}</b>
-          <span class="muted">${L('Works straight away; the daily limit is shared by everyone. You can add your key later in Settings.', 'يعمل فورًا، والحد اليومي مشترك بين الجميع. يمكنك إضافة مفتاحك لاحقًا من الإعدادات.')}</span></button>
-      </div>`);
-    const msg = box.querySelector('.wl-msg'), inp = box.querySelector('#wl-key');
-    const check = async k => {
-      k = (k || '').replace(/\s+/g, '').replace(/^["']|["']$/g, '');
-      if (!/^(AIza[\w-]{30,60}|AQ\.[\w.-]{20,300}|[\w.-]{30,300})$/.test(k)) { msg.textContent = L('That does not look like a Google AI key (it starts with AIza or AQ.). Copy it again.', 'هذا لا يبدو مفتاح Google (يبدأ بـ AIza أو AQ.). انسخه مرة أخرى.'); return; }
-      inp.value = k; msg.textContent = L('Checking the key…', 'جارٍ فحص المفتاح…');
-      let ok = null;
-      try { const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(k)}`); ok = r.ok; } catch { ok = null; }
-      if (ok === false) { msg.textContent = L('Google says this key is not valid. Copy it again, or create a new one.', 'تقول Google إن هذا المفتاح غير صالح. انسخه مرة أخرى أو أنشئ مفتاحًا جديدًا.'); return; }
-      store.set('userKey', k);
-      window.JundReport?.event('own-key');
-      msg.textContent = L('✓ Your key works. You have your own daily limit.', '✓ مفتاحك يعمل. لديك حدك اليومي الخاص.');
-      setTimeout(done, 900);
+    const me = J.me() || {};
+    const langs = new Set(me.langs || [AR ? 'Arabic' : 'English']), hard = new Set(me.hard || []);
+    frame(3, `<h1 class="wl-h">${L('Your day', 'يومك')}</h1>
+      <p class="wl-q">${L('Which languages do you speak or record in?', 'بأي لغات تتكلم أو تسجّل؟')}</p>
+      <div class="wl-langs">${LANGS.map(([en, nat]) => `<button type="button" class="chip${langs.has(en) ? ' on' : ''}" data-lang="${en}">${nat}</button>`).join('')}</div>
+      <p class="wl-q">${L('When do you usually work or study?', 'متى تعمل أو تذاكر عادةً؟')}</p>
+      <div class="row-gap"><input id="wl-from" type="time" value="${esc(me.hours?.from || '08:00')}"><span class="muted">${L('to', 'إلى')}</span><input id="wl-to" type="time" value="${esc(me.hours?.to || '16:00')}"></div>
+      <p class="wl-q">${L('What is hardest for you? (choose any)', 'ما أصعب شيء عليك؟ (اختر ما شئت)')}</p>
+      <div class="wl-hard">${J.HARD.map(([k, en]) => `<button type="button" class="chip${hard.has(k) ? ' on' : ''}" data-hard="${k}">${L(en, HARD_AR[k])}</button>`).join('')}</div>
+      <button type="button" class="primary wl-next">${L('Next', 'التالي')}</button>`);
+    box.querySelectorAll('.chip').forEach(b => b.onclick = () => b.classList.toggle('on'));
+    box.querySelector('.wl-next').onclick = () => {
+      store.set('me', { ...J.me(), langs: [...box.querySelectorAll('[data-lang].on')].map(b => b.dataset.lang),
+        hours: { from: box.querySelector('#wl-from').value, to: box.querySelector('#wl-to').value },
+        hard: [...box.querySelectorAll('[data-hard].on')].map(b => b.dataset.hard) });
+      step(4);
     };
-    box.querySelector('.wl-paste').onclick = async () => {
-      let t = '';
-      try { t = await navigator.clipboard.readText(); } catch {}
-      if (t) check(t); else { inp.focus(); msg.textContent = L('Long-press the box above and choose Paste.', 'اضغط مطولًا على الخانة أعلاه واختر لصق.'); }
+  }
+  if (n === 4) {
+    // suggest tools from what the person told us; they can change any of them
+    const me = J.me() || {}, roles = me.roles || [], hard = me.hard || [];
+    const studies = roles.some(r => ['student', 'seeker', 'teacher'].includes(r)) || me.use === 'study';
+    const suggest = { habits: hard.includes('habits') || hard.includes('focus') || hard.includes('start'), prayer: true, study: studies || hard.includes('revise'),
+      meetings: roles.some(r => ['employee', 'business', 'teacher', 'developer'].includes(r)) || hard.includes('meetings') || me.use === 'work', studio: roles.includes('creator') };
+    const now = { ...suggest, ...(store.get('tools', null) || {}) };
+    frame(4, `<h1 class="wl-h">${L('Your tools', 'أدواتك')}</h1>
+      <p class="muted">${L('These fit what you told us. Tap to change; everything can be switched on later in Settings.', 'هذه تناسب ما أخبرتنا به. اضغط للتغيير، ويمكنك تفعيل أي شيء لاحقًا من الإعدادات.')}</p>
+      <div class="wl-tools">${J.TOOLS.map(([k, en]) => `<button type="button" class="chip${now[k] ? ' on' : ''}" data-tool="${k}">${L(en, TOOLS_AR[k])}</button>`).join('')}</div>
+      <button type="button" class="primary wl-next">${L('Next', 'التالي')}</button>`);
+    box.querySelectorAll('.chip').forEach(b => b.onclick = () => b.classList.toggle('on'));
+    box.querySelector('.wl-next').onclick = () => {
+      store.set('tools', Object.fromEntries([...box.querySelectorAll('[data-tool]')].map(b => [b.dataset.tool, b.classList.contains('on')])));
+      J.applyTools(); J.saveProfile();
+      window.JundReport?.event('tools:' + [...box.querySelectorAll('[data-tool].on')].map(b => b.dataset.tool).join('+'));
+      done();
     };
-    inp.onchange = () => inp.value && check(inp.value);
-    box.querySelector('.wl-cont').onclick = () => inp.value.trim() ? check(inp.value) : done();
-    inp.onpaste = () => setTimeout(() => check(inp.value), 0);
-    box.querySelector('.wl-shared').onclick = () => { window.JundReport?.event('shared-ai'); done(); };
   }
 }
 function done() {
-  frame(3, `<h1 class="wl-h">${L('Ready ✓', 'جاهز ✓')}</h1>
+  frame(4, `<h1 class="wl-h">${L('Ready ✓', 'جاهز ✓')}</h1>
     <p class="muted">${L('Three things to try first:', 'ثلاثة أشياء جرّبها أولًا:')}</p>
     <ul class="wl-try"><li>🎙 ${L('Tap <b>Record</b> in a class or meeting — you get clean notes.', 'اضغط <b>تسجيل</b> في درس أو اجتماع — تحصل على ملاحظات مرتبة.')}</li>
       <li>🗣 ${L('Tap the microphone on Home and just talk, in Arabic or English.', 'اضغط المايك في الرئيسية وتكلّم بالعربية أو الإنجليزية.')}</li>
       <li>✅ ${L('Add a task or event — you get a reminder on time.', 'أضف مهمة أو موعدًا — يصلك تنبيه في وقته.')}</li></ul>
+    <p class="muted fine">${L('Tip: create your account in Settings → Your account, so your notes are kept safe in your own private space.', 'نصيحة: أنشئ حسابك من الإعدادات ← حسابك، لتُحفظ ملاحظاتك في مساحتك الخاصة.')}</p>
     <p class="muted fine">${L('Something not working, or an idea? Settings → Send feedback.', 'شيء لا يعمل، أو لديك فكرة؟ الإعدادات ← أرسل ملاحظة.')}</p>
     <button type="button" class="primary wl-next">${L('Start', 'ابدأ')}</button>`);
   box.querySelector('.wl-next').onclick = finish;

@@ -234,13 +234,28 @@
     <h1 class="screen-title">Settings</h1>
 
     <div class="card" id="about-card">
-      <div class="card-h">About you</div>
+      <div class="card-h">About me</div>
       <label class="field"><span>I use the app for</span><select id="me-use"><option value="study">Study — lessons, subjects, exams</option><option value="work">Work — meetings, projects, tasks</option></select></label>
       <label class="field"><span>Your name</span><input id="me-name" type="text" dir="auto" placeholder="Your first name"></label>
       <label class="field"><span>Full name in Arabic (for book covers)</span><input id="me-name-ar" type="text" dir="rtl" placeholder="الاسم الكامل"></label>
       <label class="field"><span id="me-study-label">Where and what you study</span><textarea id="me-study" rows="3" dir="auto" placeholder="e.g. Dar al-Hadith al-Khayriyyah and Kulliyat al-Masjid al-Haram, Makkah"></textarea>
         <small class="muted">The Assistant and your notes use this, so they fit you.</small></label>
+      <label class="field"><span>Languages you speak or record in</span><input id="me-langs" type="text" dir="auto" placeholder="e.g. Arabic, English, Urdu"></label>
+      <div class="field"><span>Your usual working or study hours</span><div class="row-gap"><input id="me-from" type="time" aria-label="From"><span class="muted">to</span><input id="me-to" type="time" aria-label="To"></div></div>
+      <div class="field"><span>What is hardest for you? (choose any)</span><div class="chips" id="me-hard"></div></div>
       <div class="row-gap"><button type="button" class="primary" id="me-save">Save</button><span class="muted" id="me-status"></span></div>
+      <details style="margin-top:12px"><summary>What Mustatar has learned about you</summary>
+        <div id="me-learned" class="muted" style="margin:8px 0"></div>
+        <label class="check"><input type="checkbox" id="me-learn"> Let Mustatar learn from how I use it, to suggest what fits me</label>
+        <p class="muted fine">This stays in your own space. It is never sold and never used to train any AI.</p>
+        <button type="button" class="ghost small" id="me-forget">Forget what Mustatar learned</button>
+      </details>
+    </div>
+
+    <div class="card" id="tools-card">
+      <div class="card-h">Your tools</div>
+      <p class="muted" style="margin-top:0">Show only the tools you use. You can switch any of them back on at any time.</p>
+      <div id="tools-list"></div>
     </div>
 
     <div class="card">
@@ -366,13 +381,6 @@
     </div>
 
     <div class="card">
-      <div class="card-h">Your own AI key (optional)</div>
-      <p class="muted" style="margin:0 0 10px;font-size:.9rem">Everyone without a key shares one free daily limit. Add your own free key and you get your own limit. It takes 2 minutes: open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--accent)">aistudio.google.com/apikey</a>, sign in with Google, press “Create API key”, copy it and paste it here.</p>
-      <label class="field"><span>Gemini key</span><input id="user-key" type="password" autocomplete="off" spellcheck="false" dir="ltr" placeholder="AIza… / AQ.…"></label>
-      <div class="row-gap"><button type="button" class="primary" id="user-key-save">Save</button><span class="muted" id="user-key-status"></span></div>
-    </div>
-
-    <div class="card">
       <div class="card-h">Home-screen widgets (Android app)</div>
       <p class="muted" style="margin:0 0 10px;font-size:.9rem">Show the next prayer and your upcoming tasks on your home screen.</p>
       <ol class="muted" style="margin:0 0 10px;padding-left:20px;font-size:.9rem"><li>Tap <b>Connect widget</b> (once).</li><li>Long-press an empty spot on your home screen → <b>Widgets</b> → <b>Mustatar</b>.</li><li>Drag “my day”, “reminder”, “prayer and tasks” or “next prayer” onto the screen.</li></ol>
@@ -396,6 +404,7 @@
           <button type="button" class="primary" id="acct-create">Create my account</button>
           <button type="button" class="ghost" id="acct-signin">I already have an account</button>
         </div>
+        <div id="acct-google" hidden style="margin-top:10px"></div>
       </div>
       <div id="acct-in" hidden>
         <p style="margin-top:0">Signed in as <b id="acct-who" dir="auto"></b>. Your notes are kept in your own private space.</p>

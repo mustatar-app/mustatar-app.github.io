@@ -23,3 +23,7 @@ class_name = "Accounts"
 [[migrations]]
 tag = "v1-accounts-and-spaces"
 new_sqlite_classes = ["UserSpace", "Accounts"]
+
+# "Continue with Google": the public client id from Google Cloud (empty = the button is hidden)
+[vars]
+GOOGLE_CLIENT_ID = ""

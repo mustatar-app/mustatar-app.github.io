@@ -59,6 +59,11 @@ async def main():
         r = await ev("return T.call('/space/pull')")
         check(r["status"] == 401, "the space refuses anyone not signed in")
 
+        r = await ev("return T.call('/auth/config')")
+        check(r["status"] == 200 and r["body"]["passkeys"] is True, "the server says which sign-in ways are on")
+        r = await ev("return T.call('/auth/google', { method: 'POST', body: JSON.stringify({ credential: 'not.a.token' }) })")
+        check(r["status"] in (400, 501), "a fake Google sign-in is refused")
+
         r = await ev("return T.register('Junaid')")
         check(r["status"] == 200 and r["body"].get("token"), "a passkey makes a new account")
         tok = r["body"]["token"]

@@ -10,6 +10,13 @@ if (lang !== 'ar') return;
 document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
 
 const T = {
+'About me': 'عني', 'Your tools': 'أدواتك', 'Languages you speak or record in': 'اللغات التي تتكلم أو تسجّل بها', 'Your usual working or study hours': 'ساعات عملك أو مذاكرتك المعتادة', 'to': 'إلى',
+'What is hardest for you? (choose any)': 'ما أصعب شيء عليك؟ (اختر ما شئت)', 'What Mustatar has learned about you': 'ما تعلّمه مستطر عنك',
+'Let Mustatar learn from how I use it, to suggest what fits me': 'اسمح لمستطر أن يتعلّم من استخدامي ليقترح ما يناسبني',
+'This stays in your own space. It is never sold and never used to train any AI.': 'يبقى هذا في مساحتك الخاصة، ولا يُباع ولا يُستخدم لتدريب أي ذكاء اصطناعي.',
+'Forget what Mustatar learned': 'انسَ ما تعلّمه مستطر', 'Show only the tools you use. You can switch any of them back on at any time.': 'أظهر الأدوات التي تستخدمها فقط، ويمكنك إعادة تفعيل أي منها متى شئت.',
+'Forgetting tasks': 'نسيان المهام', 'Too many meetings': 'كثرة الاجتماعات', 'Getting started': 'البدء في العمل', 'Staying focused': 'التركيز', 'Keeping habits': 'الاستمرار على العادات', 'Revising and memorising': 'المراجعة والحفظ', 'Keeping notes organised': 'ترتيب الملاحظات',
+'Habit tracker': 'متابعة العادات', 'Prayer times': 'أوقات الصلاة', 'Study tools (flashcards, quizzes, exams)': 'أدوات المذاكرة (بطاقات، اختبارات، امتحانات)', 'Recordings and meetings': 'التسجيلات والاجتماعات', 'Studio (text on photos and videos)': 'الاستوديو (نص على الصور والفيديو)',
 'Your account': 'حسابك', 'Your name': 'اسمك', 'Create my account': 'أنشئ حسابي', 'I already have an account': 'لدي حساب',
 'Sign in to keep your notes, calendar and habits in your own private space. They come back on any phone, and nobody else can see them. No password: your fingerprint or face is the key (a passkey).': 'سجّل الدخول لتُحفظ ملاحظاتك وتقويمك وعاداتك في مساحتك الخاصة. تعود إليك على أي جوال، ولا يراها أحد غيرك. بلا كلمة مرور: بصمتك أو وجهك هو المفتاح (مفتاح مرور).',
 'Signed in as': 'مسجّل الدخول باسم', 'Your notes are kept in your own private space.': 'ملاحظاتك محفوظة في مساحتك الخاصة.',

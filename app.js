@@ -161,7 +161,7 @@ const ghCloud = (() => {
    private database. Changes wait on the phone until they reach the server, so nothing is lost offline,
    and changes made on other devices come down here. The newest change of each item wins. */
 const space = (() => {
-  const DATA_NAMES = ['calendar', 'habits', 'hifz', 'studio', 'captions', 'assistant'];
+  const DATA_NAMES = ['calendar', 'habits', 'hifz', 'studio', 'captions', 'assistant', 'me'];
   const MAX_ITEM = 1_900_000;
   const tok = () => store.get('mstToken', '');
   const pending = () => store.get('mstPending', {});         // id → { kind, updated, deleted }
@@ -229,7 +229,11 @@ const space = (() => {
             const id = it.id.slice(7);
             if (it.deleted) await idb.del(id).catch(() => {}); else await idb.put(JSON.parse(it.data));
             changed++;
-          } else if (it.kind === 'data') store.set('mstData:' + it.id.slice(5), it.deleted ? null : JSON.parse(it.data));
+          } else if (it.kind === 'data') {
+            const v = it.deleted ? null : JSON.parse(it.data);
+            store.set('mstData:' + it.id.slice(5), v);
+            if (it.id === 'data:me' && v) { store.set('me', { ...store.get('me', {}), ...v.me }); store.set('tools', v.tools || {}); window.dispatchEvent(new Event('mustatar-profile')); }
+          }
         }
         since = j.seq; more = j.more; store.set('mstSeq', since);
       }
@@ -250,6 +254,7 @@ const space = (() => {
       habits: { saved: now, habits: store.get('habits', []) }, hifz: { saved: now, hifz: store.get('hifz', []) },
       studio: { saved: now, list: store.get('studioSaved', []) }, captions: { saved: now, list: store.get('captions', []) },
       assistant: { saved: now, log: store.get('assistantLog', []).slice(-60) },
+      me: { saved: now, me: store.get('me', {}), tools: store.get('tools', {}) },
     };
     for (const n of DATA_NAMES) if (store.get('mstData:' + n) == null) { store.set('mstData:' + n, snap[n]); m['data:' + n] = { kind: 'data', updated: now }; }
     setPending(m);
@@ -283,6 +288,7 @@ const cloud = {
   getData: n => space.on() ? space.getData(n) : ghCloud.getData(n),
 };
 window.addEventListener('online', () => { if (space.on()) space.flush().catch(() => {}); });
+window.addEventListener('mustatar-profile', () => { try { applyTools(); initMe(); } catch {} });
 async function saveLesson(l) { await idb.put(l); cloud.push(l); }
 async function removeLesson(id) { await idb.del(id); cloud.remove(id); }
 
@@ -348,7 +354,8 @@ const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', '
 function show(name) {
   for (const s of SCREENS) { const el = $('#screen-' + s); if (el) el.hidden = s !== name; }
   const tab = name === 'result' || name === 'new' ? 'library' : name;
-  document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;   // Home: no bottom bar, only the message box (the ☰ menu has everything)
+  document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;
+  noteUse(name);   // Home: no bottom bar, only the message box (the ☰ menu has everything)
   $$('.tabbar [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === tab));
   if (name === 'library') { renderLibrary(); window.JundRecorder?.list(); }
   if (name === 'calendar') window.JundCal?.render();
@@ -357,7 +364,7 @@ function show(name) {
   if (name === 'pending') window.JundPending?.open();
   if (name === 'inbox') window.JundInbox?.open();
   if (name === 'assistant') window.JundAssistant?.open();
-  if (name === 'settings') { renderPaletteSettings(); renderSpend(); window.__syncEngine?.(); }
+  if (name === 'settings') { renderPaletteSettings(); renderSpend(); window.__syncEngine?.(); renderTools(); renderLearned(); }
   if (name === 'new') $('#key-missing').hidden = engineKind() !== 'claude' || !!store.get('key');
   if (name === 'result') requestAnimationFrame(fitPages);
   window.scrollTo(0, 0);
@@ -527,6 +534,23 @@ function initSettings() {
     try { await acctPost('/space/delete-all', { confirm: 'DELETE' }); space.signOut(); acctRender(); acctSay('✓ Your account and your space were deleted.'); }
     catch (e) { acctSay('✗ ' + e.message); }
   };
+  // "Continue with Google" — shown only when the server has a Google client id
+  (async () => {
+    if (!pkOk) return;
+    try {
+      const base = await getServer();
+      const cfg = await (await fetch(base + '/auth/config')).json();
+      if (!cfg.googleClientId) return;
+      await new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.onload = ok; sc.onerror = bad; document.head.appendChild(sc); });
+      google.accounts.id.initialize({ client_id: cfg.googleClientId, ux_mode: 'popup', callback: async res => {
+        acctSay('Signing in with Google…');
+        try { const j = await acctPost('/auth/google', { credential: res.credential }); await signedIn(j, j.created); }
+        catch (e) { acctSay('✗ ' + e.message); }
+      } });
+      google.accounts.id.renderButton($('#acct-google'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: window.ZadLang === 'ar' ? 'ar' : 'en' });
+      $('#acct-google').hidden = false;
+    } catch {}
+  })();
   window.addEventListener('mustatar-account', acctRender);
   acctRender();
   if (space.on()) space.pull().then(n => { if (n) renderLibrary(); }).catch(() => {});
@@ -2778,16 +2802,51 @@ function initMe() {
   const lbl = () => { const w = $('#me-use').value === 'work'; $('#me-study-label').textContent = w ? 'Your work (job, company, team)' : 'Where and what you study'; $('#me-study').placeholder = w ? 'e.g. Operations manager at a logistics company, team of 12' : 'e.g. Dar al-Hadith al-Khayriyyah and Kulliyat al-Masjid al-Haram, Makkah'; };
   $('#me-use').onchange = lbl; lbl();
   $('#me-save').onclick = () => {
-    store.set('me', { name: $('#me-name').value.trim(), nameAr: $('#me-name-ar').value.trim(), study: $('#me-study').value.trim(), use: $('#me-use').value });
+    store.set('me', { ...me(), name: $('#me-name').value.trim(), nameAr: $('#me-name-ar').value.trim(), study: $('#me-study').value.trim(), use: $('#me-use').value,
+      langs: $('#me-langs').value.split(/[,،]/).map(x => x.trim()).filter(Boolean).slice(0, 8),
+      hours: { from: $('#me-from').value, to: $('#me-to').value },
+      hard: [...document.querySelectorAll('#me-hard .chip.on')].map(b => b.dataset.hard) });
+    saveProfile();
     $('#me-status').textContent = '✓ Saved'; fillSubjects(); window.JundAssistant?.home();
   };
-  // a person's own free AI key
-  $('#user-key').value = store.get('userKey', '');
-  $('#user-key-save').onclick = () => {
-    const k = $('#user-key').value.trim();
-    if (k && !/^(AIza[\w-]{30,60}|AQ\.[\w.-]{20,300}|[\w.-]{30,300})$/.test(k)) { $('#user-key-status').textContent = '✗ That does not look like a Gemini key (it starts with AIza or AQ.).'; return; }
-    store.set('userKey', k); $('#user-key-status').textContent = k ? '✓ Saved. You now have your own daily limit.' : 'Removed. The shared key is used.';
-  };
+  // the rest of "About me": languages, hours, what is hard, and what the app has learned
+  const m2 = me();
+  $('#me-langs').value = (m2.langs || []).join(', ');
+  $('#me-from').value = m2.hours?.from || ''; $('#me-to').value = m2.hours?.to || '';
+  $('#me-hard').innerHTML = HARD.map(([k, en]) => `<button type="button" class="chip${(m2.hard || []).includes(k) ? ' on' : ''}" data-hard="${k}">${esc(en)}</button>`).join('');
+  $('#me-hard').onclick = e => { const b = e.target.closest('[data-hard]'); if (b) b.classList.toggle('on'); };
+  $('#me-learn').checked = store.get('learnOn', true);
+  $('#me-learn').onchange = () => { store.set('learnOn', $('#me-learn').checked); renderLearned(); };
+  $('#me-forget').onclick = () => { store.set('usage', {}); renderLearned(); $('#me-status').textContent = '✓ Forgotten.'; };
+  renderLearned();
+  renderTools();
+}
+const HARD = [['forget', 'Forgetting tasks'], ['meetings', 'Too many meetings'], ['start', 'Getting started'], ['focus', 'Staying focused'],
+  ['habits', 'Keeping habits'], ['revise', 'Revising and memorising'], ['organise', 'Keeping notes organised']];
+// optional tools: each can be hidden; the classes on <body> hide their places in the app (style.css)
+const TOOLS = [['habits', 'Habit tracker'], ['prayer', 'Prayer times'], ['study', 'Study tools (flashcards, quizzes, exams)'],
+  ['meetings', 'Recordings and meetings'], ['studio', 'Studio (text on photos and videos)']];
+function toolsOn() { return { ...Object.fromEntries(TOOLS.map(([k]) => [k, true])), ...store.get('tools', {}) }; }
+function applyTools() { const t = toolsOn(); for (const [k] of TOOLS) document.body.classList.toggle('off-' + k, !t[k]); }
+function renderTools() {
+  const t = toolsOn(), box = $('#tools-list'); if (!box) return;
+  box.innerHTML = TOOLS.map(([k, en]) => `<label class="check"><input type="checkbox" data-tool="${k}"${t[k] ? ' checked' : ''}> ${esc(en)}</label>`).join('');
+  box.onchange = e => { const k = e.target.dataset.tool; if (!k) return; store.set('tools', { ...store.get('tools', {}), [k]: e.target.checked }); applyTools(); saveProfile(); };
+}
+function saveProfile() { cloud.putData('me', { saved: Date.now(), me: store.get('me', {}), tools: store.get('tools', {}) }); }
+function noteUse(name) { if (!store.get('learnOn', true)) return; const u = store.get('usage', {}); u[name] = (u[name] || 0) + 1; store.set('usage', u); }
+async function renderLearned() {
+  const el = $('#me-learned'); if (!el) return;
+  if (!store.get('learnOn', true)) { el.textContent = 'Learning is off. Mustatar only knows what you wrote above.'; return; }
+  const u = store.get('usage', {}), top = Object.entries(u).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+  const lessons = await idb.all().catch(() => []);
+  const subj = {}; lessons.forEach(l => { const n = l.subject?.name; if (n) subj[n] = (subj[n] || 0) + 1; });
+  const topSubj = Object.entries(subj).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+  el.innerHTML = [
+    `${ar(lessons.length)} notes saved` + (topSubj.length ? `, mostly in ${topSubj.map(esc).join(', ')}` : '') + '.',
+    top.length ? `You use ${top.map(esc).join(', ')} the most.` : 'Nothing learned yet from how you use the app.',
+    `${ar((store.get('habits', []) || []).length)} habits, ${ar((store.get('events', []) || []).length)} calendar items.`,
+  ].map(t => `<div>${t}</div>`).join('');
 }
 
 /* ---------- theme ---------- */
@@ -2882,6 +2941,7 @@ async function receiveShared() {
 }
 
 /* ---------- start ---------- */
+applyTools();
 fillSubjects();
 initSettings();
 initMe();
@@ -2923,7 +2983,7 @@ $('#lib-search').addEventListener('input', () => renderLibrary());
 // start transcribing a YouTube link from anywhere (the Assistant, a share)
 function startYouTube(url) { show('new'); $('#yt').value = url; $('#yt-go').click(); }
 // shared with calendar.js, studio.js and offline.js
-window.JN = { store, cloud, esc, ar, show, callServer, serverFetch, readStream, shrinkImage, callBig, parseJSON, getJSON, langOf, errText, allLessons, openLesson,
+window.JN = { applyTools, saveProfile, TOOLS, HARD, store, cloud, esc, ar, show, callServer, serverFetch, readStream, shrinkImage, callBig, parseJSON, getJSON, langOf, errText, allLessons, openLesson,
   noteRetry: value => pdfProgress('attachment', 'latest', value),
   saveLesson, download, safeName, addFiles, makeAttachmentNotes, startYouTube, me, keepAwake, engineKind, splitText, cleanHeator: cleanHeard, current: () => current };
 // for testing only

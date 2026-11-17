@@ -3,95 +3,29 @@ on:
   push:
     branches: [probe-ai]
 jobs:
-  probe:
+  live:
     runs-on: ubuntu-latest
     steps:
       - name: Tools
         run: sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg >/dev/null
-      - name: Make test sounds
+      - name: Live server, every AI job
         run: |
-          espeak-ng -v en -w en.wav "Good morning everyone. Today we will talk about the meeting minutes and the tasks for next week."
-          espeak-ng -v ar -w ar.wav "السلام عليكم ورحمة الله. موضوع درس اليوم هو آداب طالب العلم."
-          ffmpeg -loglevel error -f lavfi -i anullsrc=r=16000:cl=mono -t 20 silence.wav
-          for b in en ar; do
-            ffmpeg -loglevel error -i $b.wav -c:a libmp3lame -b:a 64k $b.mp3
-            ffmpeg -loglevel error -i $b.wav -c:a aac -b:a 64k -f adts $b.aac
-            cp $b.aac $b-adts-named.m4a
-            ffmpeg -loglevel error -i $b.wav -c:a aac -b:a 64k $b.m4a
-            ffmpeg -loglevel error -i $b.wav -c:a libopus -b:a 32k $b.webm
-            ffmpeg -loglevel error -i $b.wav -c:a libopus -b:a 32k $b.ogg
-          done
-          ls -la
-      - name: Which keys are there
-        env:
-          A1: ${{ secrets.GROQ_API_KEY }}
-          A2: ${{ secrets.GROQ_FREE_API_KEY }}
-          A3: ${{ secrets.GROQ_KEY }}
-          A4: ${{ vars.GROQ_API_KEY }}
-          A5: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          A6: ${{ secrets.GEMINI_API_KEY }}
-          A7: ${{ secrets.GROQ }}
-          A8: ${{ secrets.GROQ_API }}
-        run: |
-          for v in A1 A2 A3 A4 A5 A6 A7 A8; do x=${!v}; echo "$v length=${#x} starts_gsk=$([[ "$x" == gsk_* ]] && echo yes || echo no)"; done
-      - name: Groq models
-        env: { K: "${{ secrets.GROQ_API_KEY }}" }
-        run: |
-          K=$(printf %s "$K" | tr -d '[:space:]')
-          test -n "$K" || { echo "NO GROQ KEY"; exit 0; }
-          curl -sS https://api.groq.com/openai/v1/models -H "Authorization: Bearer $K" | jq -r '.data[] | "\(.id)  ctx=\(.context_window) out=\(.max_completion_tokens // "-")"' | sort
-      - name: Groq hearing, each format
-        env: { K: "${{ secrets.GROQ_API_KEY }}" }
-        run: |
-          K=$(printf %s "$K" | tr -d '[:space:]'); test -n "$K" || exit 0
-          for f in en.wav en.mp3 en.aac en-adts-named.m4a en.m4a en.webm en.ogg ar.mp3 ar.aac ar.webm silence.wav; do
-            for m in whisper-large-v3-turbo; do
-              code=$(curl -sS -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/audio/transcriptions -H "Authorization: Bearer $K" -F model=$m -F file=@$f -F response_format=verbose_json -F temperature=0)
-              echo "$f $m -> $code: $(jq -c '{text, lang: .language, nsp: [.segments[]?.no_speech_prob], err: .error.message}' out.json 2>/dev/null || head -c 300 out.json)"
-            done
-          done
-          # an aac piece sent with a content type but a neutral name
-          code=$(curl -sS -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/audio/transcriptions -H "Authorization: Bearer $K" -F model=whisper-large-v3 -F "file=@ar.aac;filename=audio.aac;type=audio/aac" -F language=ar -F response_format=verbose_json)
-          echo "ar.aac large-v3 lang=ar -> $code: $(jq -c '{text, err: .error.message}' out.json)"
-      - name: Groq writing
-        env: { K: "${{ secrets.GROQ_API_KEY }}" }
-        run: |
-          K=$(printf %s "$K" | tr -d '[:space:]'); test -n "$K" || exit 0
-          for m in openai/gpt-oss-120b openai/gpt-oss-20b qwen/qwen3.8-27b llama-3.3-70b-versatile; do
-            body=$(jq -n --arg m "$m" '{model:$m, max_completion_tokens:300, stream:false, messages:[{role:"user",content:"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}]}')
-            code=$(curl -sS -D h.txt -o out.json -w "%{http_code}" https://api.groq.com/openai/v1/chat/completions -H "Authorization: Bearer $K" -H 'content-type: application/json' -d "$body")
-            echo "$m -> $code: $(jq -c '{c: .choices[0].message.content, f: .choices[0].finish_reason, u: .usage.total_tokens, err: .error.message}' out.json)"
-            grep -i '^x-ratelimit' h.txt | tr -d '\r' | tr '\n' ' '; echo
-          done
-      - uses: actions/checkout@v4
-        with: { path: repo }
-      - name: Put up a small test server with Cloudflare AI
-        id: wr
-        uses: cloudflare/wrangler-action@v3
-        with:
-          wranglerVersion: '4.163.0'
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: repo/probe
-      - name: Cloudflare AI through the test server
-        run: |
-          URL=$(grep -oE 'https://mustatar-probe[a-zA-Z0-9.-]+\.workers\.dev' <<< "${{ steps.wr.outputs.command-output }}" | head -1); echo "$URL"; sleep 8
-          P='{"role":"user","content":"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}'
-          for extra in '{}' '{"chat_template_kwargs":{"enable_thinking":false}}' '{"reasoning_effort":"low"}' '{"reasoning_effort":"none"}' '{"reasoning":{"enabled":false}}' '{"thinking":{"type":"disabled"}}'; do
-            q=$(jq -nc --argjson p "$P" --argjson x "$extra" '{input: ({max_tokens:400, messages:[$p]} + $x)}')
-            echo "gemma $extra: $(curl -sS -X POST -d "$q" "$URL/chat" | jq -c '{c: .choices[0].message.content, r: ((.choices[0].message.reasoning // .choices[0].message.reasoning_content // "") | length), u: .usage.completion_tokens, n: .usage.neurons, e: .error}' 2>&1 | head -c 400)"
-          done
-          q=$(jq -nc --argjson p "$P" '{input: {max_tokens:400, messages:[{role:"system",content:"Answer directly."},$p], stream:true, chat_template_kwargs:{enable_thinking:false}}}')
-          echo "gemma stream nothink:"; curl -sS -X POST -d "$q" "$URL/chat" | grep -o '"delta":{[^}]*}' | head -8
-          for m in @cf/deepseek-ai/deepseek-v4-flash-0731 @cf/zai-org/glm-5.3-flash @cf/qwen/qwen3.8-27b; do
-            q=$(jq -nc --arg m "$m" --argjson p "$P" '{model:$m, input:{max_tokens:600, messages:[$p]}}')
-            echo "$m: $(curl -sS -X POST -d "$q" "$URL/chat" | jq -c '{c: .choices[0].message.content, u: .usage, e: .error}' 2>&1 | head -c 500)"; done
-      - name: Take the test server down
-        if: always()
-        uses: cloudflare/wrangler-action@v3
-        with:
-          wranglerVersion: '4.163.0'
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: repo/probe
-          command: delete --force
+          U=https://jund-notes-ai.dawajund.workers.dev; O=https://mustatar.dawajund.workers.dev
+          curl -sS $U/; echo
+          P() { curl -sS -m 120 -o out.txt -w "%{http_code} %{time_total}s" -X POST "$U$1" -H "origin: $O" -H "x-mst-stream: openai" "${@:2}"; echo " | $(grep -o '"content":"[^"]*"' out.txt | sed 's/"content":"//;s/"$//' | tr -d '\n' | head -c 400)$(grep -o '"text":"[^"]*"' out.txt | head -c 400) $(grep -o '"code":"[^"]*"' out.txt)"; }
+          echo "notes (Gemma):"; P /write -H 'content-type: application/json' -d '{"system":"Write short meeting minutes.","user":"Meeting: budget approved; launch moved one week; Sara sends the invite by Friday.","json":false,"maxTokens":600}'
+          echo "study JSON:"; P /write -H 'content-type: application/json' -d '{"system":"Make study notes from this lesson.","user":"الدرس: آداب طالب العلم: الإخلاص، والصبر، واحترام المعلم.","json":true,"studyNotes":true,"maxTokens":2000}'
+          espeak-ng -v en -w e.wav "Good morning. Today we will discuss the budget and the launch date." 
+          ffmpeg -loglevel error -i e.wav -c:a aac -b:a 64k -f adts e.aac; ffmpeg -loglevel error -i e.wav -b:a 64k e.mp3; ffmpeg -loglevel error -i e.wav -c:a libopus -b:a 32k e.webm
+          echo "aac (Cloudflare):"; P "/transcribe?mime=audio/aac&langs=ar,en" -H 'content-type: audio/aac' --data-binary @e.aac
+          echo "mp3 (Groq):"; P "/transcribe?mime=audio/mpeg&langs=ar,en" -H 'content-type: audio/mpeg' --data-binary @e.mp3
+          ffmpeg -loglevel error -f lavfi -i anullsrc=r=16000:cl=mono -t 25 -b:a 32k s.mp3
+          echo "silence:"; P "/transcribe?mime=audio/mpeg&langs=ar,en" -H 'content-type: audio/mpeg' --data-binary @s.mp3
+          ffmpeg -loglevel error -f lavfi -i color=c=white:s=600x160 -vf "drawtext=text='Meeting on Friday at 10':fontsize=36:x=10:y=60" -frames:v 1 p.jpg
+          echo "photo of a page:"; P "/transcribe?mime=image/jpeg" -H 'content-type: image/jpeg' --data-binary @p.jpg
+          img=$(base64 -w0 p.jpg); printf '{"pages":[{"page":1,"data":"%s"},{"page":2,"data":"%s"}]}' "$img" "$img" > pages.json
+          echo "two scanned pages:"; P /read-pages -H 'content-type: application/json' --data-binary @pages.json
+          a=$(base64 -w0 e.webm); printf '{"audio":"%s","mime":"audio/webm","system":"Answer briefly.","user":"","langs":"ar,en"}' "$a" > v.json
+          echo "voice:"; P /ask-voice -H 'content-type: application/json' --data-binary @v.json
+          printf '{"file":"%s","mime":"image/jpeg","name":"board.jpg","user":"When is the meeting?","system":"Answer briefly."}' "$img" > f.json
+          echo "ask about a photo:"; P /ask-file -H 'content-type: application/json' --data-binary @f.json

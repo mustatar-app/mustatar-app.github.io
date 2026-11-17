@@ -153,12 +153,18 @@ const EXT = {
   'video/webm': 'webm', 'audio/flac': 'flac', 'audio/x-flac': 'flac', 'video/mp4': 'mp4', 'video/quicktime': 'mp4', 'video/3gpp': 'mp4', 'audio/3gpp': 'mp4',
 };
 export const fileName = mime => 'audio.' + (EXT[mime] || 'mp3');
+export const GROQ_REFUSES = /^audio\/(aac|aacp)$/;
 const LANGS = { arabic: 'ar', english: 'en', urdu: 'ur', hindi: 'hi', french: 'fr', malay: 'ms', indonesian: 'id', turkish: 'tr', persian: 'fa', bengali: 'bn', spanish: 'es', german: 'de', swahili: 'sw', somali: 'so', hausa: 'ha', russian: 'ru', chinese: 'zh', tamil: 'ta', malayalam: 'ml', pashto: 'ps' };
 export const langCode = l => { l = String(l || '').toLowerCase().trim(); return LANGS[l] || (/^[a-z]{2}$/.test(l) ? l : ''); };
 // what Whisper sometimes writes over silence or music, when nobody said it
 const JUNK = /(ترجمة نانسي قنقر|اشتركوا? في القناة|لا تنسوا? الاشتراك|شكرا(?:ً)? (?:لكم )?على المشاهدة|thanks? (?:you )?(?:so much )?for watching|subtitles? by|amara\.org|please subscribe)/i;
 
-export function tidyTranscript(segments, text) {
+const ONLY_FILLER = /^[\s.!,،]*(thank you|thanks|you|bye|okay|شكرا|شكرًا|شكراً)[\s.!,،]*$/i;
+export function tidyTranscript(segments, text, duration = 0) {
+  const out = tidySegments(segments, text);
+  return duration > 15 && ONLY_FILLER.test(out) ? '' : out;
+}
+function tidySegments(segments, text) {
   if (!Array.isArray(segments) || !segments.length) return JUNK.test(text || '') && String(text).length < 80 ? '' : String(text || '').trim();
   let out = '', lastEnd = null, lastText = '', repeats = 0;
   for (const s of segments) {
@@ -191,13 +197,13 @@ async function groqHear(env, model, audio, mime, language) {
     return { ok: false, status: r.status, retryAfter: waitFrom(r, t), daily: r.status === 429 && dailyLimit(t), msg: t };
   }
   const j = await r.json().catch(() => ({}));
-  return { ok: true, text: tidyTranscript(j.segments, j.text), lang: langCode(j.language), duration: Number(j.duration) || 0, model };
+  return { ok: true, text: tidyTranscript(j.segments, j.text, Number(j.duration) || 0), lang: langCode(j.language), duration: Number(j.duration) || 0, model };
 }
 async function cfHear(env, audio, mime, language) {
   try {
     const body = audio instanceof ReadableStream ? audio : new Blob([audio]).stream();
     const j = await env.AI.run(MODELS.cfHear, { audio: { body, contentType: mime }, vad_filter: true, ...(language ? { language } : {}) });
-    return { ok: true, text: tidyTranscript(j?.segments, j?.text), lang: langCode(j?.transcription_info?.language), duration: Number(j?.transcription_info?.duration) || 0, model: MODELS.cfHear };
+    return { ok: true, text: tidyTranscript(j?.segments, j?.text, Number(j?.transcription_info?.duration) || 0), lang: langCode(j?.transcription_info?.language), duration: Number(j?.transcription_info?.duration) || 0, model: MODELS.cfHear };
   } catch (e) { return { ok: false, ...cfProblem(e) }; }
 }
 
@@ -213,7 +219,8 @@ export async function hear(env, ctx, { audio, mime, langs = [], fast = false }) 
     const second = await again(langs[0]);
     return second.ok ? second : first;
   };
-  if (groqKey(env) && size <= GROQ_AUDIO_MAX) {
+  // Groq refuses raw AAC (the sound taken out of phone videos and M4A files) whatever its name: those go to Cloudflare
+  if (groqKey(env) && size <= GROQ_AUDIO_MAX && !GROQ_REFUSES.test(mime)) {
     for (const model of fast ? [...MODELS.groqHear].reverse() : MODELS.groqHear) {
       const r = await groqHear(env, model, audio, mime, told);
       if (r.ok) {

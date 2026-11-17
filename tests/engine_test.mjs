@@ -71,11 +71,15 @@ check(meterRows['groq.audio_sec'] === 64 && !cfCalls.length, 'the meter counts G
 reset();
 groq.hear = () => fail(429, 'Rate limit reached for model in organization on seconds of audio per hour (ASH): Limit 7200. Please try again in 2m10s.');
 cf.run = () => ({ text: 'Good morning', transcription_info: { language: 'en', duration: 120 }, segments: [{ start: 0, end: 2, text: 'Good morning' }] });
-r = await AI.hear(env, ctx, { audio, mime: 'audio/aac', langs: ['en', 'ar'] });
+r = await AI.hear(env, ctx, { audio, mime: 'audio/mpeg', langs: ['en', 'ar'] });
 await settle();
 check(r.ok && r.text === 'Good morning' && r.model === AI.MODELS.cfHear, 'Groq full → Cloudflare Whisper hears it');
-check(groqCalls.length === 2 && cfCalls[0].input.audio.contentType === 'audio/aac', 'both Groq models were tried, then Cloudflare with the sound streamed');
-check(Math.abs(meterRows['cf.neurons'] - 2 * AI.NEURONS.audioMin) < 0.01, 'the meter counts Cloudflare units by minutes of sound');
+check(groqCalls.length === 2 && cfCalls[0].input.audio.contentType === 'audio/mpeg', 'both Groq models were tried, then Cloudflare with the sound streamed');
+groqCalls = []; cfCalls = [];
+r = await AI.hear(env, ctx, { audio, mime: 'audio/aac', langs: ['en', 'ar'] });
+check(r.ok && !groqCalls.length && cfCalls.length === 1, 'raw AAC (from phone videos and M4A) goes straight to Cloudflare, which reads it (Groq refuses it)');
+check(AI.tidyTranscript([{ start: 0, end: 2, text: ' Thank you.' }], '', 20) === '' && AI.tidyTranscript([{ start: 0, end: 2, text: ' Thank you.' }], '', 3) === 'Thank you.', 'a long silent piece heard as only "Thank you." becomes empty; a short real one stays');
+check(Math.abs(meterRows['cf.neurons'] - 4 * AI.NEURONS.audioMin) < 0.01, 'the meter counts Cloudflare units by minutes of sound');
 
 // 3. A piece too big for Groq goes straight to Cloudflare
 reset();

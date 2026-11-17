@@ -28,7 +28,7 @@ TRANSCRIPT = ("Today's meeting. We decided to launch on Friday and to invite the
 
 async def fake_server(route):
     req = route.request
-    cors = {"access-control-allow-origin": BASE.rstrip("/"), "access-control-allow-headers": "content-type, x-user-key"}
+    cors = {"access-control-allow-origin": BASE.rstrip("/"), "access-control-allow-headers": "content-type, x-mst-stream, authorization"}
     if req.method == "OPTIONS":
         return await route.fulfill(status=204, headers=cors)
     if req.method == "GET":
@@ -40,8 +40,15 @@ async def fake_server(route):
         b = {}
     text = json.dumps(NOTE, ensure_ascii=False) if b.get("json", True) else "Done."
     half = len(text) // 2
-    sse = "".join("data: " + json.dumps({"candidates": [{"content": {"parts": [{"text": t}]}, **({"finishReason": "STOP"} if last else {})}]},
-                                        ensure_ascii=False) + "\n\n" for t, last in ((text[:half], False), (text[half:], True)))
+    if req.headers.get("x-mst-stream") == "openai":
+        # the free engine's own stream (Cloudflare and Groq), passed straight through, with some thinking the app must ignore
+        events = [{"choices": [{"index": 0, "delta": {"reasoning_content": "thinking…", "content": None}}]},
+                  {"choices": [{"index": 0, "delta": {"content": text[:half]}}]},
+                  {"choices": [{"index": 0, "delta": {"content": text[half:]}, "finish_reason": "stop"}]}]
+        sse = "".join("data: " + json.dumps(e, ensure_ascii=False) + "\n\n" for e in events) + "data: [DONE]\n\n"
+    else:
+        sse = "".join("data: " + json.dumps({"candidates": [{"content": {"parts": [{"text": t}]}, **({"finishReason": "STOP"} if last else {})}]},
+                                            ensure_ascii=False) + "\n\n" for t, last in ((text[:half], False), (text[half:], True)))
     await route.fulfill(status=200, headers={**cors, "content-type": "text/event-stream"}, body=sse)
 
 

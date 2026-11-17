@@ -214,7 +214,7 @@ async function ask(T, blob) {
     T.abort = new AbortController();
     const history = T.turns.slice(0, -1).slice(-8).map(t => `${t.who === 'me' ? 'Person' : 'You'}: ${t.text}`).join('\n');
     const res = await J.serverFetch('/ask-voice', { method: 'POST', signal: T.abort.signal, headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ audio: b64(await blob.arrayBuffer()), mime: blob.type, system: await systemFor(T.o), user: (history ? 'EARLIER IN THIS TALK:\n' + history + '\n\n' : '') + 'Now answer the new audio below, in the language it is spoken in.' }) });
+      body: JSON.stringify({ audio: b64(await blob.arrayBuffer()), mime: blob.type, langs: J.speechLangs?.() || 'ar,en', system: await systemFor(T.o), user: (history ? 'EARLIER IN THIS TALK:\n' + history + '\n\n' : '') + 'Now answer the new audio below, in the language it is spoken in.' }) });
     const r = await J.readStream(res, t => { if (T.gen === gen) feed(t); });
     if (T.gen !== gen) return;
     feed(r.text);

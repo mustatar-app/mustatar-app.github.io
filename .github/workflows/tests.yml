@@ -22,6 +22,8 @@ jobs:
         run: |
           for f in *.js server/*.js; do node --check "$f" || exit 1; done
           for f in *.json .well-known/*.json manifest.webmanifest; do python3 -m json.tool "$f" > /dev/null || { echo "Broken: $f"; exit 1; }; done
+      - name: The free AI engine picks the right source and waits in line when all are full
+        run: node tests/engine_test.mjs
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Get the test browser
@@ -36,7 +38,14 @@ jobs:
       - name: Accounts and private spaces work (pretend passkey, server on this machine)
         run: |
           (python3 -m http.server 8765 > /dev/null 2>&1 &) || true
-          (cd server && npm ci && npx --yes wrangler@4 dev --port 8787 --ip 127.0.0.1 > /tmp/server.log 2>&1 &)
+          # Cloudflare's AI cannot run on this machine, so the test server starts without it (the AI is tested by tests/engine_test.mjs)
+          (cd server && npm ci && sed '/^\[ai\]/,/^binding/d' wrangler.toml > wrangler.test.toml && npx --yes wrangler@4 dev -c wrangler.test.toml --port 8787 --ip 127.0.0.1 > /tmp/server.log 2>&1 &)
           for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8787/ && break; sleep 2; done
           python3 tests/space_test.py http://localhost:8765/ http://127.0.0.1:8787 || { tail -40 /tmp/server.log; exit 1; }
           python3 tests/sync_test.py http://localhost:8765/ http://127.0.0.1:8787 || { tail -40 /tmp/server.log; exit 1; }
+      - name: The server's AI routes work (pretend Groq, server on this machine)
+        run: |
+          (cd server && npx --yes wrangler@4 dev -c wrangler.test.toml --port 8788 --ip 127.0.0.1 --persist-to /tmp/ai-state \
+             --var GROQ_API_KEY:gsk_test --var GROQ_BASE:http://127.0.0.1:8799 > /tmp/server-ai.log 2>&1 &)
+          for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8788/ && break; sleep 2; done
+          python3 tests/server_ai_test.py check http://127.0.0.1:8788 || { tail -40 /tmp/server-ai.log; exit 1; }

@@ -690,8 +690,8 @@ async function getServer(signal) {
 // one call to the app's server; the answer streams back as it is written
 async function serverFetch(path, init = {}) {
   const base = await getServer(init.signal);
-  const uk = store.get('userKey', '');  // a person's own free AI key: their own daily limit
-  if (uk) init = { ...init, headers: { ...(init.headers || {}), 'x-user-key': uk } };
+  // tell the server this app reads the AI's own stream format, so answers pass straight through
+  init = { ...init, headers: { ...(init.headers || {}), 'x-mst-stream': 'openai' } };
   let res;
   try { res = await fetch(base + path, init); }
   catch (e) {
@@ -701,11 +701,10 @@ async function serverFetch(path, init = {}) {
   }
   if (!res.ok) {
     let j = {}; try { j = await res.json(); } catch {}
-    if (j.code === 'quota') throw Object.assign(new Error(store.get('userKey') ? 'Your AI key reached its daily limit.' : 'Mustatar reached its shared daily AI limit.'), { code: 'quota' });
+    if (j.code === 'quota') throw Object.assign(new Error(window.ZadLang === 'ar' ? 'انتهت حصة مستطر المجانية من الذكاء الاصطناعي لهذا اليوم. ما بدأته محفوظ؛ أكمله غدًا.' : 'Mustatar’s free AI is used up for today. What you started is saved; finish it tomorrow.'), { code: 'quota', retryAfter: Number(j.retryAfter) || 0 });
     if (j.code === 'rate' || res.status === 429) throw aiRetryError('rate', Number(j.retryAfter) || Number(res.headers.get('retry-after')));
     if (j.code === 'toolong') throw Object.assign(new Error('Too big for one go. Choose fewer pages or a shorter file.'), { code: 'toolong' });
     if (j.code === 'upload') throw Object.assign(new Error('The AI server could not read this attachment. Try again or choose a smaller file.'), { code: 'upload' });
-    if ((j.code === 'key' || j.code === 'nokey') && store.get('userKey')) throw Object.assign(new Error('Your own AI key is not working. Check it in Settings → AI key, or remove it.'), { code: 'key' });
     if (j.code === 'key' || j.code === 'nokey') throw Object.assign(new Error('The server key is wrong or not added yet. Finish the server setup steps.'), { code: 'key' });
     if (j.code === 'owner') throw Object.assign(new Error('wrong code'), { code: 'owner', status: 403 });
     if (j.code === 'bad') throw Object.assign(new Error('The AI refused this request.'), { code: 'bad', status: 400, detail: j.error || '' });
@@ -781,6 +780,13 @@ async function readStream(res, onText) {
         if (Number(ev.error.code) >= 500) throw aiRetryError('ai_busy');
         throw Object.assign(new Error('The AI could not finish this response.'), { code: 'ai' });
       }
+      if (ev.choices || ev.response != null) {   // the AI's own stream (Cloudflare and Groq): only the answer, never its thinking
+        const ch = ev.choices?.[0];
+        const t = ch?.delta?.content ?? ch?.message?.content ?? ev.response ?? '';
+        if (t) { text += t; onText?.(text); }
+        if (ch?.finish_reason) stop = ch.finish_reason === 'length' ? 'MAX_TOKENS' : 'STOP';
+        continue;
+      }
       const c = ev.candidates?.[0];
       const t = (c?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('');
       if (t) { text += t; onText?.(text); }
@@ -812,8 +818,15 @@ async function getJSON(text, signal) {
 
 /* ---------- hearing: audio, video and YouTube → transcript ---------- */
 const cleanHeard = t => String(t || '').replace(/\[\[(NOSPEECH|END)\]\]/g, '').trim();
+// the languages the person speaks (About me), as short codes for Whisper; Arabic and English are always allowed
+const LANG_CODES = { arabic: 'ar', 'العربية': 'ar', 'عربي': 'ar', english: 'en', 'إنجليزي': 'en', 'انجليزي': 'en', urdu: 'ur', 'اردو': 'ur', 'أردو': 'ur', hindi: 'hi',
+  french: 'fr', turkish: 'tr', 'malay / indonesian': 'ms,id', malay: 'ms', indonesian: 'id', spanish: 'es', persian: 'fa', farsi: 'fa', bengali: 'bn', german: 'de', swahili: 'sw', somali: 'so', hausa: 'ha', russian: 'ru', tamil: 'ta', malayalam: 'ml', pashto: 'ps' };
+function speechLangs() {
+  const mine = (store.get('me', {}).langs || []).flatMap(x => (LANG_CODES[String(x).trim().toLowerCase()] || (/^[a-z]{2}$/i.test(String(x).trim()) ? String(x).trim().toLowerCase() : '')).split(','));
+  return [...new Set([...mine, 'ar', 'en'].filter(Boolean))].slice(0, 6).join(',');
+}
 async function hearPiece(piece, signal, onText) {
-  const res = await serverFetch('/transcribe?mime=' + encodeURIComponent(piece.mime), {
+  const res = await serverFetch('/transcribe?mime=' + encodeURIComponent(piece.mime) + '&langs=' + encodeURIComponent(speechLangs()), {
     method: 'POST', signal, headers: { 'content-type': piece.mime }, body: piece.blob,
   });
   return readStream(res, onText);
@@ -838,13 +851,24 @@ async function hearFile(item, signal, onStatus) {
   for (let i = 0; i < prep.pieces.length; i++) {
     const pre = prep.pieces.length > 1 ? `Transcribing part ${ar(i + 1)} of ${ar(prep.pieces.length)}` : 'Transcribing';
     onStatus(pre + '… (uploading the sound)');
-    let r, tries = 0;
+    let r, tries = 0, waited = 0;
     for (;;) {
       try {
         r = await hearPiece(prep.pieces[i], signal, t => onStatus(`${pre}… ${ar(t.split(/\s+/).filter(Boolean).length)} words`));
         break;
       } catch (e) {
-        if (signal?.aborted || e.code === 'offline' || e.code === 'key' || e.code === 'quota' || ++tries >= 2) throw e;
+        if (signal?.aborted || e.code === 'offline' || e.code === 'key' || e.code === 'quota') throw e;
+        // the free hearing services are full for the moment: wait in line (up to an hour in all), then carry on by itself
+        if (e.code === 'rate' && waited < 3600) {
+          const sec = Math.min(Math.max(Number(e.retryAfter) || 30, 10), 900);
+          for (let left = sec; left > 0; left--) {
+            onStatus(window.ZadLang === 'ar' ? `${pre}… الخدمة المجانية مشغولة، في الانتظار (${ar(left)} ث)` : `${pre}… the free service is busy, waiting in line (${ar(left)} s)`);
+            await new Promise((res, rej) => { const t = setTimeout(res, 1000); signal?.addEventListener('abort', () => { clearTimeout(t); rej(signal.reason); }, { once: true }); });
+          }
+          waited += sec;
+          continue;
+        }
+        if (++tries >= 2) throw e;
         onStatus(pre + '… failed, trying again');
       }
     }
@@ -2933,7 +2957,7 @@ async function checkServer() {
     const base = await getServer();
     const j = await (await fetch(base + '/', { cache: 'no-store' })).json();
     dot.dataset.ok = j.key ? '1' : '0';
-    if (st) st.textContent = j.key ? '✓ The server is running and has its AI key.' : '⚠ The server runs but has no AI key yet. Add GEMINI_API_KEY in the GitHub secrets.';
+    if (st) st.textContent = j.key ? '✓ The server is running, with its free AI (' + [j.engine?.hear?.length ? 'hearing' : '', j.engine?.write?.length ? 'writing' : ''].filter(Boolean).join(' and ') + ').' : '⚠ The server runs but has no AI yet. Add GROQ_API_KEY in the GitHub secrets.';
   } catch (e) {
     dot.dataset.ok = '0';
     if (st) st.textContent = '✗ ' + (e.code === 'noserver' ? e.message : 'The server could not be reached. Check the internet.');
@@ -3048,7 +3072,7 @@ $('#lib-search').addEventListener('input', () => renderLibrary());
 // start transcribing a YouTube link from anywhere (the Assistant, a share)
 function startYouTube(url) { show('new'); $('#yt').value = url; $('#yt-go').click(); }
 // shared with calendar.js, studio.js and offline.js
-window.JN = { applyTools, saveProfile, TOOLS, HARD, store, cloud, esc, ar, show, callServer, serverFetch, readStream, shrinkImage, callBig, parseJSON, getJSON, langOf, errText, allLessons, openLesson,
+window.JN = { speechLangs, applyTools, saveProfile, TOOLS, HARD, store, cloud, esc, ar, show, callServer, serverFetch, readStream, shrinkImage, callBig, parseJSON, getJSON, langOf, errText, allLessons, openLesson,
   noteRetry: value => pdfProgress('attachment', 'latest', value),
   saveLesson, download, safeName, addFiles, makeAttachmentNotes, startYouTube, me, keepAwake, engineKind, splitText, cleanHeator: cleanHeard, current: () => current };
 // for testing only

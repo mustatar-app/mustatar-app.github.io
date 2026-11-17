@@ -40,7 +40,7 @@ async function askFile(file, { system, user, json = false, maxTokens = 8000, onT
   let f = file; const mime = mimeOf(file);
   if (mime.startsWith('image/') && file.size > 1.5e6 && window.JN.shrinkImage) { try { f = await window.JN.shrinkImage(file); } catch {} }
   if (f.size > sizeLimit(mime)) throw Object.assign(new Error(L('PDFs can be up to 50 MB. Other attachments can be up to 15 MB.', 'الحد الأقصى لملفات PDF هو ٥٠ م.ب، وللمرفقات الأخرى ١٥ م.ب.')), { code: 'toolong' });
-  const options = { mime: mime.startsWith('image/') ? f.type || mime : mime, name: file.name, system, user, json, maxTokens };
+  const options = { mime: mime.startsWith('image/') ? f.type || mime : mime, name: file.name, system, user, json, maxTokens, langs: J.speechLangs?.() || 'ar,en' };
   const request = { method: 'POST', signal };
   if (mime === 'application/pdf' && f.size > INLINE_PDF) {
     const form = new FormData();

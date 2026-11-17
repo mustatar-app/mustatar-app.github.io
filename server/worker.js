@@ -10,21 +10,13 @@
 //   POST /ask-voice   a short spoken question (+ the file being discussed) → what was heard and the answer
 
 import { UserSpace, Accounts, accountRoutes } from './space.js';
+import * as AI from './engine.js';
 export { UserSpace, Accounts };   // each person's own database, and the sign-in database (see space.js)
 
 const ALLOWED = ['https://mustatar-app.github.io', 'https://dawajund-1.github.io'];
 const CLOUDFLARE_SITE = /^https:\/\/mustatar\.[a-z0-9-]+\.workers\.dev$/;   // the app's own copy on Cloudflare
-let G = 'https://generativelanguage.googleapis.com';  // GEMINI_BASE replaces it only in local tests
-const WRITE_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'];
+let G = 'https://generativelanguage.googleapis.com';  // only for YouTube links (public videos); GEMINI_BASE replaces it in local tests
 const HEAR_MODELS = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-flash-lite-latest'];
-const FILE_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-const NOTES_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-const STUDY_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-2.5-flash'];
-const OPENROUTER_STUDY_MODEL = 'nvidia/nemotron-3.5-super-vl:free';
-const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
-const GROQ_STUDY_MODELS = [GROQ_VISION_MODEL, 'openai/gpt-oss-120b'];
-const OPENROUTER_ROUTE = { require_parameters: true, data_collection: 'deny', zdr: true, max_price: { prompt: 0, completion: 0, request: 0 } };
-const VOICE_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest'];
 const OWNER_HASH = '8a5e60651062c57c33c620aa1cae7f15b0581db7d824c80a3357fdc74ef88bf1';   // sha-256 of the owner code (the code itself is not stored here)
 const MAX_BODY = 900_000;            // characters of text: about 150 pages
 const MAX_AUDIO = 95 * 1024 * 1024;  // bytes per audio piece
@@ -61,20 +53,18 @@ function cors(origin) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, x-user-key, authorization',
+    'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
 }
 const json = (obj, status, headers) => new Response(JSON.stringify(obj), { status, headers: { ...headers, 'content-type': 'application/json; charset=utf-8' } });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const keyHeaders = env => ({ 'x-goog-api-key': env.GEMINI_API_KEY });
 const errCode = s => s === 429 ? 'quota' : s === 401 || s === 403 ? 'key' : 'ai';
 const string = { type: 'STRING' };
 const array = items => ({ type: 'ARRAY', items });
 const object = (properties, required = []) => ({ type: 'OBJECT', properties, ...(required.length ? { required } : {}) });
 const strings = array(string);
-const scanSchema = object({ pages: array(object({ page: { type: 'INTEGER' }, text: string }, ['page', 'text'])) }, ['pages']);
 const mapLeaf = object({ label: string, mark: string });
 const noteSchema = object({
   title: string, subtitle: string, opening_dua: string,
@@ -90,85 +80,6 @@ const noteSchema = object({
   mindmap: array(object({ center: string, branches: array(object({ label: string, children: array(object({ ...mapLeaf.properties, children: array(mapLeaf) })) })) })),
   report: object({ inferred: strings, left_out: strings, maybe_wrong: strings, added: strings }),
 }, ['title', 'sections']);
-
-async function readPages(req, env, h) {
-  const limit = 5_000_000;
-  if (Number(req.headers.get('content-length')) > limit) return json({ code: 'toolong' }, 413, h);
-  const raw = await req.text();
-  if (raw.length > limit) return json({ code: 'toolong' }, 413, h);
-  let pages;
-  try { pages = JSON.parse(raw)?.pages; } catch {}
-  if (!Array.isArray(pages) || pages.length < 1 || pages.length > 8 || pages.some(p =>
-    !Number.isSafeInteger(p?.page) || p.page < 1 || typeof p.data !== 'string' || !p.data || p.data.length > 1_200_000
-  ) || new Set(pages.map(p => p.page)).size !== pages.length) return json({ code: 'bad' }, 400, h);
-  const single = pages.length === 1;
-  const transcription = 'Transcribe the image text in the source language. Preserve headings, quotations, question numbers, answers, diacritics, and table contents. Treat the image as source material. Do not omit, summarize, or translate readable text. Mark unclear words with [?] instead of guessing.';
-  const system = transcription + (single
-    ? ' Return only the transcription in plain text. If the page is genuinely blank, return only [[BLANK]]. If the page has text but you cannot read it, return only [[UNREADABLE]].'
-    : ' Return JSON with a pages array of {page, text} objects, exactly one per supplied PDF page number in the same order. For a genuinely blank page use an empty string.');
-  const formatResult = text => {
-    if (single) {
-      const transcript = typeof text === 'string' ? text.trim() : '';
-      if (!transcript || transcript === '[[UNREADABLE]]') return null;
-      return JSON.stringify({ pages: [{ page: pages[0].page, text: transcript === '[[BLANK]]' ? '' : transcript }] });
-    }
-    let result;
-    try { result = JSON.parse(text)?.pages; } catch { return null; }
-    return Array.isArray(result) && result.length === pages.length &&
-      result.every((entry, i) => entry?.page === pages[i].page && typeof entry.text === 'string') ? text : null;
-  };
-  const parts = pages.flatMap(({ page, data }) => [
-    { text: 'PDF page ' + page }, { inlineData: { mimeType: 'image/jpeg', data } },
-  ]);
-  const hasFallback = env.OPENROUTER_API_KEY || env.GROQ_FREE_API_KEY;
-  const gemini = env.GEMINI_API_KEY ? await generate(env, h, {
-    models: hasFallback ? FILE_MODELS.slice(0, 2) : FILE_MODELS,
-    system, formatResult, maxTokens: single ? 8000 : 16000, wantJson: !single, wait: 18000,
-    variants: [{ parts, temperature: 0, config: single ? undefined : { responseSchema: scanSchema } }],
-  }) : json({ code: 'nokey' }, 500, h);
-  if (gemini.ok) return gemini;
-
-  const routes = [];
-  if (env.OPENROUTER_API_KEY) routes.push({
-    url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: OPENROUTER_STUDY_MODEL, timeout: 30000,
-    options: { provider: OPENROUTER_ROUTE, max_tokens: 16000, reasoning: { enabled: false } },
-  });
-  // Two images and the answer fit Groq's Free-plan token allowance per request.
-  if (env.GROQ_FREE_API_KEY && pages.length <= 2) routes.push({
-    url: 'https://api.groq.com/openai/v1/chat/completions', key: env.GROQ_FREE_API_KEY, model: GROQ_VISION_MODEL, timeout: 20000,
-    options: { max_completion_tokens: 3400, reasoning_effort: 'none' },
-  });
-  const content = [{ type: 'text', text: system }, ...pages.flatMap(({ page, data }) => [
-    { type: 'text', text: 'PDF page ' + page }, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + data } },
-  ])];
-  let retryAfter = 0;
-  let incomplete = (await gemini.clone().json()).code === 'scan_format';
-  for (const { url, key, model, timeout, options } of routes) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content }], stream: false,
-          ...(!single ? { response_format: { type: 'json_object' } } : {}), ...options }),
-        signal: AbortSignal.timeout(timeout),
-      });
-      if (!response.ok) {
-        if (response.status === 429) retryAfter = Math.max(retryAfter, Number(response.headers.get('retry-after')) || 0);
-        await response.body?.cancel();
-        continue;
-      }
-      const choice = (await response.json()).choices?.[0];
-      incomplete ||= choice?.finish_reason === 'length' || choice?.finish_reason === 'stop';
-      const formatted = choice?.finish_reason === 'stop' && formatResult(choice.message?.content);
-      if (formatted) return modelResponse(h, model, formatted, 'STOP');
-    } catch {
-      // Try another reader if the provider times out or its response is invalid.
-    }
-  }
-  if (retryAfter) return json({ code: 'rate', retryAfter: Math.ceil(retryAfter) }, 429, h);
-  // The existing client splits batches whose result did not finish successfully.
-  if (incomplete || (pages.length > 2 && env.GROQ_FREE_API_KEY)) return modelResponse(h, '', '', 'MAX_TOKENS');
-  return gemini;
-}
 
 function rateLimit(text, header) {
   let details = [];
@@ -221,7 +132,7 @@ async function generate(env, h, { models, system, variants, maxTokens, wantJson,
           const candidate = (await r.json()).candidates?.[0];
           const text = (candidate?.content?.parts || []).filter(part => !part.thought).map(part => part.text || '').join('');
           const formatted = candidate?.finishReason === 'STOP' && formatResult(text);
-          if (formatted) return modelResponse(h, model, formatted, 'STOP');
+          if (formatted) return AI.modelResponse(h, model, formatted, 'STOP');
           invalid = true;
           last = { status: 502, text: 'The scan reader returned an incomplete result.' };
         } else {
@@ -256,71 +167,6 @@ async function generate(env, h, { models, system, variants, maxTokens, wantJson,
   return json(failure, failure.status === 429 ? 429 : 502, h);
 }
 
-function jsonSchema({ type, properties, items, ...fields }) {
-  const schema = { ...fields, type: type.toLowerCase() };
-  if (properties) schema.properties = Object.fromEntries(Object.entries(properties).map(([key, value]) => [key, jsonSchema(value)]));
-  if (items) schema.items = jsonSchema(items);
-  return schema;
-}
-
-const studyResponseFormat = {
-  type: 'json_schema',
-  json_schema: { name: 'study_notes', strict: false, schema: jsonSchema(noteSchema) },
-};
-
-async function generateStudyFallback(env, h, { system, user, maxTokens, allowTruncated }) {
-  const routes = [];
-  if (env.OPENROUTER_API_KEY) {
-    routes.push({
-      url: 'https://openrouter.ai/api/v1/chat/completions', key: env.OPENROUTER_API_KEY, model: OPENROUTER_STUDY_MODEL, timeout: 55000,
-      options: { max_tokens: Math.min(maxTokens, 32000), reasoning: { effort: 'high', exclude: true },
-        provider: OPENROUTER_ROUTE },
-    });
-  }
-  // Groq's free TPM limits make it useful for smaller requests and split sections.
-  if (env.GROQ_FREE_API_KEY && system.length + user.length <= 26000) {
-    for (const model of GROQ_STUDY_MODELS) routes.push({
-      url: 'https://api.groq.com/openai/v1/chat/completions', key: env.GROQ_FREE_API_KEY, model, timeout: 20000,
-      options: { max_completion_tokens: Math.min(maxTokens, 3800), reasoning_effort: 'high', include_reasoning: false },
-    });
-  }
-  let truncatedModel;
-  for (const { url, key, model, timeout, options } of routes) {
-    try {
-      const result = await fetch(url, {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, stream: false, response_format: studyResponseFormat,
-          messages: [{ role: 'system', content: system || 'Write source-grounded study notes as JSON.' }, { role: 'user', content: user }], ...options }),
-        signal: AbortSignal.timeout(timeout),
-      });
-      if (!result.ok) {
-        await result.body?.cancel();
-        continue;
-      }
-      const choice = (await result.json()).choices?.[0];
-      if (choice?.finish_reason === 'length') {
-        truncatedModel = model;
-        continue;
-      }
-      if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string') continue;
-      const notes = JSON.parse(choice.message.content);
-      if (!Array.isArray(notes?.sections) || !notes.sections.length || notes.sections.some(section =>
-        !Array.isArray(section?.blocks) || !section.blocks.length || section.blocks.some(block => typeof block?.t !== 'string'))) continue;
-      return modelResponse(h, model, choice.message.content, 'STOP');
-    } catch {
-      // A fallback can be unavailable or return invalid JSON. Try the next configured model.
-    }
-  }
-  return allowTruncated && truncatedModel ? modelResponse(h, truncatedModel, '', 'MAX_TOKENS') : null;
-}
-
-function modelResponse(h, model, text, finishReason) {
-  const event = { candidates: [{ content: { parts: [{ text }] }, finishReason }] };
-  return new Response(`data: ${JSON.stringify(event)}\n\n`, {
-    headers: { ...h, 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-model': model },
-  });
-}
-
 async function boundedForm(req) {
   const limit = MAX_FILE + 1_000_000;
   const length = Number(req.headers.get('content-length'));
@@ -334,139 +180,101 @@ async function boundedForm(req) {
   }}));
   return new Response(body, {headers:{'content-type':req.headers.get('content-type')}}).formData();
 }
-async function removeUploaded(env, file) {
-  if (!/^files\/[\w-]+$/.test(file?.name || '')) return;
-  try { await fetch(`${G}/v1beta/${file.name}`, {method:'DELETE', headers:keyHeaders(env), signal:AbortSignal.timeout(10000)}); } catch {}
-}
-function cleanupResponse(response, cleanup) {
-  const reader = response.body.getReader();
-  return new Response(new ReadableStream({
-    async pull(ctl) {
-      try {
-        const { done, value } = await reader.read();
-        if (done) { ctl.close(); cleanup(); }
-        else ctl.enqueue(value);
-      } catch (e) { ctl.error(e); cleanup(); }
-    },
-    async cancel(reason) { try { await reader.cancel(reason); } finally { cleanup(); } },
-  }), { status: response.status, headers: response.headers });
-}
 const ATTACHMENT_MIME = /^(image\/[\w.+-]+|application\/pdf|audio\/[\w.+-]+|video\/[\w.+-]+|text\/[\w.+-]+)$/;
 const attachmentType = value => String(value || '').split(';')[0].trim().toLowerCase();
 
-function generateAttachment(env, h, b, filePart) {
-  return generate(env, h, {
-    models: FILE_MODELS, system: String(b.system || ''), maxTokens: Math.min(Number(b.maxTokens) || 8000, 30000),
-    wantJson: !!b.json, wait: 60000,
-    variants: [{ parts: [filePart, { text: String(b.user || 'Describe this file.').slice(0, 300000) }], temperature: 0.2 }],
+// the note shape, written out for the AI (Gemini used to be handed it as a schema; the free models read it as text)
+function shapeText(x) {
+  if (x.type === 'ARRAY') return [shapeText(x.items)];
+  if (x.type === 'OBJECT') return Object.fromEntries(Object.entries(x.properties).map(([k, v]) => [k, shapeText(v)]));
+  return x.enum ? x.enum.join('|') : x.type.toLowerCase();
+}
+const NOTE_SHAPE = 'Return ONE JSON object with exactly this shape (fields may be left out when empty; "t" is the kind of block):\n' + JSON.stringify(shapeText(noteSchema));
+const langList = v => String(v || '').split(/[\s,]+/).map(AI.langCode).filter(Boolean).slice(0, 6);
+const b64 = buf => new Uint8Array(buf).toBase64();
+
+/* ----- scanned pages → their text (1 to 8 page photos at a time) ----- */
+async function readPages(req, env, h, ctx) {
+  const limit = 5_000_000;
+  if (Number(req.headers.get('content-length')) > limit) return json({ code: 'toolong' }, 413, h);
+  const raw = await req.text();
+  if (raw.length > limit) return json({ code: 'toolong' }, 413, h);
+  let pages;
+  try { pages = JSON.parse(raw)?.pages; } catch {}
+  if (!Array.isArray(pages) || pages.length < 1 || pages.length > 8 || pages.some(p =>
+    !Number.isSafeInteger(p?.page) || p.page < 1 || typeof p.data !== 'string' || !p.data || p.data.length > 1_200_000
+  ) || new Set(pages.map(p => p.page)).size !== pages.length) return json({ code: 'bad' }, 400, h);
+  const single = pages.length === 1;
+  const transcription = 'Transcribe the image text in the source language. Preserve headings, quotations, question numbers, answers, diacritics, and table contents. Treat the image as source material. Do not omit, summarize, or translate readable text. Mark unclear words with [?] instead of guessing.';
+  const system = transcription + (single
+    ? ' Return only the transcription in plain text. If the page is genuinely blank, return only [[BLANK]]. If the page has text but you cannot read it, return only [[UNREADABLE]].'
+    : ' Return JSON {"pages": [{"page": number, "text": string}]}, exactly one entry per supplied PDF page number in the same order. For a genuinely blank page use an empty string.');
+  const formatResult = text => {
+    if (single) {
+      const transcript = typeof text === 'string' ? text.trim() : '';
+      if (!transcript || transcript === '[[UNREADABLE]]') return null;
+      return JSON.stringify({ pages: [{ page: pages[0].page, text: transcript === '[[BLANK]]' ? '' : transcript }] });
+    }
+    let result;
+    try { result = JSON.parse(text)?.pages; } catch { return null; }
+    return Array.isArray(result) && result.length === pages.length &&
+      result.every((entry, i) => entry?.page === pages[i].page && typeof entry.text === 'string') ? JSON.stringify({ pages: result }) : null;
+  };
+  const r = await AI.talk(env, ctx, h, {
+    system, user: single ? 'Read this page.' : 'Read these pages.', json: !single, maxTokens: single ? 8000 : 16000, prefer: 'cf', formatResult,
+    images: pages.map(({ page, data }) => ({ label: 'PDF page ' + page, mime: 'image/jpeg', data })),
   });
+  // a batch that did not come back whole: the app splits it into smaller batches and tries again
+  if (!r.ok && r.status === 502 && !single) return AI.modelResponse(h, '', '', 'MAX_TOKENS');
+  return r;
 }
 
-async function askFile(req, env, h, ctx) {
-  let uploaded;
+/* ----- a question about one attached file (photo, PDF, recording, video or text) ----- */
+async function askFile(req, env, h, ctx, direct) {
   try {
-    let b, filePart;
+    let b, blob, mime;
     if ((req.headers.get('content-type') || '').startsWith('multipart/form-data')) {
-      const form = await boundedForm(req), blob = form.get('file'), meta = form.get('meta');
+      const form = await boundedForm(req), meta = form.get('meta');
+      blob = form.get('file');
       if (typeof meta !== 'string' || meta.length > 500000) return json({ error: 'Invalid instructions', code: 'bad' }, 400, h);
       try { b = JSON.parse(meta); } catch { return json({ error: 'Invalid instructions', code: 'bad' }, 400, h); }
       if (!b || typeof b !== 'object') return json({ error: 'Invalid instructions', code: 'bad' }, 400, h);
       if (!blob || typeof blob === 'string' || !blob.size) return json({ error: 'No file attached', code: 'bad' }, 400, h);
-      const mime = attachmentType(b.mime || blob.type);
-      if (!ATTACHMENT_MIME.test(mime)) return json({ error: 'Unsupported file type', code: 'bad' }, 400, h);
-      if (blob.size > (mime === 'application/pdf' ? MAX_PDF : MAX_FILE)) {
-        return json({ error: 'Upload too large', code: 'toolong' }, 413, h);
-      }
-      if (mime.startsWith('text/')) {
-        const text = await blob.slice(0, 1_600_000).text();
-        filePart = { text: 'ATTACHED FILE (' + blob.name.slice(0, 80) + '):\n' + text.slice(0, 400000) };
-      } else {
-        const result = await uploadToGoogle(env, blob.stream(), blob.size, mime);
-        if (result.error) {
-          const { status } = result.error;
-          console.warn('Attachment upload failed', status);
-          const code = errCode(status);
-          return json({ error: 'The file could not be uploaded.', code: code === 'ai' ? 'upload' : code }, status === 429 ? 429 : 502, h);
-        }
-        uploaded = result.file;
-        filePart = { fileData: { mimeType: mime, fileUri: uploaded.uri } };
-      }
+      mime = attachmentType(b.mime || blob.type);
     } else {
       const raw = await req.text();
       if (raw.length > 25_000_000) return json({ error: 'Upload too large', code: 'toolong' }, 413, h);
       try { b = JSON.parse(raw); } catch { return json({ error: 'Invalid attachment', code: 'bad' }, 400, h); }
-      const mime = attachmentType(b?.mime);
-      if (typeof b?.file !== 'string' || !b.file || !ATTACHMENT_MIME.test(mime)) {
-        return json({ error: 'Unsupported or missing attachment', code: 'bad' }, 400, h);
-      }
-      if (mime.startsWith('text/')) {
-        let bytes;
-        try { bytes = Uint8Array.fromBase64(b.file); } catch { return json({ error: 'Invalid attachment', code: 'bad' }, 400, h); }
-        filePart = { text: 'ATTACHED FILE (' + String(b.name || '').slice(0, 80) + '):\n' + new TextDecoder().decode(bytes).slice(0, 400000) };
-      } else {
-        filePart = { inlineData: { mimeType: mime, data: b.file } };
-      }
+      mime = attachmentType(b?.mime);
+      if (typeof b?.file !== 'string' || !b.file) return json({ error: 'Unsupported or missing attachment', code: 'bad' }, 400, h);
+      let bytes;
+      try { bytes = Uint8Array.fromBase64(b.file); } catch { return json({ error: 'Invalid attachment', code: 'bad' }, 400, h); }
+      blob = new Blob([bytes], { type: mime });
     }
-    const response = await generateAttachment(env, h, b, filePart);
-    if (!uploaded) return response;
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      ctx.waitUntil(removeUploaded(env, uploaded));
-    };
-    if (response.ok && response.body) return cleanupResponse(response, cleanup);
-    cleanup();
-    return response;
+    if (!ATTACHMENT_MIME.test(mime)) return json({ error: 'Unsupported file type', code: 'bad' }, 400, h);
+    if (blob.size > (mime === 'application/pdf' ? MAX_PDF : MAX_FILE)) return json({ error: 'Upload too large', code: 'toolong' }, 413, h);
+    const name = String(b.name || blob.name || 'file').slice(0, 80);
+    const ask = { system: String(b.system || ''), json: !!b.json, maxTokens: Math.min(Number(b.maxTokens) || 8000, 16000), prefer: 'cf', direct };
+    const question = String(b.user || 'Describe this file.').slice(0, 300000);
+    if (mime.startsWith('image/')) return AI.talk(env, ctx, h, { ...ask, user: question, images: [{ mime, data: b64(await blob.arrayBuffer()) }] });
+    let content = '';
+    if (mime.startsWith('text/')) content = (await blob.slice(0, 1_600_000).text()).slice(0, 400000);
+    else if (mime === 'application/pdf') {
+      content = (await AI.pdfText(env, blob, name.endsWith('.pdf') ? name : name + '.pdf')).slice(0, 400000);
+      if (!content) return json({ error: 'This PDF has no text layer (a scan). Use Make notes, which reads scanned pages.', code: 'upload' }, 422, h);
+    } else {
+      const big = blob.size > AI.GROQ_AUDIO_MAX;
+      const heard = await AI.hear(env, ctx, { audio: big ? blob.stream() : await blob.arrayBuffer(), mime, langs: langList(b.langs) });
+      if (!heard.ok) return heard.fail(h);
+      content = heard.text;
+      if (!content) return AI.modelResponse(h, heard.model || '', 'لم يُسمع كلام في هذا التسجيل. — No speech was heard in this recording.', 'STOP');
+    }
+    return AI.talk(env, ctx, h, { ...ask, user: `ATTACHED FILE (${name}):\n${content}\n\n${question}` });
   } catch (e) {
-    if (uploaded) ctx.waitUntil(removeUploaded(env, uploaded));
     if (e.message === 'toolong') return json({ error: 'Upload too large', code: 'toolong' }, 413, h);
-    console.warn('Attachment processing failed', e.name);
+    console.warn('Attachment processing failed', e.name, e.message);
     return json({ error: 'The file could not be processed.', code: 'upload' }, 502, h);
   }
-}
-
-// Put a media file in Google's temporary file store (kept 48 hours), streaming it straight through.
-async function uploadToGoogle(env, body, len, mime) {
-  const start = await fetch(`${G}/upload/v1beta/files`, {
-    method: 'POST',
-    headers: {
-      ...keyHeaders(env), 'content-type': 'application/json',
-      'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(len), 'X-Goog-Upload-Header-Content-Type': mime,
-    },
-    body: JSON.stringify({ file: { display_name: 'jund-' + Date.now() } }),
-  });
-  if (!start.ok) return { error: { status: start.status, text: (await start.text()).slice(0, 300) } };
-  const target = new URL(start.headers.get('x-goog-upload-url') || G, G);
-  if (!start.headers.has('x-goog-upload-url') || target.origin !== new URL(G).origin) {
-    return { error: { status: 502, text: 'invalid upload address' } };
-  }
-  const { readable, writable } = new FixedLengthStream(len);
-  const piping = body.pipeTo(writable).catch(() => {});
-  const up = await fetch(target.href, {
-    method: 'POST', redirect: 'manual',
-    headers: { 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
-    body: readable,
-  });
-  await piping;
-  if (!up.ok) return { error: { status: up.status, text: (await up.text()).slice(0, 300) } };
-  let file = (await up.json()).file;
-  for (let i = 0; i < 30 && file?.state === 'PROCESSING'; i++) {
-    await sleep(2000);
-    if (!/^files\/[\w-]+$/.test(file.name || '')) break;
-    const poll = await fetch(`${G}/v1beta/${file.name}`, { headers: keyHeaders(env) });
-    if (!poll.ok) {
-      await removeUploaded(env, file);
-      return { error: { status: poll.status, text: 'the file status could not be checked' } };
-    }
-    file = await poll.json();
-  }
-  if (!file?.uri || file.state !== 'ACTIVE') {
-    await removeUploaded(env, file);
-    return { error: { status: 502, text: 'the file could not be read' } };
-  }
-  return { file };
 }
 
 const ytId = u => {
@@ -648,19 +456,20 @@ export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(cron(env)); },
   async fetch(req, env, ctx) {
     if (env.GEMINI_BASE) G = env.GEMINI_BASE;
-    // someone using their own free AI key gets their own daily limit
-    const own = req.headers.get('x-user-key') || '';
-    if (/^(AIza[\w-]{30,60}|AQ\.[\w.-]{20,300}|[\w.-]{30,300})$/.test(own)) env = { ...env, GEMINI_API_KEY: own };
+    AI.setBase(env);
     const origin = req.headers.get('origin') || '';
-    const h = cors(origin);
+    const h = { ...cors(origin), 'Access-Control-Expose-Headers': 'x-model, retry-after' };
     const url = new URL(req.url);
     const path = url.pathname;
+    // the app says it reads the AI's own stream format, so a streamed answer can pass straight through
+    const direct = req.headers.get('x-mst-stream') === 'openai';
     if (req.method === 'OPTIONS') return new Response(null, { headers: h });
     if (req.method === 'GET' && path === '/') return json({
-      ok: true, app: 'jund-notes', version: 14, studyModel: STUDY_MODELS[0],
-      studyFallbacks: [...(env.OPENROUTER_API_KEY ? [OPENROUTER_STUDY_MODEL] : []), ...(env.GROQ_FREE_API_KEY ? GROQ_STUDY_MODELS : [])],
-      scanFallbacks: [...(env.OPENROUTER_API_KEY ? [OPENROUTER_STUDY_MODEL] : []), ...(env.GROQ_FREE_API_KEY ? [GROQ_VISION_MODEL] : [])],
-      uploads: { pdf: MAX_PDF, other: MAX_FILE }, key: !!env.GEMINI_API_KEY, push: !!env.PUSH,
+      ok: true, app: 'mustatar', version: 15, key: AI.ready(env), push: !!env.PUSH,
+      engine: { hear: [...(AI.groqKey(env) ? AI.MODELS.groqHear.map(m => 'groq/' + m) : []), ...(env.AI ? ['cloudflare/' + AI.MODELS.cfHear] : [])],
+        write: [...(env.AI ? ['cloudflare/' + AI.MODELS.cfText] : []), ...(AI.groqKey(env) ? AI.MODELS.groqText.map(m => 'groq/' + m) : [])],
+        youtube: !!env.GEMINI_API_KEY },
+      uploads: { pdf: MAX_PDF, other: MAX_FILE },
     }, 200, h);
     if (path.startsWith('/push/')) return pushRoutes(req, env, h, path, url);
     if (path === '/widget' || path.startsWith('/widget/')) return widgetRoutes(req, env, h, path, url);
@@ -736,8 +545,9 @@ export default {
     }
 
     if (req.method !== 'POST') return json({ error: 'not found' }, 404, h);
-    if (!origin && !req.headers.get('x-user-key')) return json({ error: 'forbidden' }, 403, h);
-    if (!env.GEMINI_API_KEY && path !== '/write' && path !== '/read-pages') return json({ error: 'server has no key', code: 'nokey' }, 500, h);
+    if (!origin) return json({ error: 'forbidden' }, 403, h);
+    const needsAI = ['/write', '/transcribe', '/ask-file', '/ask-voice', '/read-pages'].includes(path);
+    if (needsAI && !AI.ready(env)) return json({ error: 'server has no AI source', code: 'nokey' }, 500, h);
 
     /* ----- reports from the app: problems, feedback, usage counts ----- */
     if (path === '/report') {
@@ -752,10 +562,13 @@ export default {
       await env.PUSH.put(key, raw.slice(0, 12000), { metadata: meta, expirationTtl: (kind === 'feedback' ? 365 : 120) * 86400 });
       return json({ ok: true }, 200, h);
     }
-    if (path === '/owner/reports' || path === '/owner/delete') {
+    if (path === '/owner/reports' || path === '/owner/delete' || path === '/owner/meter' || path === '/owner/brake') {
       let b; try { b = await req.json(); } catch { return json({ error: 'bad request' }, 400, h); }
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(b.code || '').trim().toUpperCase())))].map(x => x.toString(16).padStart(2, '0')).join('');
       if (hash !== OWNER_HASH) return json({ error: 'wrong code', code: 'owner' }, 403, h);
+      // the AI meter: what each free source used, by day; and the brake that keeps Cloudflare inside its free allowance
+      if (path === '/owner/meter') return json(await AI.meterReport(env, 14), 200, h);
+      if (path === '/owner/brake') return json({ brake: await AI.setBrake(env, b.brake) }, 200, h);
       if (path === '/owner/delete') { for (const k of (b.keys || []).slice(0, 200)) if (String(k).startsWith('r:')) await env.PUSH.delete(k); return json({ ok: true }, 200, h); }
       const items = []; let cursor;
       for (let i = 0; i < 5; i++) {
@@ -770,59 +583,55 @@ export default {
     }
 
     /* ----- a question about one attached file ----- */
-    if (path === '/ask-file') return askFile(req, env, h, ctx);
-    if (path === '/read-pages') return readPages(req, env, h);
+    if (path === '/ask-file') return askFile(req, env, h, ctx, direct);
+    if (path === '/read-pages') return readPages(req, env, h, ctx);
 
-    /* ----- a short spoken question → what was heard + the answer (basic voice) ----- */
+    /* ----- a short spoken question → what was heard + the answer (voice) ----- */
     if (path === '/ask-voice') {
       const raw = await req.text();
       if (raw.length > 4_000_000) return json({ error: 'too long', code: 'toolong' }, 413, h);
       let body; try { body = JSON.parse(raw); } catch { return json({ error: 'bad request' }, 400, h); }
-      const { audio = '', mime = 'audio/webm', system = '', user = '' } = body;
-      if (!audio || !/^(audio|video)\/[\w.+-]+$/.test(String(mime).split(';')[0])) return json({ error: 'empty', code: 'empty' }, 400, h);
-      return generate(env, h, { models: VOICE_MODELS, system, maxTokens: 900, wantJson: false, wait: 15000,
-        variants: [{ parts: [{ text: user }, { inlineData: { mimeType: String(mime).split(';')[0], data: audio } }, { text: 'Answer what the person says in this audio.' }], temperature: 0.4 }] });
+      const { audio = '', system = '', user = '' } = body;
+      const mime = String(body.mime || 'audio/webm').split(';')[0];
+      if (!audio || typeof audio !== 'string' || !/^(audio|video)\/[\w.+-]+$/.test(mime)) return json({ error: 'empty', code: 'empty' }, 400, h);
+      let bytes; try { bytes = Uint8Array.fromBase64(audio); } catch { return json({ error: 'bad audio', code: 'bad' }, 400, h); }
+      const heard = await AI.hear(env, ctx, { audio: bytes.buffer, mime, langs: langList(body.langs || 'ar,en'), fast: true });
+      if (!heard.ok) return heard.fail(h);
+      const said = heard.text.replace(/\s+/g, ' ').trim();
+      const lang = heard.lang === 'ar' || /[؀-ۿ]/.test(said) ? 'ar' : 'en';
+      if (!said) return AI.modelResponse(h, heard.model, `Q (${lang}): …\n` + (lang === 'ar' ? 'لم أسمعك جيدًا. أعد من فضلك.' : "I didn't catch that. Please say it again."), 'STOP');
+      return AI.talk(env, ctx, h, { system: String(system), maxTokens: 900, prefer: 'groq', direct, prefix: `Q (${lang}): ${said}\n`,
+        user: `${String(user)}\n\nWHAT THE PERSON JUST SAID (written from their voice; small hearing mistakes are possible):\n${said}` });
     }
 
-    /* ----- text → notes ----- */
+    /* ----- text → notes, and the assistant's answers ----- */
     if (path === '/write') {
       const raw = await req.text();
       if (raw.length > MAX_BODY) return json({ error: 'text too long', code: 'toolong' }, 413, h);
       let body; try { body = JSON.parse(raw); } catch { return json({ error: 'bad request' }, 400, h); }
-      const { system = '', user = '', maxTokens = 30000, json: wantJson = true, deep = false, studyNotes = false, assistant = false, preferBackup = false } = body || {};
+      const { system = '', user = '', maxTokens = 30000, json: wantJson = true, studyNotes = false, assistant = false } = body || {};
       if (typeof system !== 'string' || typeof user !== 'string' || !user) return json({ error: 'bad request' }, 400, h);
       const structured = studyNotes === true && wantJson;
-      const models = deep && structured ? STUDY_MODELS : deep ? NOTES_MODELS : (env.MODELS ? String(env.MODELS).split(',') : WRITE_MODELS).map(s => s.trim()).filter(Boolean);
-      const config = structured ? { responseSchema: noteSchema } : undefined;
-      const useFallbacks = deep && structured && (env.OPENROUTER_API_KEY || env.GROQ_FREE_API_KEY);
-      const backup = allowTruncated => generateStudyFallback(env, h, { system, user, maxTokens: Number(maxTokens) || 30000, allowTruncated });
-      const backupFirst = useFallbacks && preferBackup === true;
-      if (backupFirst) {
-        const fallback = await backup(false);
-        if (fallback) return fallback;
-      }
-      const gemini = env.GEMINI_API_KEY
-        ? await generate(env, h, { models, system: structured || assistant === true ? system : (system + '\n\n' + CLAUDE_NOTE_FORMAT).trim(),
-          maxTokens, wantJson, think: !!deep, startTimeout: useFallbacks ? 25000 : assistant === true ? 15000 : undefined,
-          variants: [{ parts: [{ text: user }], config }] })
-        : json({ error: 'server has no key', code: 'nokey' }, 500, h);
-      if (!useFallbacks || backupFirst || gemini.ok || gemini.status === 400) return gemini;
-      return await backup(true) || gemini;
+      const fullSystem = structured ? (system + '\n\n' + NOTE_SHAPE).trim() : assistant === true ? system : (system + '\n\n' + CLAUDE_NOTE_FORMAT).trim();
+      return AI.talk(env, ctx, h, { system: fullSystem, user, json: !!wantJson, maxTokens, prefer: assistant === true ? 'groq' : 'cf', direct });
     }
 
-    /* ----- audio piece → transcript ----- */
+    /* ----- an audio piece → its transcript; a photo of a page → its text ----- */
     if (path === '/transcribe') {
       const len = Number(req.headers.get('content-length') || 0);
       const mime = (url.searchParams.get('mime') || req.headers.get('content-type') || '').split(';')[0].trim();
       if (!len || !req.body) return json({ error: 'empty', code: 'empty' }, 411, h);
       if (len > MAX_AUDIO) return json({ error: 'piece too big', code: 'toolong' }, 413, h);
       if (!/^(audio|video|image)\/[\w.+-]+$/.test(mime)) return json({ error: 'not audio', code: 'type' }, 415, h);
-      const isImg = mime.startsWith('image/');
-      const up = await uploadToGoogle(env, req.body, len, mime);
-      if (up.error) return json({ error: up.error.text, code: errCode(up.error.status), status: up.error.status }, up.error.status === 429 ? 429 : 502, h);
-      const part = { fileData: { mimeType: up.file.mimeType || mime, fileUri: up.file.uri } };
-      return generate(env, h, { models: HEAR_MODELS, system: isImg ? READ : HEAR, maxTokens: 60000, wantJson: false,
-        variants: [{ parts: [part, { text: isImg ? 'Read this page.' : 'Transcribe this recording.' }], temperature: 0 }] });
+      if (mime.startsWith('image/')) {
+        if (len > 12_000_000) return json({ error: 'photo too big', code: 'toolong' }, 413, h);
+        return AI.talk(env, ctx, h, { system: READ, user: 'Read this page.', images: [{ mime, data: b64(await req.arrayBuffer()) }], maxTokens: 8000, stream: false, prefer: 'cf' });
+      }
+      // a piece Groq can take is kept in memory (so Cloudflare can try it too); a bigger one goes straight to Cloudflare
+      const audio = len <= AI.GROQ_AUDIO_MAX ? await req.arrayBuffer() : req.body;
+      const heard = await AI.hear(env, ctx, { audio, mime, langs: langList(url.searchParams.get('langs')) });
+      if (!heard.ok) return heard.fail(h);
+      return AI.modelResponse(h, heard.model, heard.text || '[[NOSPEECH]]', 'STOP');
     }
 
     /* ----- YouTube link → transcript of one time range ----- */
@@ -830,6 +639,7 @@ export default {
       let body; try { body = await req.json(); } catch { return json({ error: 'bad request' }, 400, h); }
       const id = ytId(body.url || '');
       if (!id) return json({ error: 'bad link', code: 'badlink' }, 400, h);
+      if (!env.GEMINI_API_KEY) return json({ error: 'YouTube links are not available on this server', code: 'bad' }, 400, h);
       const start = Math.max(0, Math.floor(Number(body.start) || 0)), end = Math.max(start + 60, Math.floor(Number(body.end) || start + 900));
       const file = { fileData: { fileUri: 'https://www.youtube.com/watch?v=' + id } };
       const ask = { text: `Transcribe the speech in this part of the video (from second ${start} to second ${end}).

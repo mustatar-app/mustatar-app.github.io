@@ -110,6 +110,26 @@ export class Accounts extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, challenge TEXT NOT NULL, user TEXT, name TEXT, expires INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS google (sub TEXT PRIMARY KEY, user TEXT NOT NULL, email TEXT NOT NULL, created INTEGER NOT NULL)');
+    // the AI meter: how much each free source was used each day (no contents, no names)
+    this.sql.exec('CREATE TABLE IF NOT EXISTS meter (day TEXT NOT NULL, k TEXT NOT NULL, n REAL NOT NULL, PRIMARY KEY (day, k))');
+  }
+  meterAdd(day, items) {
+    if (!/^\d{4}-\d\d-\d\d$/.test(String(day))) return;
+    for (const [k, n] of Object.entries(items || {}).slice(0, 12)) {
+      if (!/^[a-z_.:-]{1,40}$/.test(k) || !Number.isFinite(n) || n <= 0 || n > 1e9) continue;
+      this.sql.exec('INSERT INTO meter (day, k, n) VALUES (?, ?, ?) ON CONFLICT (day, k) DO UPDATE SET n = n + excluded.n', day, k, n);
+    }
+  }
+  brake() { try { return JSON.parse(this.sql.exec("SELECT v FROM meta WHERE k = 'brake'").toArray()[0]?.v || 'null'); } catch { return null; } }
+  setBrake(v) { this.sql.exec("INSERT INTO meta (k, v) VALUES ('brake', ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v", JSON.stringify(v)); }
+  meterToday(day) {
+    const used = Object.fromEntries(this.sql.exec('SELECT k, n FROM meter WHERE day = ?', String(day)).toArray().map(r => [r.k, r.n]));
+    return { used, brake: this.brake() };
+  }
+  meterRead(days = 14) {
+    const since = new Date(Date.now() - Math.max(1, Math.min(90, days)) * 864e5).toISOString().slice(0, 10);
+    this.sql.exec('DELETE FROM meter WHERE day < ?', new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10));
+    return { rows: this.sql.exec('SELECT day, k, n FROM meter WHERE day >= ? ORDER BY day DESC, k', since).toArray(), brake: this.brake() };
   }
   // "Continue with Google": the Google account is another door into the same Mustatar account
   googleUser(sub, email, name, linkTo) {

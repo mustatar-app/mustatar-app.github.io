@@ -24,6 +24,10 @@ class_name = "Accounts"
 tag = "v1-accounts-and-spaces"
 new_sqlite_classes = ["UserSpace", "Accounts"]
 
+# the free AI engine on Cloudflare: Whisper (hearing) and Gemma 4 (writing, reading pages). Free for 10,000 units a day.
+[ai]
+binding = "AI"
+
 # "Continue with Google": the public client id from Google Cloud (empty = the button is hidden)
 [vars]
 GOOGLE_CLIENT_ID = "667190468571-f4rph9bnbjh6kko3vq4lb54pufbfm9lb.apps.googleusercontent.com"

@@ -3,3 +3,5 @@ node_modules/
 site/.wrangler/
 tests/shots/
 server/node_modules/
+server/wrangler.test.toml
+tests/__pycache__/

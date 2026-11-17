@@ -21,6 +21,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -30,7 +31,9 @@ import java.util.Collections;
 import java.util.UUID;
 
 public class MainActivity extends Activity {
-    private static final String ORIGIN = "https://mustatar-app.github.io";
+    // the app's home on Cloudflare; the old GitHub address is opened only once, to carry notes over
+    private static final String ORIGIN = "https://mustatar.dawajund.workers.dev";
+    private static final String OLD_ORIGIN = "https://mustatar-app.github.io";
     private static final String SHARE_PATH = "/__mustatar_share/";
     private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4;
     private WebView web;
@@ -44,7 +47,8 @@ public class MainActivity extends Activity {
     private boolean ready;
 
     private static boolean local(Uri url) {
-        return "https".equals(url.getScheme()) && "mustatar-app.github.io".equals(url.getHost())
+        return "https".equals(url.getScheme())
+            && ("mustatar.dawajund.workers.dev".equals(url.getHost()) || "mustatar-app.github.io".equals(url.getHost()))
             && (url.getPort() == -1 || url.getPort() == 443);
     }
 
@@ -56,6 +60,9 @@ public class MainActivity extends Activity {
         web.getSettings().setGeolocationEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(true);
+        // passkeys (fingerprint or face sign-in) inside the app, with the app's own identity
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION))
+            WebSettingsCompat.setWebAuthenticationSupport(web.getSettings(), WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP);
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame() || local(request.getUrl())) return false;
@@ -122,13 +129,26 @@ public class MainActivity extends Activity {
             }
         });
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(web, "MustatarAndroid", Collections.singleton(ORIGIN),
+            WebViewCompat.addWebMessageListener(web, "MustatarAndroid", new java.util.HashSet<>(java.util.Arrays.asList(ORIGIN, OLD_ORIGIN)),
                 (view, message, origin, mainFrame, reply) -> {
                     if (!mainFrame || !local(origin)) return;
                     try {
                         JSONObject command = new JSONObject(message.getData());
                         switch (command.optString("action")) {
                             case "ready": ready = true; deliverShare(); break;
+                            // the one-time move from the old address (app.js, "moving to Mustatar's new address")
+                            case "moveExport":
+                                writeMove(command.optString("data"));
+                                runOnUiThread(() -> web.loadUrl(ORIGIN + "/?move=import"));
+                                return;
+                            case "moveTake":
+                                String moved = readMove();
+                                reply.postMessage("{\"move\":" + (moved.isEmpty() ? "null" : moved) + "}");
+                                return;
+                            case "moveDone":
+                                new java.io.File(getFilesDir(), "move.json").delete();
+                                getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply();
+                                return;
                             case "shareDone":
                                 SharedFile file = shared;
                                 if (file != null && (SHARE_PATH + file.token).equals(command.optString("path"))) shared = null;
@@ -166,7 +186,32 @@ public class MainActivity extends Activity {
             deliverShare();
         }
         if (Intent.ACTION_VIEW.equals(intent.getAction()) && data != null && local(data)) web.loadUrl(data.toString());
-        else if (first) web.loadUrl(ORIGIN + "/");
+        else if (first) {
+            if (getSharedPreferences("mustatar", MODE_PRIVATE).getBoolean("moved", false)) web.loadUrl(ORIGIN + "/");
+            else {
+                // first start at the new address: collect the notes kept at the old one, then open the new one
+                web.loadUrl(OLD_ORIGIN + "/?move=export");
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    if (!getSharedPreferences("mustatar", MODE_PRIVATE).getBoolean("moved", false)
+                        && !new java.io.File(getFilesDir(), "move.json").exists()) {
+                        getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply();
+                        web.loadUrl(ORIGIN + "/");
+                    }
+                }, 25000);
+            }
+        }
+    }
+
+    private void writeMove(String data) {
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(getFilesDir(), "move.json"))) {
+            out.write(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+    }
+    private String readMove() {
+        java.io.File f = new java.io.File(getFilesDir(), "move.json");
+        if (!f.exists()) return "";
+        try { return new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8); }
+        catch (Exception e) { return ""; }
     }
 
     private void deliverShare() {

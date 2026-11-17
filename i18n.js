@@ -10,6 +10,7 @@ if (lang !== 'ar') return;
 document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
 
 const T = {
+'Privacy: what is kept, where, and how to delete it': 'الخصوصية: ماذا يُحفظ، وأين، وكيف تحذفه',
 'About me': 'عني', 'Your tools': 'أدواتك', 'Languages you speak or record in': 'اللغات التي تتكلم أو تسجّل بها', 'Your usual working or study hours': 'ساعات عملك أو مذاكرتك المعتادة', 'to': 'إلى',
 'What is hardest for you? (choose any)': 'ما أصعب شيء عليك؟ (اختر ما شئت)', 'What Mustatar has learned about you': 'ما تعلّمه مستطر عنك',
 'Let Mustatar learn from how I use it, to suggest what fits me': 'اسمح لمستطر أن يتعلّم من استخدامي ليقترح ما يناسبني',

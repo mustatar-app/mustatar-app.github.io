@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mustatar — Privacy</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 24px 18px 60px; line-height: 1.6; color: #1d2433; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #E8EDF6; background: #0C0C0E; } a { color: #8fb3ff; } .ar { border-color: #2a2f3a; } }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { font-size: 1.1rem; margin: 22px 0 6px; }
+  .muted { opacity: .7; font-size: .9rem; } ul { padding-inline-start: 20px; } li { margin: 4px 0; }
+  .ar { direction: rtl; text-align: right; border-top: 1px solid #dfe3ea; margin-top: 36px; padding-top: 18px; font-family: "Amiri", "Noto Naskh Arabic", system-ui, sans-serif; font-size: 1.05rem; }
+  .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; } .top img { width: 40px; height: 40px; border-radius: 10px; }
+</style>
+</head>
+<body>
+<div class="top"><img src="icon-192.png" alt=""><b>Mustatar · مستطر</b></div>
+<h1>Privacy</h1>
+<p class="muted">Last updated 17 November 2026. <a href="#ar">العربية ↓</a></p>
+
+<h2>In short</h2>
+<ul>
+  <li>Your notes are yours. They are kept in <b>your own private space</b>, and nobody else can see them.</li>
+  <li>Recordings are used only to make your text and notes, and the sound is <b>deleted as soon as the text is ready</b>, unless you tick "Keep the audio".</li>
+  <li>Nothing is sold, nothing is shown to advertisers, and <b>Mustatar never uses your content to train AI</b>. (One exception for now is explained under "The AI that writes your notes".)</li>
+  <li>You can delete everything at any time: Settings → Your account → Delete my data.</li>
+</ul>
+
+<h2>What is kept, and where</h2>
+<ul>
+  <li><b>On your phone:</b> your notes, calendar, habits and settings, so the app works without internet.</li>
+  <li><b>In your own private space</b> (only when you create an account): a copy of the same, so it comes back on any phone. It is stored on Cloudflare's network, in a database that belongs only to your account.</li>
+  <li><b>Your account:</b> your name, and your passkey's public part. Passkeys keep the secret part on your own device. If you use "Continue with Google", we keep the Google account id and email that Google shares, and nothing else from Google.</li>
+  <li><b>About me:</b> what you tell the app (your work or study, languages, hours, what is hard), and, if you allow it, which screens you use most, so it can suggest what fits you. You can switch learning off or make it forget.</li>
+</ul>
+
+<h2>The AI that writes your notes</h2>
+<p>To turn a recording or file into text and notes, its sound or text is sent to the AI service that does the work (for example Groq or Cloudflare for transcription, or Anthropic's Claude for notes). These services process it to give the answer back. Mustatar is moving to services that do not train their models on what you send.</p>
+<p><b>Until that move is finished,</b> some notes are written by Google's Gemini on its free service, and on its free service Google may use what is sent to improve its products. This page will be updated when the move is done.</p>
+
+<h2>Reports and counts</h2>
+<p>If something breaks, or you send feedback, the app may send a short report. The app also counts, without names, which features are used, so the owner knows what to improve. These never include your notes.</p>
+
+<h2>Deleting</h2>
+<p><b>Settings → Your account → Delete my data</b> removes your account and everything in your private space, for good. Notes on your phone stay until you remove them or uninstall the app.</p>
+
+<h2>Contact</h2>
+<p>Questions about privacy: Settings → Send feedback in the app.</p>
+
+<div class="ar" id="ar" lang="ar">
+<h1>الخصوصية</h1>
+<p class="muted">آخر تحديث: ١٧ نوفمبر ٢٠٢٦</p>
+<h2>باختصار</h2>
+<ul>
+  <li>ملاحظاتك ملكك، وتُحفظ في <b>مساحتك الخاصة</b>، ولا يراها أحد غيرك.</li>
+  <li>التسجيلات تُستخدم فقط لكتابة النص والملاحظات، و<b>يُحذف الصوت فور جاهزية النص</b>، إلا إذا اخترت «احتفظ بالصوت».</li>
+  <li>لا يُباع شيء، ولا يُعرض على المعلنين، و<b>لا يستخدم مستطر محتواك لتدريب أي ذكاء اصطناعي</b>. (مع استثناء مؤقت موضّح أدناه.)</li>
+  <li>يمكنك حذف كل شيء في أي وقت: الإعدادات ← حسابك ← احذف بياناتي.</li>
+</ul>
+<h2>ماذا يُحفظ، وأين</h2>
+<ul>
+  <li><b>على جوالك:</b> ملاحظاتك وتقويمك وعاداتك وإعداداتك، ليعمل التطبيق بلا إنترنت.</li>
+  <li><b>في مساحتك الخاصة</b> (عند إنشاء حساب فقط): نسخة منها لتعود إليك على أي جوال، محفوظة على شبكة Cloudflare في قاعدة بيانات خاصة بحسابك وحده.</li>
+  <li><b>حسابك:</b> اسمك، والجزء العام من مفتاح المرور، أما الجزء السري فيبقى في جهازك. وإن استخدمت «المتابعة بحساب Google» نحفظ معرّف الحساب والبريد الذي تشاركه Google فقط.</li>
+  <li><b>عني:</b> ما تخبر به التطبيق، وإن سمحت: الشاشات التي تستخدمها أكثر، ليقترح ما يناسبك. ويمكنك إيقاف التعلّم أو مسحه.</li>
+</ul>
+<h2>الذكاء الاصطناعي الذي يكتب ملاحظاتك</h2>
+<p>لتحويل التسجيل أو الملف إلى نص وملاحظات، يُرسل صوته أو نصه إلى الخدمة التي تقوم بذلك (مثل Groq أو Cloudflare للتفريغ، أو Claude من Anthropic للملاحظات)، فتعالجه وتعيد النتيجة. ويتحوّل مستطر إلى خدمات لا تدرّب نماذجها على ما يُرسل إليها.</p>
+<p><b>وإلى أن يكتمل هذا التحوّل</b>، تُكتب بعض الملاحظات بواسطة Gemini من Google عبر خدمتها المجانية، وقد تستخدم Google ما يُرسل إليها فيها لتحسين منتجاتها. وسنحدّث هذه الصفحة عند اكتمال التحوّل.</p>
+<h2>التقارير والإحصاءات</h2>
+<p>عند حدوث خطأ أو إرسالك ملاحظة، قد يرسل التطبيق تقريرًا قصيرًا. ويَعُدّ التطبيق — دون أسماء — الميزات المستخدمة لمعرفة ما يحتاج إلى تحسين. ولا تتضمن هذه ملاحظاتك أبدًا.</p>
+<h2>الحذف</h2>
+<p><b>الإعدادات ← حسابك ← احذف بياناتي</b> يحذف حسابك وكل ما في مساحتك نهائيًا. وتبقى الملاحظات على جوالك حتى تحذفها أو تزيل التطبيق.</p>
+</div>
+</body>
+</html>

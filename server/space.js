@@ -29,6 +29,8 @@ const MAX_PUSH = 500;                  // items per request
 const PAGE = 500;                      // items per pull page
 const SPACE_LIMIT = 100 * 1024 * 1024; // free plan: 100 MB of text per person
 const KINDS = /^[a-z][a-z0-9_-]{0,31}$/;
+// passkeys made inside the Android app carry the app's identity instead of a web address
+const ANDROID_ORIGINS = ['android:apk-key-hash:nJ8TYGIV2h5a7op5cG45zI-U5HOGovC0_fmoOEWoq4g'];
 const IDS = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 const enc = new TextEncoder();
@@ -247,7 +249,7 @@ export async function accountRoutes(req, env, h, path, url, json, allowedOrigin)
       const f = await acc.takeFlow(b.flow);
       if (!f) return json({ error: 'took too long; please try again', code: 'expired' }, 400, h);
       let v;
-      try { v = await verifyRegistrationResponse({ response: b.response, expectedChallenge: f.challenge, expectedOrigin: origin, expectedRPID: rpID }); }
+      try { v = await verifyRegistrationResponse({ response: b.response, expectedChallenge: f.challenge, expectedOrigin: [origin, ...ANDROID_ORIGINS], expectedRPID: rpID }); }
       catch (e) { return json({ error: 'the passkey could not be checked', code: 'passkey' }, 400, h); }
       if (!v.verified) return json({ error: 'the passkey could not be checked', code: 'passkey' }, 400, h);
       const c = v.registrationInfo.credential;
@@ -266,7 +268,7 @@ export async function accountRoutes(req, env, h, path, url, json, allowedOrigin)
       let v;
       try {
         v = await verifyAuthenticationResponse({
-          response: b.response, expectedChallenge: f.challenge, expectedOrigin: origin, expectedRPID: rpID,
+          response: b.response, expectedChallenge: f.challenge, expectedOrigin: [origin, ...ANDROID_ORIGINS], expectedRPID: rpID,
           credential: { id: cred.id, publicKey: unb64u(cred.key), counter: cred.counter, transports: JSON.parse(cred.transports) },
         });
       } catch { return json({ error: 'the passkey could not be checked', code: 'passkey' }, 400, h); }

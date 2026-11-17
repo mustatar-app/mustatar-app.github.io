@@ -1,5 +1,5 @@
 /* Mustatar — Recordings & meetings: every file you transcribe is kept here as a dated text copy.
-   The sound itself is deleted 30 days after it is transcribed (to save space), unless you tick "Keep the audio".
+   The sound itself is deleted as soon as its text is ready (privacy and space), unless you tick "Keep the audio".
    Recordings not transcribed yet, or still being transcribed, show what is left. */
 (() => {
 'use strict';
@@ -7,7 +7,7 @@ const J = window.JN; if (!J) return;
 const { esc } = J;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const DAYS = 30, DAY = 864e5;
+const DAYS = 0, DAY = 864e5;   // the sound goes as soon as the text is ready
 const toast = t => window.JundCal?.toast(t);
 
 /* ---------- storage on the phone ---------- */
@@ -45,7 +45,9 @@ async function finished(p, err) {
     if (p.text) { it.status = 'done'; it.text = p.text; it.raw = p.raw || ''; it.at = Date.now(); it.err = ''; it.words = p.text.split(/\s+/).filter(Boolean).length;
       if (!it.sid && p.audio && p.audio.size < (it.audio?.size || Infinity)) it.audio = p.audio; }
     else { it.status = 'failed'; it.err = err || 'Not finished'; }
-    await put(it); paint();
+    await put(it);
+    if (it.status === 'done') await cleanup();
+    paint();
   } catch {}
 }
 
@@ -58,7 +60,7 @@ async function keepText(p, text, type) {
   } catch {}
 }
 
-/* ---------- the 30-day clean-up ---------- */
+/* ---------- the clean-up: the sound goes once the text is ready ---------- */
 async function cleanup() {
   const items = await all().catch(() => []);
   for (const it of items) {
@@ -97,7 +99,7 @@ async function paint() {
   const left = list.filter(r => r.status !== 'done').length, done = list.length - left;
   const shown = list.filter(r => filter === 'all' || (filter === 'done' ? r.status === 'done' : r.status !== 'done'));
   sc.innerHTML = `<h1 class="screen-title">Recordings &amp; meetings</h1>
-    <p class="muted fine">Every recording is saved here as a dated text copy. The sound is deleted ${DAYS} days after it is transcribed, unless you tick “Keep the audio”.</p>
+    <p class="muted fine">Every recording is saved here as a dated text copy. The sound is deleted as soon as its text is ready, unless you tick “Keep the audio”.</p>
     <div class="row-gap" style="margin:6px 0 12px"><button type="button" class="primary small" id="rx-rec">● Record a meeting or class</button><button type="button" class="ghost small" data-go="new">＋ Add a file</button></div>
     <div class="seg rx-filter">${[['all', `All ${list.length}`], ['done', `Done ${done}`], ['left', `Left ${left}`]].map(([k, t]) => `<button type="button" data-f="${k}" class="${filter === k ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div class="rx-list">${shown.length ? shown.map(card).join('') : `<p class="muted" style="margin-top:14px">${filter === 'left' ? 'Nothing left — everything is transcribed. ✓' : 'No recordings yet. Record a class or a meeting, or add an audio file.'}</p>`}</div>`;
@@ -109,7 +111,7 @@ async function paint() {
 function card(r) {
   const [label, cls] = STATUS[r.status] || STATUS.new, open = openId === r.id;
   const gone = r.status === 'done' && !r.keep && r.at ? Math.max(0, Math.ceil((r.at + DAYS * DAY - Date.now()) / DAY)) : null;
-  const audioNote = r.status !== 'done' ? '' : r.audioGone ? 'Audio deleted after 30 days — the text is kept.' : r.keep ? 'Audio kept (will not be deleted).' : (r.audio || r.sid) ? `Audio will be deleted in ${gone} day${gone === 1 ? '' : 's'}.` : '';
+  const audioNote = r.status !== 'done' ? '' : r.audioGone ? 'Audio deleted once the text was ready — the text is kept.' : r.keep ? 'Audio kept (will not be deleted).' : (r.audio || r.sid) ? 'Audio will be deleted shortly.' : '';
   return `<div class="rx ${open ? 'open' : ''}">
     <button type="button" class="rx-head" data-id="${esc(r.id)}"><span class="rx-t" dir="auto">${esc(r.name)}</span>
       <small class="muted">${fmtD(r.created)} · ${fmtT(r.created)}${r.words ? ` · ${r.words} words` : ''}</small>
@@ -131,7 +133,7 @@ function card(r) {
 function wire(sc, list) {
   const find = id => list.find(r => r.id === id);
   $$('[data-view]', sc).forEach(b => b.onclick = () => { views[b.dataset.id] = b.dataset.view; paint(); });
-  $$('[data-keep]', sc).forEach(c => c.onchange = async () => { const it = await get(c.dataset.keep); if (!it) return; it.keep = c.checked; await put(it); toast(c.checked ? '✓ The audio will be kept' : `The audio will be deleted ${DAYS} days after transcription`); paint(); });
+  $$('[data-keep]', sc).forEach(c => c.onchange = async () => { const it = await get(c.dataset.keep); if (!it) return; it.keep = c.checked; await put(it); if (!c.checked) await cleanup(); toast(c.checked ? '✓ The audio will be kept' : `The audio will be deleted ${DAYS} days after transcription`); paint(); });
   $$('[data-act]', sc).forEach(b => b.onclick = async () => {
     const r = find(b.dataset.id); if (!r) return;
     const a = b.dataset.act;

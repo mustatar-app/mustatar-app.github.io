@@ -536,7 +536,7 @@ function initSettings() {
   };
   // "Continue with Google" — shown only when the server has a Google client id
   (async () => {
-    if (!pkOk) return;
+    if (!pkOk || window.MustatarAndroid) return;   // Google's sign-in window does not open inside the Android app
     try {
       const base = await getServer();
       const cfg = await (await fetch(base + '/auth/config')).json();
@@ -2792,6 +2792,71 @@ $('#restore').onchange = async e => {
   } catch { st.textContent = '✗ This is not a backup file from the app.'; }
   e.target.value = '';
 };
+
+/* ---------- moving to Mustatar's new address ----------
+   The app moved from mustatar-app.github.io to Cloudflare. A phone keeps notes per address, so
+   everything is carried over once: every lesson and every setting. In a browser the old page hands
+   it to the new page directly; in the Android app the app carries it between the two. */
+const NEW_HOME = 'https://mustatar.dawajund.workers.dev', OLD_HOME = 'https://mustatar-app.github.io';
+const onOldHome = location.origin === OLD_HOME;
+async function exportAll() {
+  const ls = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('jn_') && !/^jn_(mst|welcomeStep)/.test(k)) ls[k] = localStorage.getItem(k); }
+  return { app: 'mustatar-move', v: 1, lessons: await allLessons(), ls };
+}
+async function importAll(d) {
+  if (d?.app !== 'mustatar-move') return -1;
+  for (const l of d.lessons || []) await idb.put(l);
+  for (const [k, v] of Object.entries(d.ls || {})) if (localStorage.getItem(k) === null) localStorage.setItem(k, v);
+  return (d.lessons || []).length;
+}
+function moveBanner(html) {
+  const b = document.createElement('div');
+  b.className = 'move-banner'; b.innerHTML = html; document.body.prepend(b); return b;
+}
+(async () => {
+  const q = new URL(location.href).searchParams.get('move');
+  // the new page, opened by the old one: ask for everything, then keep it here
+  if (q === 'receive' && window.opener) {
+    const b = moveBanner('⏳ Bringing your notes from the old address…');
+    window.addEventListener('message', async e => {
+      if (e.origin !== OLD_HOME || e.data?.app !== 'mustatar-move') return;
+      const n = await importAll(e.data);
+      e.source.postMessage({ moved: n }, OLD_HOME);
+      b.textContent = `✓ ${ar(n)} notes and your settings are here. You can close the old page.`;
+      history.replaceState(null, '', location.pathname); setTimeout(() => location.reload(), 1500);
+    });
+    window.opener.postMessage({ ready: 'mustatar-move' }, OLD_HOME);
+    return;
+  }
+  // the Android app carries the notes over itself (see MainActivity)
+  if (window.MustatarAndroid && (q === 'export' || q === 'import')) {
+    const b = moveBanner('⏳ Moving your notes to Mustatar’s new address…');
+    window.MustatarAndroid.addEventListener?.('message', async e => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (q === 'import' && m.move) { const n = await importAll(m.move); b.textContent = `✓ ${ar(Math.max(0, n))} notes moved.`; window.MustatarAndroid.postMessage(JSON.stringify({ action: 'moveDone' })); setTimeout(() => location.replace('/'), 900); }
+    });
+    if (q === 'export') window.MustatarAndroid.postMessage(JSON.stringify({ action: 'moveExport', data: JSON.stringify(await exportAll()) }));
+    else window.MustatarAndroid.postMessage(JSON.stringify({ action: 'moveTake' }));
+    return;
+  }
+  // the old address in a browser: point people to the new one, and carry their notes there
+  if (onOldHome && !window.MustatarAndroid) {
+    const b = moveBanner(`<b>Mustatar has a new address.</b> Your notes move with one tap. <button type="button" class="primary small" id="move-go">Move my notes</button> <span id="move-msg" class="muted"></span>`);
+    $('#move-go', b).onclick = () => {
+      const w = window.open(NEW_HOME + '/?move=receive', '_blank');
+      const msg = $('#move-msg', b);
+      if (!w) { msg.textContent = 'Allow pop-ups, or use Settings → Backup here, then Restore on the new address.'; return; }
+      msg.textContent = 'Opening the new address…';
+      window.addEventListener('message', async e => {
+        if (e.origin !== NEW_HOME) return;
+        if (e.data?.ready === 'mustatar-move') w.postMessage(await exportAll(), NEW_HOME);
+        if (typeof e.data?.moved === 'number') msg.textContent = `✓ Moved ${ar(e.data.moved)} notes. Use the new address from now on.`;
+      });
+      setTimeout(() => { if (!/✓/.test(msg.textContent)) msg.textContent = 'If nothing happened: Settings → Backup here, then Restore on ' + NEW_HOME.replace('https://', ''); }, 15000);
+    };
+  }
+})();
 
 /* ---------- about you ---------- */
 function me() { return store.get('me', {}); }

@@ -1190,3 +1190,13 @@ body.net-busy .net-bar { opacity: 1; }
 .habit-week .habit.on { outline: 1px solid var(--ok); color: var(--ok); }
 .habit-row input[type="time"] { width: auto; margin: 4px; }
 .habit-add { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- tools the person switched off (Settings → Your tools) ---------- */
+body.off-prayer #hm-prayer,
+body.off-habits #hm-habits-wrap, body.off-habits .dr-link[data-to="habit"],
+body.off-study #hm-study,
+body.off-meetings .dr-item[data-nav-to="recordings"],
+body.off-studio .dr-item[data-nav-to="studio"] { display: none !important; }
+#tools-list .check, #acct-card .check, #about-card .check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+#me-hard .chip.on, .wl-tools .chip.on, .wl-langs .chip.on, .wl-hard .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#me-hard, .wl-hard, .wl-langs, .wl-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }

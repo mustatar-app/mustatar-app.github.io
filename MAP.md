@@ -45,17 +45,20 @@ reports page is stored only as a hash in `server/worker.js`.
 | `study.js` | Flashcards, quizzes, exam planner, memorisation |
 | `studio.js` | Text on photos and videos |
 | `features.js` | Prayer times, morning brief, habits, focus timer and other tools |
-| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu, "working" spinner, the logo mark, first-open welcome (still offers a personal Google key — to remove), Arabic interface |
+| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu, "working" spinner, the logo mark, first-open welcome (name, roles, languages, hours, what is hard, tools), Arabic interface |
 | `report.js` | Problem reports and anonymous usage counts to the owner |
 | `sw.js` | Offline opening and receiving shared files; change `CACHE` when shipping |
 | `vendor/` | Outside libraries kept in the project (PDF reader, MP3 maker, on-phone AI, video reader, HEIC photos) |
 | `server/worker.js` | The server: AI routes, transcription, YouTube, reminders (Web Push), reports |
+| `server/space.js` | Accounts (passkeys, "Continue with Google") and each person's own private database (one Durable Object per person); sync, usage, delete my data |
 | `android/` | The Android wrapper: the app in a web view, plus four home-screen widgets and reminders |
 
 ## Data
 
 Notes live on the phone in the browser's storage (database `jund-notes` — the old name is kept on purpose,
-because renaming it would lose people's notes). Step 2 of the plan adds each person's own space on Cloudflare.
+because renaming it would lose people's notes). When signed in, `space` in `app.js` copies every lesson and
+app data (calendar, habits, memorisation, studio, captions, assistant, About me and tools) to the person's own
+database and back. `GOOGLE_CLIENT_ID` in `server/wrangler.toml` switches on "Continue with Google".
 
 ## Checking a change
 

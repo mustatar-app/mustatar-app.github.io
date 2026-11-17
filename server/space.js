@@ -107,6 +107,17 @@ export class Accounts extends DurableObject {
     this.sql.exec('CREATE INDEX IF NOT EXISTS creds_user ON creds(user)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, challenge TEXT NOT NULL, user TEXT, name TEXT, expires INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS google (sub TEXT PRIMARY KEY, user TEXT NOT NULL, email TEXT NOT NULL, created INTEGER NOT NULL)');
+  }
+  // "Continue with Google": the Google account is another door into the same Mustatar account
+  googleUser(sub, email, name, linkTo) {
+    const row = this.sql.exec('SELECT user FROM google WHERE sub = ?', sub).toArray()[0];
+    if (row) return { user: row.user, created: false };
+    const user = linkTo || randomId();
+    if (!this.sql.exec('SELECT id FROM users WHERE id = ?', user).toArray().length)
+      this.sql.exec('INSERT INTO users (id, name, created) VALUES (?, ?, ?)', user, name || '', Date.now());
+    this.sql.exec('INSERT INTO google (sub, user, email, created) VALUES (?, ?, ?, ?)', sub, user, email || '', Date.now());
+    return { user, created: !linkTo };
   }
   // the secret that signs sessions: made once, never leaves the server
   sessionKey() {
@@ -137,7 +148,7 @@ export class Accounts extends DurableObject {
   cred(id) { return this.sql.exec('SELECT id, user, key, counter, transports FROM creds WHERE id = ?', String(id)).toArray()[0] || null; }
   usedCred(id, counter) { this.sql.exec('UPDATE creds SET counter = ?, used = ? WHERE id = ?', counter, Date.now(), id); }
   user(id) { return this.sql.exec('SELECT id, name, created FROM users WHERE id = ?', id).toArray()[0] || null; }
-  removeUser(id) { this.sql.exec('DELETE FROM creds WHERE user = ?', id); this.sql.exec('DELETE FROM users WHERE id = ?', id); return { ok: true }; }
+  removeUser(id) { this.sql.exec('DELETE FROM google WHERE user = ?', id); this.sql.exec('DELETE FROM creds WHERE user = ?', id); this.sql.exec('DELETE FROM users WHERE id = ?', id); return { ok: true }; }
 }
 
 /* ---------------- sessions ---------------- */
@@ -164,6 +175,31 @@ export async function sessionUser(req, env) {
   } catch { return null; }
 }
 
+/* ---------------- Google sign-in: check the ID token Google gives the browser ---------------- */
+let googleKeys = null, googleKeysAt = 0;
+async function googleKey(kid) {
+  if (!googleKeys || Date.now() - googleKeysAt > 3_600_000 || !googleKeys.find(k => k.kid === kid)) {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+    googleKeys = (await r.json()).keys || []; googleKeysAt = Date.now();
+  }
+  const k = googleKeys.find(x => x.kid === kid);
+  return k ? crypto.subtle.importKey('jwk', k, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']) : null;
+}
+export async function checkGoogleToken(token, clientId, now = Date.now()) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const head = JSON.parse(new TextDecoder().decode(unb64u(parts[0])));
+    const body = JSON.parse(new TextDecoder().decode(unb64u(parts[1])));
+    if (head.alg !== 'RS256') return null;
+    if (body.aud !== clientId || !['accounts.google.com', 'https://accounts.google.com'].includes(body.iss)) return null;
+    if (!(body.exp * 1000 > now) || !body.sub || body.email_verified === false) return null;
+    const key = await googleKey(head.kid);
+    if (!key || !await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, unb64u(parts[2]), enc.encode(parts[0] + '.' + parts[1]))) return null;
+    return { sub: String(body.sub), email: String(body.email || ''), name: String(body.given_name || body.name || '').slice(0, 60) };
+  } catch { return null; }
+}
+
 const accounts = env => env.ACCOUNTS.get(env.ACCOUNTS.idFromName('accounts'));
 const space = (env, user) => env.SPACE.get(env.SPACE.idFromName('user:' + user));
 
@@ -172,6 +208,21 @@ export async function accountRoutes(req, env, h, path, url, json, allowedOrigin)
   if (!env.SPACE || !env.ACCOUNTS) return json({ error: 'accounts are not set up yet', code: 'noaccounts' }, 501, h);
   const origin = req.headers.get('origin') || '';
   const body = async () => { try { return await req.json(); } catch { return {}; } };
+
+  if (path === '/auth/config' && req.method === 'GET')
+    return json({ passkeys: true, googleClientId: env.GOOGLE_CLIENT_ID || '' }, 200, h);
+
+  if (path === '/auth/google' && req.method === 'POST') {
+    if (!allowedOrigin(origin)) return json({ error: 'forbidden' }, 403, h);
+    if (!env.GOOGLE_CLIENT_ID) return json({ error: 'Google sign-in is not set up yet', code: 'nogoogle' }, 501, h);
+    const b = await body();
+    const g = await checkGoogleToken(b.credential, env.GOOGLE_CLIENT_ID);
+    if (!g) return json({ error: 'Google sign-in could not be checked; please try again', code: 'google' }, 400, h);
+    const signedIn = await sessionUser(req, env);
+    const r = await accounts(env).googleUser(g.sub, g.email, g.name, signedIn);
+    const u = await accounts(env).user(r.user);
+    return json({ ok: true, token: await makeSession(env, r.user), user: { id: r.user, name: u?.name || g.name }, created: r.created }, 200, h);
+  }
 
   if (path.startsWith('/auth/passkey/')) {
     if (req.method !== 'POST' || !allowedOrigin(origin)) return json({ error: 'forbidden' }, 403, h);

@@ -1200,3 +1200,8 @@ body.off-studio .dr-item[data-nav-to="studio"] { display: none !important; }
 #tools-list .check, #acct-card .check, #about-card .check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 #me-hard .chip.on, .wl-tools .chip.on, .wl-langs .chip.on, .wl-hard .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 #me-hard, .wl-hard, .wl-langs, .wl-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+
+/* the "Mustatar has a new address" banner, and the move in progress */
+.move-banner { position: sticky; top: 0; z-index: 50; padding: 10px 14px; background: var(--accent); color: var(--on-accent); font-size: .92rem; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.move-banner .primary { background: var(--on-accent); color: var(--accent); border-color: var(--on-accent); }
+.move-banner .muted { color: var(--on-accent); opacity: .85; }

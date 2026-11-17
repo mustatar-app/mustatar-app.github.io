@@ -31,11 +31,12 @@ reports page is stored only as a hash in `server/worker.js`.
 | File | What it does |
 |---|---|
 | `index.html`, `style.css` | The page and its look |
+| `privacy.html` | The privacy page (English and Arabic) |
 | `app.js` | The core: making notes from recordings, files and text; the library; settings; backup and restore |
 | `prompt.js` | How notes are written ("the Jund way"); edit this to change the note style |
 | `subjects.js` | Subjects or projects and their colours |
 | `media.js`, `recorder.js`, `rec-worker.js` | Cutting audio and video into pieces; long recordings saved every 15 seconds; small MP3s |
-| `recordings.js` | Recordings and meetings list (keeps sound 30 days today — to change: delete after the notes are made) |
+| `recordings.js` | Recordings and meetings list; the sound is deleted as soon as its text is ready, unless "Keep the audio" is ticked |
 | `offline.js`, `offline-worker.js` | Whisper on the phone, with no internet |
 | `local-ai.js`, `ai-worker.js` | An AI that runs on the phone |
 | `scan-ocr.js` | Reading text from photos and scans on the phone |
@@ -66,3 +67,12 @@ database and back. `GOOGLE_CLIENT_ID` in `server/wrangler.toml` switches on "Con
 python3 -m http.server 8765 &
 python3 tests/app_test.py http://localhost:8765/
 ```
+
+## The move to Cloudflare (step 2, part 4)
+
+The app's home is `https://mustatar.dawajund.workers.dev`. The old address (`mustatar-app.github.io`, still published
+by GitHub Pages) shows a "new address" banner that carries every note and setting to the new address
+(`exportAll`/`importAll` in `app.js`). The Android app does the same once on its first start
+(`MainActivity`: `?move=export` at the old address → `?move=import` at the new one), then opens only the new address.
+Passkeys inside the Android app use the app's identity (`android:apk-key-hash:…`, accepted in `server/space.js`) and the
+`get_login_creds` relation in `.well-known/assetlinks.json`.

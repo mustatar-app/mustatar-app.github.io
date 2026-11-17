@@ -150,7 +150,7 @@ public class ReminderReceiver extends BroadcastReceiver {
             manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Mustatar reminders", NotificationManager.IMPORTANCE_HIGH));
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, CHANNEL) : new Notification.Builder(context);
         Intent open = new Intent(context, MainActivity.class).setAction(Intent.ACTION_VIEW)
-            .setData(Uri.parse("https://mustatar-app.github.io/?view=calendar"));
+            .setData(Uri.parse("https://mustatar.dawajund.workers.dev/?view=calendar"));
         PendingIntent tap = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         builder.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(body).setAutoCancel(true).setContentIntent(tap);
         if (Build.VERSION.SDK_INT < 26) builder.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);

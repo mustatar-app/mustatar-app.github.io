@@ -324,7 +324,7 @@ function nativeReminders() {
 }
 function nativeMessage(action, details = {}) { android.postMessage(JSON.stringify({ action, ...details })); }
 if (android) android.onmessage = e => {
-  try { nativeStatus = JSON.parse(e.data); notifStatus(); } catch {}
+  try { const s = JSON.parse(e.data); if (s && s.move !== undefined) return; nativeStatus = s; notifStatus(); } catch {}
 };
 let pushBusy = false;
 async function pushSync(force) {

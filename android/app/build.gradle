@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'sa.jund.notes'
-    compileSdk 34
+    compileSdk 35
     defaultConfig {
         // the app's permanent id: Android and Google Play know the app by it
         applicationId 'app.mustatar'

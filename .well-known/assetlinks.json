@@ -1,8 +1,15 @@
-[{
-  "relation": ["delegate_permission/common.handle_all_urls"],
-  "target": {
-    "namespace": "android_app",
-    "package_name": "app.mustatar",
-    "sha256_cert_fingerprints": ["9C:9F:13:60:62:15:DA:1E:5A:EE:8A:79:70:6E:39:CC:8F:94:E4:73:86:A2:F0:B4:FD:F9:A8:38:45:A8:AB:88"]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.mustatar",
+      "sha256_cert_fingerprints": [
+        "9C:9F:13:60:62:15:DA:1E:5A:EE:8A:79:70:6E:39:CC:8F:94:E4:73:86:A2:F0:B4:FD:F9:A8:38:45:A8:AB:88"
+      ]
+    }
   }
-}]
+]

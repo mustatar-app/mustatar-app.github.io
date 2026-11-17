@@ -76,25 +76,16 @@ jobs:
       - name: Cloudflare AI through the test server
         run: |
           URL=$(grep -oE 'https://mustatar-probe[a-zA-Z0-9.-]+\.workers\.dev' <<< "${{ steps.wr.outputs.command-output }}" | head -1); echo "$URL"; sleep 8
-          for f in ar.mp3 en.aac ar.aac ar.webm en.m4a silence.wav; do
-            echo "whisper b64 $f: $(curl -sS -X POST --data-binary @$f "$URL/whisper?mode=b64" | head -c 400)"
+          P='{"role":"user","content":"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}'
+          for extra in '{}' '{"chat_template_kwargs":{"enable_thinking":false}}' '{"reasoning_effort":"low"}' '{"reasoning_effort":"none"}' '{"reasoning":{"enabled":false}}' '{"thinking":{"type":"disabled"}}'; do
+            q=$(jq -nc --argjson p "$P" --argjson x "$extra" '{input: ({max_tokens:400, messages:[$p]} + $x)}')
+            echo "gemma $extra: $(curl -sS -X POST -d "$q" "$URL/chat" | jq -c '{c: .choices[0].message.content, r: ((.choices[0].message.reasoning // .choices[0].message.reasoning_content // "") | length), u: .usage.completion_tokens, n: .usage.neurons, e: .error}' 2>&1 | head -c 400)"
           done
-          echo "whisper stream ar.mp3: $(curl -sS -X POST -H 'content-type: audio/mpeg' --data-binary @ar.mp3 "$URL/whisper?mode=stream&lang=ar" | head -c 400)"
-          echo "whisper b64 ar.aac lang ar: $(curl -sS -X POST --data-binary @ar.aac "$URL/whisper?mode=b64&lang=ar" | head -c 400)"
-          q='{"input":{"max_tokens":300,"messages":[{"role":"user","content":"لخص في جملة: الاجتماع ناقش ميزانية المشروع وتقرر تأجيل الإطلاق أسبوعا."}]}}'
-          echo "gemma: $(curl -sS -X POST -d "$q" "$URL/chat" | head -c 900)"
-          q='{"input":{"stream":true,"max_tokens":60,"messages":[{"role":"user","content":"Say hello in Arabic."}]}}'
-          echo "gemma stream:"; curl -sS -X POST -d "$q" "$URL/chat" | head -c 1500; echo
-          q='{"input":{"max_tokens":200,"response_format":{"type":"json_object"},"messages":[{"role":"system","content":"Reply as JSON {title, points:[...]}"},{"role":"user","content":"Meeting: budget approved, launch moved one week."}]}}'
-          echo "gemma json: $(curl -sS -X POST -d "$q" "$URL/chat" | head -c 900)"
-          ffmpeg -loglevel error -f lavfi -i color=c=white:s=400x120 -vf "drawtext=text='Invoice 4417 total 250':fontsize=28:x=10:y=40" -frames:v 1 img.jpg || true
-          if [ -f img.jpg ]; then img=$(base64 -w0 img.jpg)
-            printf '{"input":{"max_tokens":200,"messages":[{"role":"user","content":[{"type":"text","text":"Read the text in this image."},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,%s"}}]}]}}' "$img" > q.json
-            echo "gemma image: $(curl -sS -X POST --data-binary @q.json "$URL/chat" | head -c 900)"; fi
-          for m in @cf/openai/gpt-oss-120b @cf/meta/llama-4-scout-17b-16e-instruct @cf/qwen/qwen3-30b-a3b-fp8; do
-            q=$(jq -nc --arg m "$m" '{model:$m, input:{max_tokens:200, messages:[{role:"user",content:"لخص في جملة: الاجتماع ناقش ميزانية المشروع."}]}}')
-            echo "$m: $(curl -sS -X POST -d "$q" "$URL/chat" | head -c 500)"; done
-          echo "models:"; curl -sS "$URL/models" | jq -r '.[]' | grep -i "generation\|speech\|recogn" | sort
+          q=$(jq -nc --argjson p "$P" '{input: {max_tokens:400, messages:[{role:"system",content:"Answer directly."},$p], stream:true, chat_template_kwargs:{enable_thinking:false}}}')
+          echo "gemma stream nothink:"; curl -sS -X POST -d "$q" "$URL/chat" | grep -o '"delta":{[^}]*}' | head -8
+          for m in @cf/deepseek-ai/deepseek-v4-flash-0731 @cf/zai-org/glm-5.3-flash @cf/qwen/qwen3.8-27b; do
+            q=$(jq -nc --arg m "$m" --argjson p "$P" '{model:$m, input:{max_tokens:600, messages:[$p]}}')
+            echo "$m: $(curl -sS -X POST -d "$q" "$URL/chat" | jq -c '{c: .choices[0].message.content, u: .usage, e: .error}' 2>&1 | head -c 500)"; done
       - name: Take the test server down
         if: always()
         uses: cloudflare/wrangler-action@v3

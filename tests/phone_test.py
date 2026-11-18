@@ -129,7 +129,8 @@ def back_to_app():
 
 def main():
     # the app asks for notifications at its first start; answer yes now, so no question covers the screen
-    adb("shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS")
+    for perm in ["POST_NOTIFICATIONS", "ACCESS_COARSE_LOCATION", "RECORD_AUDIO"]:
+        adb("shell", "pm", "grant", PKG, "android.permission." + perm)
     adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765", check_ok=True)
     time.sleep(8)
     shot("00-start")
@@ -137,8 +138,14 @@ def main():
     check(wait(page, "document.readyState === 'complete' && !!window.JundNative"), "the app opens the pages, and its save, share and voice are connected")
     page.js("""(()=>{for(let i=0;i<6;i++){const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) break; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click();} return true})()""")
     time.sleep(1)
-    page.js("document.querySelector('[data-nav=\"studio\"]').click()")
-    time.sleep(1.5)
+    def open_studio():
+        page.js("document.body.classList.remove('off-studio'); (document.querySelector('.tabbar [data-nav=\"studio\"]') || document.querySelector('[data-nav-to=\"studio\"]'))?.click(); true")
+        if not wait(page, "!!document.querySelector('#st-media')", 5):
+            page.js("location.href = '/?view=studio'; true")
+            time.sleep(4)
+            wait(page, "!!document.querySelector('#st-media')", 20)
+    open_studio()
+    check(page.js("!!document.querySelector('#st-media')"), "Studio opens")
     shot("01-studio")
 
     # 1. a photo with words on it → Save image → the phone's gallery
@@ -164,9 +171,13 @@ def main():
     acts = on_screen()
     check("chooser" in acts.lower() or "ResolverActivity" in acts, "Share opens the phone's share sheet: " + acts[:160])
     back_to_app()
-    st = page.js("document.querySelector('#st-status').textContent")
+    if not page.js("!!document.querySelector('#st-media')"):
+        open_studio()
+    st = page.js("document.querySelector('#st-status')?.textContent")
     check(st == "✓ Shared.", f"the screen says it was shared: {st}")
 
+    if not page.js("!!document.querySelector('#st-media')"):
+        open_studio()
     # 3. a phone video (H.264 MP4, as phones record) → Save video → the gallery
     size = page.js(LOAD_FILE + "('/tests/samples/clip.mp4', 'clip.mp4', 'video/mp4')")
     ok = wait(page, "!document.querySelector('#st-trim').hidden && document.querySelector('#st-export').textContent === 'Save video'", 30)

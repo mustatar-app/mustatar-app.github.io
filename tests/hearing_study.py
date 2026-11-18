@@ -102,6 +102,16 @@ except Exception as e: print("note: Husary not available:", e)
 f = b.fleurs("ar_eg"); sets.append(("ar", "FLEURS Arabic, many speakers", f["wav"], f["ref"], f["sentences"]))
 
 def tail(t, n=30): return " ".join(t.split()[-n:])
+if os.environ.get("STUDY") == "quran-text":
+    lang, name, wav, ref, sentences = sets[0]
+    pieces = quiet_pieces(wav)
+    whole = " ".join(groq(mp3_of(wav), "whisper-large-v3-turbo").get("text", "").split())
+    parts = [" ".join(groq(p, "whisper-large-v3-turbo").get("text", "").split()) for p in pieces]
+    print(f"STUDY | words: reference {len(ref.split())}, whole {len(whole.split())}, pieces {[len(x.split()) for x in parts]} = {sum(len(x.split()) for x in parts)}")
+    print("WHOLE:", whole)
+    for i, x in enumerate(parts): print(f"PIECE {i}:", x)
+    print("REF:", ref)
+    sys.exit(0)
 if VARIANTS:
     import difflib
     for lang, name, wav, ref, sentences in sets:

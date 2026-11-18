@@ -173,6 +173,12 @@ def hearing(lang, s):
             w = wer(s["ref"], text, lang); miss = skipped(s["sentences"], text, lang)
             bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · heard by {who} · {secs / s['minutes']:.1f} s per minute")
             texts[f"{kind} {mode}"] = text
+            if lang == "en":
+                words = set(norm(text, lang))
+                for snt in s["sentences"]:
+                    w = norm(snt, lang)
+                    if w and sum(x in words for x in w) / len(w) < 0.5:
+                        print(f"MISSED {lang} {kind} {mode}: {snt[:160]}")
     return {"mp3": texts.get("mp3 whole", "")}
 
 def notes(lang, transcript):

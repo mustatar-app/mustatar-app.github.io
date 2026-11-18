@@ -79,6 +79,49 @@ function adtsHeader(len, { profile, fi, ch }) {
   return h;
 }
 
+// AAC frames → a small M4A file (the same sound, in the box that phones and Groq's Whisper accept).
+// Groq refuses raw AAC, so without this, sound from phone videos and M4A files could only go to Cloudflare.
+function m4a(frames, asc, rate, channels) {
+  const enc = new TextEncoder();
+  const u32 = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const u16 = n => [(n >> 8) & 255, n & 255];
+  const box = (type, ...parts) => {
+    const body = parts.flat(Infinity);
+    return [...u32(8 + body.length), ...enc.encode(type), ...body];
+  };
+  const full = (type, v, flags, ...parts) => box(type, v, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255, ...parts);
+  const n = frames.length, dur = n * 1024;
+  const matrix = [...u32(0x10000), ...u32(0), ...u32(0), ...u32(0), ...u32(0x10000), ...u32(0), ...u32(0), ...u32(0), ...u32(0x40000000)];
+  const desc = (tag, body) => [tag, body.length, ...body];
+  const esds = full('esds', 0, 0, desc(3, [...u16(1), 0,
+    ...desc(4, [0x40, 0x15, 0, 0, 0, ...u32(0), ...u32(0), ...desc(5, [...asc])]),
+    ...desc(6, [2])]));
+  const mp4a = box('mp4a', 0, 0, 0, 0, 0, 0, ...u16(1), ...u32(0), ...u32(0), ...u16(channels), ...u16(16), ...u16(0), ...u16(0), ...u32((rate & 0xFFFF) << 16 >>> 0), esds);
+  const sizes = frames.map(f => u32(f.length));
+  const moov = offset => box('moov',
+    full('mvhd', 0, 0, ...u32(0), ...u32(0), ...u32(rate), ...u32(dur), ...u32(0x10000), ...u16(0x100), ...u16(0), ...u32(0), ...u32(0), ...matrix, ...new Array(24).fill(0), ...u32(2)),
+    box('trak',
+      full('tkhd', 0, 7, ...u32(0), ...u32(0), ...u32(1), ...u32(0), ...u32(dur), ...u32(0), ...u32(0), ...u16(0), ...u16(0), ...u16(0x100), ...u16(0), ...matrix, ...u32(0), ...u32(0)),
+      box('mdia',
+        full('mdhd', 0, 0, ...u32(0), ...u32(0), ...u32(rate), ...u32(dur), ...u16(0x55C4), ...u16(0)),
+        full('hdlr', 0, 0, ...u32(0), ...enc.encode('soun'), ...u32(0), ...u32(0), ...u32(0), ...enc.encode('Sound'), 0),
+        box('minf',
+          full('smhd', 0, 0, ...u16(0), ...u16(0)),
+          box('dinf', full('dref', 0, 0, ...u32(1), full('url ', 0, 1))),
+          box('stbl',
+            full('stsd', 0, 0, ...u32(1), mp4a),
+            full('stts', 0, 0, ...u32(1), ...u32(n), ...u32(1024)),
+            full('stsc', 0, 0, ...u32(1), ...u32(1), ...u32(n), ...u32(1)),
+            full('stsz', 0, 0, ...u32(0), ...u32(n), ...sizes),
+            full('stco', 0, 0, ...u32(1), ...u32(offset)))))));
+  const ftyp = box('ftyp', ...enc.encode('M4A '), ...u32(0), ...enc.encode('M4A isommp42'));
+  const total = frames.reduce((t, f) => t + f.length, 0);
+  const head = moov(0).length;
+  const mv = new Uint8Array(moov(ftyp.length + head + 8));
+  return new Blob([new Uint8Array(ftyp), mv, new Uint8Array([...u32(8 + total), ...enc.encode('mdat')]), ...frames], { type: 'audio/mp4' });
+}
+const ascFrom = ({ profile, fi, ch }) => [((profile + 1) << 3) | (fi >> 1), ((fi & 1) << 7) | (ch << 3)];
+
 async function fromMp4(file, onStatus, signal) {
   if (!window.MP4Box) throw cannot();
   const boxes = await topBoxes(file);
@@ -106,12 +149,18 @@ async function fromMp4(file, onStatus, signal) {
   const cfg = ascInfo(dsi ? new Uint8Array(dsi) : null, track);
 
   const list = samples.map(s => ({ off: s.offset, size: s.size, t: s.cts / s.timescale })).sort((a, b) => a.off - b.off);
-  const pieces = [];
-  let parts = [], pieceStart = 0, bytes = 0;
-  const close = (endT) => { if (parts.length) pieces.push({ blob: new Blob(parts, { type: 'audio/aac' }), mime: 'audio/aac', start: pieceStart, end: endT }); parts = []; bytes = 0; };
+  const asc = dsi && dsi.byteLength >= 2 ? new Uint8Array(dsi) : ascFrom(cfg);
+  const rate = RATES[cfg.fi] || track.audio?.sample_rate || 44100;
+  const pieces = [], whole = [];
+  let frames = [], pieceStart = 0, bytes = 0;
+  const close = (endT) => {
+    if (frames.length) pieces.push({ blob: m4a(frames, asc, rate, cfg.ch), mime: 'audio/mp4', start: pieceStart, end: endT });
+    frames = []; bytes = 0;
+  };
   const add = (s, data) => {
-    if (parts.length && (s.t >= pieceStart + PIECE_SEC || bytes > FAST_MAX)) { close(s.t); pieceStart = s.t; }
-    parts.push(adtsHeader(data.length, cfg), data); bytes += data.length + 7;
+    if (frames.length && (s.t >= pieceStart + PIECE_SEC || bytes > FAST_MAX)) { close(s.t); pieceStart = s.t; }
+    frames.push(data); bytes += data.length;
+    whole.push(adtsHeader(data.length, cfg), data);
   };
   let i = 0;
   while (i < list.length) {
@@ -130,7 +179,7 @@ async function fromMp4(file, onStatus, signal) {
   }
   const duration = list.length ? Math.max(...list.slice(-50).map(s => s.t)) : 0;
   close(duration);
-  return { pieces, audio: new Blob(pieces.map(p => p.blob), { type: 'audio/aac' }), audioName: 'aac', duration };
+  return { pieces, audio: new Blob(whole, { type: 'audio/aac' }), audioName: 'aac', duration };
 }
 
 /* ---------- how long is it, and where is it quiet? ---------- */
@@ -204,6 +253,21 @@ async function cutAtFrames(file, mime, isSync) {
   return { pieces, audio: file };
 }
 
+// raw AAC (ADTS frames) → M4A; null if the bytes are not clean ADTS
+function adtsToM4a(u8) {
+  const frames = []; let i = 0, cfg = null;
+  while (i + 7 <= u8.length) {
+    if (u8[i] !== 0xFF || (u8[i + 1] & 0xF6) !== 0xF0) return null;
+    const hdr = (u8[i + 1] & 1) ? 7 : 9;
+    const len = ((u8[i + 3] & 3) << 11) | (u8[i + 4] << 3) | (u8[i + 5] >> 5);
+    if (len <= hdr || i + len > u8.length) break;
+    cfg ||= { profile: u8[i + 2] >> 6, fi: (u8[i + 2] >> 2) & 15, ch: ((u8[i + 2] & 1) << 2) | (u8[i + 3] >> 6) };
+    frames.push(u8.subarray(i + hdr, i + len)); i += len;
+  }
+  if (!frames.length || !cfg) return null;
+  return m4a(frames, ascFrom(cfg), RATES[cfg.fi] || 44100, cfg.ch || 1);
+}
+
 /* ---------- WAV: cut the sound data, give each piece its own header ---------- */
 async function cutWav(file) {
   const head = new Uint8Array(await file.slice(0, Math.min(file.size, 1 << 16)).arrayBuffer());
@@ -261,7 +325,11 @@ async function prepare(file, onStatus, signal) {
       r = { pieces: [{ blob: file, mime }], audio: null };
     }
   } else if (k === 'mp3') r = await cutAtFrames(file, 'audio/mp3', (a, b) => a === 0xFF && (b & 0xE0) === 0xE0);
-  else if (k === 'aac') r = await cutAtFrames(file, 'audio/aac', (a, b) => a === 0xFF && (b & 0xF6) === 0xF0);
+  else if (k === 'aac') {
+    r = await cutAtFrames(file, 'audio/aac', (a, b) => a === 0xFF && (b & 0xF6) === 0xF0);
+    r.pieces = await Promise.all(r.pieces.map(async p => ({ ...p, blob: adtsToM4a(new Uint8Array(await p.blob.arrayBuffer())) || p.blob, mime: 'audio/mp4' })));
+    r.pieces.forEach(p => { if (p.blob.type !== 'audio/mp4') p.mime = 'audio/aac'; });
+  }
   else if (k === 'wav') r = await cutWav(file);
   else if (MIME[k]) {
     if (file.size > HARD_MAX) throw tooBig();
@@ -271,5 +339,5 @@ async function prepare(file, onStatus, signal) {
   return r;
 }
 
-window.JundMedia = { isMedia, kindOf, prepare, PIECE_SEC };
+window.JundMedia = { isMedia, kindOf, prepare, PIECE_SEC, adtsToM4a };
 })();

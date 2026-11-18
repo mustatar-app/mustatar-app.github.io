@@ -31,10 +31,10 @@ def mp3_of(wav):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-b:a", "64k", out], check=True)
     return out
 
-def quiet_pieces(wav, target=120, window=6):
+def quiet_pieces(wav, target=120, window=6, tag="q"):
     """cut like the app: every ~2 minutes, at the middle of the nearest silence within 6 seconds"""
     dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav], capture_output=True, text=True).stdout)
-    if dur <= 150:
+    if dur <= target * 1.25:
         return [mp3_of(wav)]
     log = subprocess.run(["ffmpeg", "-i", wav, "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"], capture_output=True, text=True).stderr
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", log)]; ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", log)]
@@ -47,7 +47,7 @@ def quiet_pieces(wav, target=120, window=6):
     cuts.append(dur)
     out = []
     for i in range(len(cuts) - 1):
-        p = f"{wav[:-4]}-q{i:02d}.mp3"
+        p = f"{wav[:-4]}-{tag}{i:03d}.mp3"
         subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", str(cuts[i]), "-to", str(cuts[i + 1]), "-i", wav, "-ac", "1", "-b:a", "64k", p], check=True)
         out.append(p)
     return out
@@ -92,7 +92,7 @@ def husary(surah=36, ayat=40):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-ar", "16000", "-ac", "1", wav], check=True)
     return wav, " ".join(texts), texts
 
-VARIANTS = os.environ.get("STUDY") in ("variants", "quran-text")
+VARIANTS = os.environ.get("STUDY") in ("variants", "quran-text", "short")
 sets = []
 if not VARIANTS:
   try: sets.append(("en", "LibriSpeech, one reader", *librispeech()))
@@ -102,6 +102,18 @@ except Exception as e: print("note: Husary not available:", e)
 f = b.fleurs("ar_eg"); sets.append(("ar", "FLEURS Arabic, many speakers", f["wav"], f["ref"], f["sentences"]))
 
 def tail(t, n=30): return " ".join(t.split()[-n:])
+if os.environ.get("STUDY") == "short":
+    for lang, name, wav, ref, sentences in sets:
+        # where does Whisper jump over speech? gaps between its own time marks, in the 2-minute pieces
+        for p in quiet_pieces(wav)[:2]:
+            segs = groq(p, "whisper-large-v3-turbo").get("segments", [])
+            gaps = [(round(a["end"], 1), round(c["start"], 1)) for a, c in zip(segs, segs[1:]) if c["start"] - a["end"] > 2.5]
+            print(f"STUDY | {name} | 2-min piece: {len(segs)} segments, gaps over 2.5 s: {gaps}", flush=True)
+        for target in (28, 55):
+            pieces = quiet_pieces(wav, target=target, window=4, tag=f"s{target}")
+            t0 = time.time(); text = " ".join(groq(p, "whisper-large-v3-turbo").get("text", "") for p in pieces)
+            print(f"STUDY | {name} | whisper-large-v3-turbo | {len(pieces)} pieces of ~{target} s | WER {b.wer(ref, text, lang)*100:.1f}% | {b.skipped(sentences, text, lang)} of {len(sentences)} skipped | words {len(text.split())} of {len(ref.split())} | {time.time()-t0:.0f} s", flush=True)
+    sys.exit(0)
 if os.environ.get("STUDY") == "quran-text":
     lang, name, wav, ref, sentences = sets[0]
     pieces = quiet_pieces(wav)

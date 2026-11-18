@@ -40,13 +40,20 @@ def on_screen():
     return " ".join(lines) or out[:2000]
 
 class Page:
+    """the app's page, through the web view's debugging connection (it reconnects if the page reloads)"""
     def __init__(self):
+        self.ws = None
+        self.n = 0
+        self.connect()
+
+    def connect(self):
         pid = ""
         for _ in range(30):
-            pid = adb("shell", "pidof", PKG).strip()
+            pid = adb("shell", "pidof", PKG).strip().split(" ")[0]
             if pid:
                 break
             time.sleep(1)
+        adb("forward", "--remove-all")
         adb("forward", "tcp:9222", f"localabstract:webview_devtools_remote_{pid}")
         pages = []
         for _ in range(40):
@@ -58,21 +65,32 @@ class Page:
             except Exception:
                 pass
             time.sleep(1)
+        print("     page:", pages[0].get("url") if pages else "none", flush=True)
+        if self.ws:
+            try: self.ws.close()
+            except Exception: pass
         self.ws = websocket.create_connection(pages[0]["webSocketDebuggerUrl"], timeout=120, suppress_origin=True)
-        self.n = 0
 
-    def js(self, expr, timeout=60):
+    def js(self, expr, timeout=60, again=True):
         self.n += 1
-        self.ws.settimeout(timeout + 5)
-        self.ws.send(json.dumps({"id": self.n, "method": "Runtime.evaluate",
-                                 "params": {"expression": expr, "awaitPromise": True, "returnByValue": True, "timeout": timeout * 1000}}))
-        while True:
-            m = json.loads(self.ws.recv())
-            if m.get("id") == self.n:
-                r = m.get("result", {})
-                if "exceptionDetails" in r:
-                    return {"error": r["exceptionDetails"].get("exception", {}).get("description", "error")[:300]}
-                return r.get("result", {}).get("value")
+        try:
+            self.ws.settimeout(timeout + 5)
+            self.ws.send(json.dumps({"id": self.n, "method": "Runtime.evaluate",
+                                     "params": {"expression": expr, "awaitPromise": True, "returnByValue": True, "timeout": timeout * 1000}}))
+            while True:
+                m = json.loads(self.ws.recv())
+                if m.get("id") == self.n:
+                    r = m.get("result", {})
+                    if "exceptionDetails" in r:
+                        return {"error": r["exceptionDetails"].get("exception", {}).get("description", "error")[:300]}
+                    return r.get("result", {}).get("value")
+        except Exception as e:
+            if not again:
+                raise
+            print("     (connection lost:", type(e).__name__, "- reconnecting)", flush=True)
+            time.sleep(3)
+            self.connect()
+            return self.js(expr, timeout, again=False)
 
 def wait(page, expr, secs=30):
     for _ in range(secs * 2):
@@ -98,7 +116,8 @@ def back_to_app():
 
 def main():
     adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765", check_ok=True)
-    time.sleep(6)
+    time.sleep(8)
+    shot("00-start")
     page = Page()
     check(wait(page, "document.readyState === 'complete' && !!window.JundNative"), "the app opens the pages, and its save, share and voice are connected")
     page.js("""(()=>{for(let i=0;i<6;i++){const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) break; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click();} return true})()""")
@@ -173,4 +192,14 @@ def main():
     sys.exit(1 if failures else 0)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print("FAIL the test stopped:", type(e).__name__, e)
+        shot("99-stopped")
+        sys.exit(1)
+    finally:
+        log = adb("logcat", "-d", "-t", "400")
+        open(f"{SHOTS}/logcat.txt", "w").write(log)

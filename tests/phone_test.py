@@ -26,8 +26,21 @@ def adb(*args, check_ok=False):
     return r.stdout
 
 def shot(name):
+    png = subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True).stdout
     with open(f"{SHOTS}/{name}.png", "wb") as f:
-        f.write(subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True).stdout)
+        f.write(png)
+    # also into the log, small, so the screenshots can be seen without downloading anything
+    try:
+        import base64, io
+        from PIL import Image
+        im = Image.open(io.BytesIO(png)).convert("RGB")
+        im.thumbnail((360, 800))
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=60)
+        b = base64.b64encode(buf.getvalue()).decode()
+        for i in range(0, len(b), 8000):
+            print(f"SHOT {name} {i // 8000} {b[i:i + 8000]}")
+    except Exception as e:
+        print("     (screenshot not printed:", e, ")")
 
 def media(uri):
     out = adb("shell", "content", "query", "--uri", uri, "--projection", "_display_name:relative_path:_size")
@@ -115,6 +128,8 @@ def back_to_app():
         time.sleep(1.5)
 
 def main():
+    # the app asks for notifications at its first start; answer yes now, so no question covers the screen
+    adb("shell", "pm", "grant", PKG, "android.permission.POST_NOTIFICATIONS")
     adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765", check_ok=True)
     time.sleep(8)
     shot("00-start")
@@ -201,5 +216,9 @@ if __name__ == "__main__":
         shot("99-stopped")
         sys.exit(1)
     finally:
-        log = adb("logcat", "-d", "-t", "400")
+        log = adb("logcat", "-d", "-t", "3000")
         open(f"{SHOTS}/logcat.txt", "w").write(log)
+        print("---- the phone's log (the app's page and errors) ----")
+        for l in log.splitlines():
+            if re.search(r"chromium|Console|AndroidRuntime|FATAL|FileOut|app\.mustatar|TextToSpeech", l):
+                print("LOG", l[:300])

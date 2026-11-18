@@ -12,7 +12,7 @@ concurrency: tests-${{ github.ref }}
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
@@ -33,6 +33,7 @@ jobs:
           python3 -m http.server 8765 > /dev/null 2>&1 &
           sleep 1
           python3 tests/app_test.py http://localhost:8765/
+          python3 tests/smaller_test.py http://localhost:8765/
       - name: Moving to the new address, recordings and privacy page
         run: python3 tests/move_test.py
       - name: Studio saves and shares pictures, videos and carousels (browser, and as inside the Android app)

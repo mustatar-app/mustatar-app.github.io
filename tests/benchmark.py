@@ -173,6 +173,9 @@ def hearing(lang, s):
             w = wer(s["ref"], text, lang); miss = skipped(s["sentences"], text, lang)
             bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · heard by {who} · {secs / s['minutes']:.1f} s per minute")
             texts[f"{kind} {mode}"] = text
+            if lang == "en" and mode in ("whole", 60):
+                for i, line in enumerate(text.splitlines()):
+                    print(f"TEXT {kind} {mode} {i:03d} {line}")
             if lang == "en":
                 words = set(norm(text, lang))
                 for snt in s["sentences"]:

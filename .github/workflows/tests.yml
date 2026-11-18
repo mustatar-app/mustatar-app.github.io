@@ -35,6 +35,10 @@ jobs:
           python3 tests/app_test.py http://localhost:8765/
       - name: Moving to the new address, recordings and privacy page
         run: python3 tests/move_test.py
+      - name: Studio saves and shares pictures, videos and carousels (browser, and as inside the Android app)
+        run: |
+          command -v ffmpeg > /dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null)
+          python3 tests/studio_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)
         run: |
           (python3 -m http.server 8765 > /dev/null 2>&1 &) || true

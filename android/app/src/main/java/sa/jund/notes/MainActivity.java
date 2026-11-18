@@ -45,8 +45,16 @@ public class MainActivity extends Activity {
     private String sharedText;
     private boolean sharePending;
     private boolean ready;
+    private FileOut files;
+    private android.speech.tts.TextToSpeech tts;
+    private boolean ttsReady;
+    private final java.util.Map<String, androidx.webkit.JavaScriptReplyProxy> speaking = new java.util.HashMap<>();
+    // test builds only: the automatic phone test opens the app's pages from the test computer instead
+    private static Uri testHome;
 
     private static boolean local(Uri url) {
+        if (testHome != null && testHome.getScheme().equals(url.getScheme()) && testHome.getHost().equals(url.getHost())
+            && testHome.getPort() == url.getPort()) return true;
         return "https".equals(url.getScheme())
             && ("mustatar.dawajund.workers.dev".equals(url.getHost()) || "mustatar-app.github.io".equals(url.getHost()))
             && (url.getPort() == -1 || url.getPort() == 443);
@@ -54,9 +62,18 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        boolean debuggable = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (debuggable) {
+            WebView.setWebContentsDebuggingEnabled(true);
+            String t = getIntent().getStringExtra("testHome");
+            if (t != null && t.startsWith("http://localhost:")) testHome = Uri.parse(t);
+        }
+        files = new FileOut(this);
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        // Studio plays the chosen video while it makes the new one (a few moments after the tap): allow it
+        web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.getSettings().setGeolocationEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(true);
@@ -129,7 +146,9 @@ public class MainActivity extends Activity {
             }
         });
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(web, "MustatarAndroid", new java.util.HashSet<>(java.util.Arrays.asList(ORIGIN, OLD_ORIGIN)),
+            java.util.Set<String> origins = new java.util.HashSet<>(java.util.Arrays.asList(ORIGIN, OLD_ORIGIN));
+            if (testHome != null) origins.add(testHome.getScheme() + "://" + testHome.getHost() + ":" + testHome.getPort());
+            WebViewCompat.addWebMessageListener(web, "MustatarAndroid", origins,
                 (view, message, origin, mainFrame, reply) -> {
                     if (!mainFrame || !local(origin)) return;
                     try {
@@ -156,13 +175,41 @@ public class MainActivity extends Activity {
                             case "sync": ReminderReceiver.replace(this, command.getJSONArray("items")); break;
                             case "permissions": notificationPermissions(); break;
                             case "test": ReminderReceiver.test(this); break;
+                            // a file made in the app leaves it: sent in pieces, then saved on the phone or shared
+                            case "fileStart": files.start(command.getString("id"), command.optString("name"), command.optString("mime")); return;
+                            case "fileChunk": files.chunk(command.getString("id"), command.getString("data")); return;
+                            case "fileEnd": files.end(command.getString("id")); return;
+                            case "fileSave": case "fileShare": {
+                                java.util.List<String> ids = new java.util.ArrayList<>();
+                                org.json.JSONArray a = command.getJSONArray("ids");
+                                for (int i = 0; i < a.length(); i++) ids.add(a.getString(i));
+                                String job = command.optString("job");
+                                FileOut.Done done = json -> reply.postMessage("{\"file\":" + JSONObject.quote(job) + ",\"result\":" + json + "}");
+                                if ("fileSave".equals(command.optString("action"))) files.save(ids, done); else files.share(ids, done);
+                                return;
+                            }
+                            case "shareText": {
+                                String job = command.optString("job");
+                                files.shareText(command.optString("text"), command.optString("title"),
+                                    json -> reply.postMessage("{\"file\":" + JSONObject.quote(job) + ",\"result\":" + json + "}"));
+                                return;
+                            }
+                            // reading the assistant's answer aloud (a web view has no voice of its own)
+                            case "speak": speak(command.optString("id"), command.optString("text"), command.optString("lang"), command.optDouble("rate", 1), reply); return;
+                            case "stopSpeaking": if (tts != null) tts.stop(); return;
                             case "print":
                                 getSystemService(PrintManager.class).print("Mustatar",
                                     web.createPrintDocumentAdapter("Mustatar"), null);
                                 break;
                         }
                         reply.postMessage(ReminderReceiver.status(this).toString());
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        try {
+                            JSONObject command = new JSONObject(message.getData());
+                            if (command.has("job")) reply.postMessage("{\"file\":" + JSONObject.quote(command.optString("job"))
+                                + ",\"result\":{\"ok\":false,\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}}");
+                        } catch (Exception ignored) {}
+                    }
                 });
         }
         setContentView(web);
@@ -177,6 +224,7 @@ public class MainActivity extends Activity {
 
     private void receive(Intent intent, boolean first) {
         Uri data = intent.getData();
+        if (first && testHome != null) { getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply(); web.loadUrl(testHome.toString() + "/"); return; }
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
             Uri stream = intent.getParcelableExtra(Intent.EXTRA_STREAM);
@@ -203,6 +251,41 @@ public class MainActivity extends Activity {
                 }, 25000);
             }
         }
+    }
+
+    private void speak(String id, String text, String lang, double rate, androidx.webkit.JavaScriptReplyProxy reply) {
+        if (tts == null) {
+            tts = new android.speech.tts.TextToSpeech(this, status -> {
+                ttsReady = status == android.speech.tts.TextToSpeech.SUCCESS;
+                if (!ttsReady) { finishSpeaking(id, false, "no voice"); return; }
+                tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                    @Override public void onStart(String u) {}
+                    @Override public void onDone(String u) { runOnUiThread(() -> finishSpeaking(u, true, null)); }
+                    @Override public void onError(String u) { runOnUiThread(() -> finishSpeaking(u, false, "error")); }
+                    @Override public void onStop(String u, boolean interrupted) { runOnUiThread(() -> finishSpeaking(u, true, null)); }
+                });
+                runOnUiThread(() -> speakNow(id, text, lang, rate));
+            });
+            speaking.put(id, reply);
+            return;
+        }
+        speaking.put(id, reply);
+        if (ttsReady) speakNow(id, text, lang, rate);
+        else finishSpeaking(id, false, "no voice");
+    }
+    private void speakNow(String id, String text, String lang, double rate) {
+        if (!ttsReady) { finishSpeaking(id, false, "no voice"); return; }
+        int ok = tts.setLanguage(java.util.Locale.forLanguageTag("ar".equals(lang) ? "ar" : "en".equals(lang) ? "en-US" : lang));
+        if (ok == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || ok == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+            finishSpeaking(id, false, "missing " + lang);
+            return;
+        }
+        tts.setSpeechRate((float) Math.max(0.5, Math.min(2, rate)));
+        tts.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, id);
+    }
+    private void finishSpeaking(String id, boolean ok, String problem) {
+        androidx.webkit.JavaScriptReplyProxy r = speaking.remove(id);
+        if (r != null) r.postMessage("{\"spoke\":" + JSONObject.quote(id) + ",\"ok\":" + ok + (problem == null ? "" : ",\"problem\":" + JSONObject.quote(problem)) + "}");
     }
 
     private void writeMove(String data) {
@@ -289,6 +372,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int code, int result, Intent data) {
         super.onActivityResult(code, result, data);
+        if (code == FileOut.CREATE) files.placed(result, data);
         if (code == PICK && picker != null) {
             picker.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
             picker = null;
@@ -313,6 +397,7 @@ public class MainActivity extends Activity {
             && WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST)) {
             androidx.webkit.ServiceWorkerControllerCompat.getInstance().setServiceWorkerClient(null);
         }
+        if (tts != null) tts.shutdown();
         if (web != null) web.destroy();
         super.onDestroy();
     }

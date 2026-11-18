@@ -234,6 +234,18 @@ function sentLang(t, fallback) {
   return a > e ? 'ar' : e > a ? 'en' : (fallback || 'ar');
 }
 function say(text, lang, after) {
+  // inside the Android app: the phone's own reading voice (a web view has none)
+  if (window.JundNative && text) {
+    let fired = false; const fin = () => { if (!fired) { fired = true; clearTimeout(guard); after(); } };
+    const guard = setTimeout(fin, 6000 + text.length * 160 / rate());
+    window.JundNative.speak(text, lang, rate()).then(r => {
+      if (!r.ok && /missing|no voice/.test(r.problem || '')) status(lang === 'ar'
+        ? L('This phone has no Arabic reading voice — see Voice settings below.', 'لا يوجد صوت عربي للقراءة في هذا الجوال — انظر إعدادات الصوت بالأسفل.')
+        : L('This phone has no reading voice for this language.', 'لا يوجد صوت قراءة لهذه اللغة في هذا الجوال.'));
+      fin();
+    });
+    return;
+  }
   const synth = window.speechSynthesis;
   if (!synth || !text) { after(); return; }
   const v = pickVoice(lang);
@@ -245,7 +257,7 @@ function say(text, lang, after) {
   const guard = setTimeout(fin, 4000 + text.length * 140 / rate());   // some phones never say "finished"
   synth.speak(u);
 }
-function stopSpeaking() { try { speechSynthesis.cancel(); } catch {} }
+function stopSpeaking() { try { window.JundNative?.stopSpeaking(); speechSynthesis.cancel(); } catch {} }
 try { speechSynthesis.getVoices(); } catch {}
 
 /* ---------------- where the talk button appears ---------------- */

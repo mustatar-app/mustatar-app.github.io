@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- reading answers aloud: lets the app find the phone's text-to-speech engine (Android 11 and newer) -->
+    <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -48,6 +51,12 @@
                 <data android:scheme="daftar" android:host="widget" />
             </intent-filter>
         </activity>
+        <!-- lets the share sheet (Instagram, WhatsApp, Drive…) read a file made in the app -->
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths" />
+        </provider>
+
         <receiver android:name=".DaftarWidget" android:exported="false" android:label="Mustatar: prayer and tasks">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_main_info" />

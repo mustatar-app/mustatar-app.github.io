@@ -30,13 +30,13 @@ async def main():
     async with async_playwright() as p:
         br = await p.chromium.launch()
         ctx = await br.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
-        await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');")
+        await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan','"test"');localStorage.setItem('welcomed','1');")
         page = await ctx.new_page(); errors = []
         page.on("pageerror", lambda e: errors.append(str(e)[:300]))
         await page.route("**/*workers.dev/**", server); await page.route("**/api.aladhan.com/**", lambda r: r.abort())
         await page.goto(BASE, wait_until="load"); await page.wait_for_timeout(2000)
         for _ in range(6):
-            c = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click(); return true}""")
+            c = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip|Continue without|بدون حساب/i.test(b.innerText))||bs[0])?.click(); return true}""")
             if not c: break
             await page.wait_for_timeout(300)
         await page.evaluate("window.JN.show('new')"); await page.wait_for_timeout(800)

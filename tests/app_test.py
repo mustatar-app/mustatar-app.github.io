@@ -10,7 +10,7 @@ import asyncio, json, sys
 from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8765/"
-SCREENS = ["library", "calendar", "assistant", "studio", "settings"]
+SCREENS = ["library", "calendar", "assistant", "studio", "settings", "me"]
 NOTE = {
     "title": "اجتماع الفريق", "subtitle": "Weekly meeting",
     "sections": [{"heading": "القرارات", "blocks": [
@@ -71,7 +71,7 @@ async def main():
         await page.wait_for_timeout(2500)
         # pass the first-day welcome screens
         for _ in range(6):
-            closed = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click(); return true}""")
+            closed = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip|Continue without|بدون حساب/i.test(b.innerText))||bs[0])?.click(); return true}""")
             if not closed:
                 break
             await page.wait_for_timeout(400)
@@ -79,7 +79,8 @@ async def main():
 
         for screen in SCREENS:
             before = len(errors)
-            found = await page.evaluate(f"(()=>{{const b=document.querySelector('[data-nav=\"{screen}\"]'); if(!b) return false; b.click(); return true}})()")
+            # the bottom bar has Today, Notes, Calendar and Me; Studio and Settings are opened from Me
+            found = await page.evaluate(f"(()=>{{const b=document.querySelector('[data-nav=\"{screen}\"]'); if(b) b.click(); else JN.show('{screen}'); return !document.querySelector('#screen-{screen}').hidden}})()")
             await page.wait_for_timeout(700)
             check(found and len(errors) == before, f"the {screen} screen opens")
 
@@ -115,7 +116,7 @@ async def main():
         # the first-day questions and "Your tools"
         await page.evaluate("window.JundWelcome.start(true)")
         await page.wait_for_timeout(400)
-        await page.evaluate("(()=>{const b=[...document.querySelectorAll('.wl [data-l]')].find(x=>x.dataset.l===(window.ZadLang==='ar'?'ar':'en')); b.click()})()")
+        await page.evaluate("document.querySelector('#op-skip')?.click()")
         await page.wait_for_timeout(300)
         await page.fill("#wl-name", "Junaid")
         await page.evaluate("document.querySelector('.wl .wl-role[data-r=\"employee\"]').click(); document.querySelector('.wl .wl-next').click()")
@@ -130,6 +131,22 @@ async def main():
         check("meetings" in me.get("hard", []) and me.get("name") == "Junaid", "the first-day answers are kept in About me")
         check(await page.evaluate("document.body.classList.contains('off-prayer')"), "a tool switched off disappears from the app")
         await page.evaluate("document.querySelector('.wl .wl-next')?.click()")
+        # the navigation: Today · Notes · ＋ · Calendar · Me
+        check(await page.evaluate("document.querySelectorAll('.tabbar button').length === 5 && getComputedStyle(document.querySelector('.tabbar')).display !== 'none'"), "the bottom bar shows Today, Notes, ＋, Calendar and Me")
+        await page.evaluate("document.querySelector('#tab-plus').click()")
+        await page.wait_for_timeout(400)
+        check(await page.evaluate("!!document.querySelector('.px.in') && document.querySelectorAll('.px .mx-row').length === 8"), "＋ opens the sheet: five ways to capture, three ways to plan")
+        await page.evaluate("JundNav.closeSheet()")
+        await page.wait_for_timeout(300)
+        await page.evaluate("document.querySelector('.tabbar [data-nav=\"me\"]').click()")
+        await page.wait_for_timeout(400)
+        check(await page.evaluate("!!document.querySelector('#screen-me .pl-card') && document.querySelectorAll('#screen-me .pl-row').length === 5"), "Me shows the free plan and what is left today and this month")
+        check(await page.evaluate("(()=>{const d=new Date().toLocaleDateString('en-CA'); localStorage.setItem('jn_planUse', JSON.stringify({day:d, month:d.slice(0,7), rec:0, msg:10, text:0, yt:0, quiz:0})); try { JundPlan.check('msg'); return false } catch (e) { return e.code === 'quota' && JundPlan.left('rec') === 60 } })()"), "after 10 free assistant messages the next waits until tomorrow; recordings are counted apart")
+        await page.evaluate("localStorage.removeItem('jn_planUse')")
+        check(await page.evaluate("!document.querySelector('#screen-me').hidden && document.querySelectorAll('#screen-me .mx-row').length >= 12 && document.querySelector('.tabbar [data-nav=\"me\"]').classList.contains('on')"), "Me shows growth, workspace and settings")
+        await page.evaluate("document.querySelector('#screen-me [data-k=\"sun\"]').click()")
+        await page.wait_for_timeout(400)
+        check(await page.evaluate("!document.querySelector('#screen-settings').hidden && document.querySelector('.tabbar [data-nav=\"me\"]').classList.contains('on')"), "a Me row opens its part of Settings")
         await page.evaluate("JN.show('settings')")
         await page.wait_for_timeout(400)
         check(await page.evaluate("!!document.querySelector('#tools-list [data-tool=\"prayer\"]') && !document.querySelector('#tools-list [data-tool=\"prayer\"]').checked"),

@@ -376,6 +376,11 @@ async function send({ retryNotes = false } = {}) {
     ? (AR_() ? 'ما محتوى المرفقات؟ لخّصها باختصار.' : 'What do the attachments contain? Summarise them briefly.')
     : input;
   if (!t) return;
+  // Basic: a few free assistant messages a day (they use the shared free AI allowance)
+  try { window.JundPlan?.check('msg'); } catch (e) {
+    log.push({ who: 'me', text: t }, { who: 'ai', text: e.message }); if (!retryNotes) { $('#as-text').value = ''; } persist(); render(); return;
+  }
+  window.JundPlan?.add('msg');
   busy = true; $('#as-send').disabled = true;
   if (att) recentAttachment = { chatId, files };
   log.push({ who: 'me', text: (att ? files.map(f => '📎 ' + f.name).join('\n') + '\n' : '') + t });

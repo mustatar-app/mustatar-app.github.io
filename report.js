@@ -129,7 +129,7 @@ async function owner() {
   const save = $('.ow-brake-save', ov);
   if (save) save.onclick = async () => {
     const brake = { cfLimit: Number($('.ow-cf-limit', ov).value) || 9500, paid: $('.ow-cf-paid', ov).checked };
-    if (brake.paid && !confirm(L('Allow Cloudflare to charge past its free daily allowance? (About $0.011 per 1,000 units; it works only once the Cloudflare paid plan is on.)', 'السماح لـ Cloudflare بالمحاسبة بعد الحصة المجانية اليومية؟ (نحو ٠٫٠١١ دولار لكل ١٠٠٠ وحدة، ويعمل فقط بعد تفعيل خطة Cloudflare المدفوعة.)'))) return;
+    if (brake.paid && !confirm(L('Allow Cloudflare to charge past its free daily allowance for PAID plans only? Free users always stop at the free allowance. (About $0.011 per 1,000 units; it works only once the Cloudflare paid plan is on.)', 'السماح لـ Cloudflare بالمحاسبة بعد الحصة المجانية اليومية للخطط المدفوعة فقط؟ المستخدمون المجانيون يتوقفون دائمًا عند الحصة المجانية. (نحو ٠٫٠١١ دولار لكل ١٠٠٠ وحدة، ويعمل فقط بعد تفعيل خطة Cloudflare المدفوعة.)'))) return;
     try { await J.serverFetch('/owner/brake', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, brake }) }); save.textContent = L('✓ Saved', '✓ حُفظ'); }
     catch (e) { save.textContent = J.errText(e); }
   };
@@ -171,7 +171,7 @@ function meterHtml(m) {
     <p class="muted fine">${L('Cost today', 'تكلفة اليوم')}: <b>$${(over * 0.011 / 1000).toFixed(2)}</b> · ${L('the free allowances start again at 03:00 Makkah time.', 'تتجدد الحصص المجانية الساعة ٣ فجرًا بتوقيت مكة.')}</p>
     <div class="ow-item"><div class="ow-meta">${L('The brake', 'المكابح')}</div>
       <label>${L('Stop Cloudflare at', 'أوقف Cloudflare عند')} <input class="ow-cf-limit" type="number" min="0" step="100" value="${esc(m.brake.cfLimit)}" style="width:7em"> ${L('units a day', 'وحدة يوميًا')}</label><br>
-      <label><input class="ow-cf-paid" type="checkbox"${m.brake.paid ? ' checked' : ''}> ${L('Allow paying past the free allowance', 'اسمح بالدفع بعد الحصة المجانية')}</label><br>
+      <label><input class="ow-cf-paid" type="checkbox"${m.brake.paid ? ' checked' : ''}> ${L('Allow paying past the free allowance (paid plans only)', 'اسمح بالدفع بعد الحصة المجانية (للخطط المدفوعة فقط)')}</label><br>
       <button type="button" class="ghost small ow-brake-save">${L('Save the brake', 'احفظ المكابح')}</button></div>
     <table class="ow-table"><tr><th>${L('Day', 'اليوم')}</th><th>${L('Hearing G+C', 'تفريغ G+C')}</th><th>${L('Writing C+G', 'كتابة C+G')}</th><th>${L('CF units', 'وحدات CF')}</th><th>${L('Groq min', 'دقائق Groq')}</th></tr>${rows}</table>`;
 }

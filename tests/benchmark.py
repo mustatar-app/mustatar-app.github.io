@@ -257,14 +257,14 @@ async def whole_app(s_ar, s_en):
         for lang, s in (("ar", s_ar), ("en", s_en)):
             ctx = await b.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
             # the app rewrites the transcript after hearing (headings, fillers removed); switch that off here so the number measures hearing only
-            await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');localStorage.setItem('jn_autoCorrect','false');")
+            await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan','"test"');localStorage.setItem('welcomed','1');localStorage.setItem('jn_autoCorrect','false');")
             page = await ctx.new_page()
             errs = []
             page.on("pageerror", lambda e: errs.append(str(e)[:200]))
             await page.goto(ORIGIN + "/", wait_until="load")
             await page.wait_for_timeout(1500)
             for _ in range(6):
-                c = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click(); return true}""")
+                c = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip|Continue without|بدون حساب/i.test(b.innerText))||bs[0])?.click(); return true}""")
                 if not c: break
                 await page.wait_for_timeout(300)
             await page.evaluate("window.JN.show('new')")

@@ -70,7 +70,7 @@ async def main():
         # the app: Arabic speech keeps 1-minute pieces; if the first minute is English it cuts again into 2-minute pieces
         for lang, said, want in (("ar", "قال الشيخ إن العلم نور يهدي به الله من يشاء من عباده", 7), ("en", "The teacher said that knowledge is a light that guides the people who look for it", 1 + 4)):
             ctx2 = await b.new_context(service_workers="block"); pg = await ctx2.new_page(); calls = []
-            await ctx2.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');localStorage.setItem('jn_autoCorrect','false');localStorage.setItem('jn_autoMake','false');")
+            await ctx2.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan','"test"');localStorage.setItem('welcomed','1');localStorage.setItem('jn_autoCorrect','false');localStorage.setItem('jn_autoMake','false');")
             def make_srv(said, calls):
               async def srv(route):
                   req = route.request

@@ -34,6 +34,8 @@ async function dueCards() {
   return (await allCards()).filter(c => !s[c.id] || s[c.id].due <= t);
 }
 async function makeCards(l, then) {
+  try { window.JundPlan?.check('quiz'); } catch (e) { open('Making cards and a quiz', `<p dir="auto">${esc(e.message)}</p>`); return; }
+  window.JundPlan?.add('quiz');
   const body = open('Making cards and a quiz', '<div class="progress small"><div class="spinner"></div><div id="sd-st">Reading the lesson…</div></div>');
   const text = F().lessonText(l);
   const ar = J.langOf(text) === 'ar';

@@ -47,7 +47,9 @@ reports page is stored only as a hash in `server/worker.js`.
 | `study.js` | Flashcards, quizzes, exam planner, memorisation |
 | `studio.js` | Text on photos and videos |
 | `features.js` | Prayer times, morning brief, habits, focus timer and other tools |
-| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu, "working" spinner, the logo mark, first-open welcome (name, roles, languages, hours, what is hard, tools), Arabic interface |
+| `nav.js` | The bottom bar (Today · Notes · ＋ · Calendar · Me), the ＋ sheet (capture or plan) and the Me screen |
+| `plan.js` | Plans and fair limits: Basic is free and runs only on the free daily AI allowance; the per-day and per-month counts, the plan card on Me and the plans page |
+| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu (chats and projects; opened from Me → Assistant chats or a swipe), "working" spinner, the logo mark, the opening screen (Google, passkey, or continue without an account) and first-open questions (name, roles, languages, hours, what is hard, tools), Arabic interface |
 | `report.js` | Problem reports and anonymous usage counts to the owner |
 | `sw.js` | Offline opening and receiving shared files; change `CACHE` when shipping |
 | `vendor/` | Outside libraries kept in the project (PDF reader, MP3 maker, on-phone AI, video reader, HEIC photos) |
@@ -88,6 +90,6 @@ Passkeys inside the Android app use the app's identity (`android:apk-key-hash:�
 | Assistant and voice | gpt-oss on Groq | Gemma 4 on Cloudflare | same |
 | YouTube links | Gemini (the only Google use) | — | — |
 
-Free allowances: Cloudflare 10,000 units a day for the whole account (the brake stops at 9,500 unless the owner
-allows paying); Groq 8 hours of sound a day per Whisper model and 200,000 tokens a day per text model. The owner
+Free allowances: Cloudflare 10,000 units a day for the whole account (the brake stops at 9,500; when the owner allows paying,
+only paid plans go past it — free users never cost money); Groq 8 hours of sound a day per Whisper model and 200,000 tokens a day per text model. The owner
 view (Settings → Send feedback → owner) shows today's use against each allowance and sets the brake.

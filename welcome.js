@@ -22,21 +22,50 @@ function start(force) {
   box = document.createElement('div');
   box.className = 'wl'; box.setAttribute('data-noi18n', ''); box.dir = AR ? 'rtl' : 'ltr';
   document.body.appendChild(box); document.body.classList.add('vx-open');
-  step(store.get('welcomeStep', 1));
+  // the opening screen first (sign in, or continue without an account), unless already signed in
+  const st = store.get('welcomeStep', 0);
+  step(st <= 1 ? (store.get('mstToken', '') || store.get('opened') ? 2 : 0) : st);
+}
+// the opening screen: what Mustatar does, and how to come in
+function opening() {
+  store.set('welcomeStep', 0);
+  const A = window.JundAcct;
+  box.innerHTML = `<div class="wl-card op">
+    <div class="op-top"><span class="op-brand">${window.MustatarMark?.(26, false) || '<img src="icon-192.png" alt="" width="26" height="26">'}<b>${L('Mustatar', 'مستطر')}</b></span>
+      <button type="button" class="op-lang" id="op-lang">${AR ? 'English' : 'عربي'}</button></div>
+    <div class="op-mid"><h1 class="op-h">${L('Every lesson and meeting,<br>written your way.', 'كل درس واجتماع،<br>مكتوب بطريقتك.')}</h1>
+      <p class="muted">${L('Record or upload, and Mustatar writes the notes, the minutes and the tasks, in Arabic and English.', 'سجّل أو ارفع ملفًا، ومستطر يكتب الملاحظات والمحضر والمهام، بالعربية والإنجليزية.')}</p></div>
+    <div class="op-btns">
+      <div id="op-google" class="op-google" hidden></div>
+      ${A?.canPasskey ? `<button type="button" class="ghost op-pk" id="op-pk"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> ${L('Sign in with a passkey', 'الدخول بمفتاح المرور')}</button>` : ''}
+      <button type="button" class="link op-skip" id="op-skip">${L('Continue without an account', 'المتابعة بدون حساب')}</button>
+      <p class="muted op-st" id="op-st" aria-live="polite"></p>
+      <p class="muted fine op-fine">${L('By continuing you agree to the Terms and Privacy Policy. Your content is never used to train AI.', 'بالمتابعة فإنك توافق على الشروط وسياسة الخصوصية. لا يُستخدم محتواك أبدًا لتدريب الذكاء الاصطناعي.')}</p>
+    </div></div>`;
+  const say = t => { const e = box.querySelector('#op-st'); if (e) e.textContent = t; };
+  A?.say(say);
+  A?.mountGoogle(box.querySelector('#op-google')).catch(() => {});
+  const pk = box.querySelector('#op-pk'); if (pk) pk.onclick = () => A.passkeySignIn();
+  const next = () => { A?.say(null); store.set('opened', true); window.removeEventListener('mustatar-signed-in', onIn); step(2); };
+  const onIn = () => setTimeout(next, 600);
+  window.addEventListener('mustatar-signed-in', onIn);
+  box.querySelector('#op-skip').onclick = next;
+  box.querySelector('#op-lang').onclick = () => { store.set('uiLang', AR ? 'en' : 'ar'); location.reload(); };
 }
 function finish() {
   store.set('welcomed', true); store.set('welcomeStep', 1);
   box?.remove(); document.body.classList.remove('vx-open');
-  try { window.JundAssistant?.home(); } catch {}
+  try { J.show('assistant'); window.JundAssistant?.home(); } catch {}
   window.JundReport?.event('welcome-done');
 }
 function frame(n, html) {
   box.innerHTML = `<div class="wl-card">
-    <div class="wl-top"><img src="icon-192.png" alt="" width="44" height="44"><div class="wl-dots">${[1, 2, 3, 4].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="wl-top"><img src="icon-192.png" alt="" width="44" height="44"><div class="wl-dots">${[2, 3, 4].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>
       <button type="button" class="ghost small wl-skip">${L('Skip', 'تخطَّ')}</button></div>${html}</div>`;
   box.querySelector('.wl-skip').onclick = finish;
 }
 function step(n) {
+  if (n === 0) return opening();
   store.set('welcomeStep', n);
   if (n === 1) {
     frame(1, `<h1 class="wl-h">${L('Welcome to Mustatar', 'أهلًا بك في مستطر')}</h1>
@@ -108,11 +137,11 @@ function step(n) {
 function done() {
   frame(4, `<h1 class="wl-h">${L('Ready ✓', 'جاهز ✓')}</h1>
     <p class="muted">${L('Three things to try first:', 'ثلاثة أشياء جرّبها أولًا:')}</p>
-    <ul class="wl-try"><li>🎙 ${L('Tap <b>Record</b> in a class or meeting — you get clean notes.', 'اضغط <b>تسجيل</b> في درس أو اجتماع — تحصل على ملاحظات مرتبة.')}</li>
-      <li>🗣 ${L('Tap the microphone on Home and just talk, in Arabic or English.', 'اضغط المايك في الرئيسية وتكلّم بالعربية أو الإنجليزية.')}</li>
-      <li>✅ ${L('Add a task or event — you get a reminder on time.', 'أضف مهمة أو موعدًا — يصلك تنبيه في وقته.')}</li></ul>
-    <p class="muted fine">${L('Tip: create your account in Settings → Your account, so your notes are kept safe in your own private space.', 'نصيحة: أنشئ حسابك من الإعدادات ← حسابك، لتُحفظ ملاحظاتك في مساحتك الخاصة.')}</p>
-    <p class="muted fine">${L('Something not working, or an idea? Settings → Send feedback.', 'شيء لا يعمل، أو لديك فكرة؟ الإعدادات ← أرسل ملاحظة.')}</p>
+    <ul class="wl-try"><li>🎙 ${L('Tap <b>＋ → Record</b> in a class or meeting — you get clean notes.', 'اضغط <b>＋ ← تسجيل</b> في درس أو اجتماع — تحصل على ملاحظات مرتبة.')}</li>
+      <li>🗣 ${L('Tap the microphone on Today and just talk, in Arabic or English.', 'اضغط المايك في «اليوم» وتكلّم بالعربية أو الإنجليزية.')}</li>
+      <li>✅ ${L('Tap <b>＋ → Task</b> — you get a reminder on time.', 'اضغط <b>＋ ← مهمة</b> — يصلك تنبيه في وقته.')}</li></ul>
+    ${store.get('mstToken', '') ? '' : `<p class="muted fine">${L('Tip: sign in from Me → Sign in, so your notes are kept safe in your own private space.', 'نصيحة: سجّل الدخول من «أنا» ← تسجيل الدخول، لتُحفظ ملاحظاتك في مساحتك الخاصة.')}</p>`}
+    <p class="muted fine">${L('Something not working, or an idea? Me → Send feedback.', 'شيء لا يعمل، أو لديك فكرة؟ «أنا» ← أرسل ملاحظة.')}</p>
     <button type="button" class="primary wl-next">${L('Start', 'ابدأ')}</button>`);
   box.querySelector('.wl-next').onclick = finish;
 }

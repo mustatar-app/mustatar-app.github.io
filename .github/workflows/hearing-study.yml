@@ -19,5 +19,5 @@ jobs:
       - uses: actions/cache@v4
         with: { path: bench-work, key: fleurs-test-v1 }
       - name: Study
-        env: { GROQ_API_KEY: "${{ secrets.GROQ_API_KEY }}" }
+        env: { GROQ_API_KEY: "${{ secrets.GROQ_API_KEY }}", STUDY: variants }
         run: python3 tests/hearing_study.py

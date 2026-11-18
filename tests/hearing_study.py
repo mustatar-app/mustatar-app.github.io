@@ -10,9 +10,9 @@ KEY = os.environ["GROQ_API_KEY"].strip()
 W = b.WORK
 UA = {"user-agent": "Mozilla/5.0 (Mustatar hearing study)"}
 
-def groq(path, model, name="a.mp3", mime="audio/mpeg"):
+def groq(path, model, name="a.mp3", mime="audio/mpeg", language=None, prompt=None):
     bnd = uuid.uuid4().hex
-    parts = [("model", model), ("response_format", "verbose_json"), ("temperature", "0")]
+    parts = [("model", model), ("response_format", "verbose_json"), ("temperature", "0")] + ([("language", language)] if language else []) + ([("prompt", prompt)] if prompt else [])
     body = b"".join(f"--{bnd}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode() for k, v in parts)
     body += f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n".encode() + open(path, "rb").read() + f"\r\n--{bnd}--\r\n".encode()
     for attempt in range(6):
@@ -92,13 +92,30 @@ def husary(surah=36, ayat=40):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-ar", "16000", "-ac", "1", wav], check=True)
     return wav, " ".join(texts), texts
 
+VARIANTS = os.environ.get("STUDY") == "variants"
 sets = []
-try: sets.append(("en", "LibriSpeech, one reader", *librispeech()))
-except Exception as e: print("note: LibriSpeech not available:", e)
+if not VARIANTS:
+  try: sets.append(("en", "LibriSpeech, one reader", *librispeech()))
+  except Exception as e: print("note: LibriSpeech not available:", e)
 try: sets.append(("ar", "Quran, al-Husary", *husary()))
 except Exception as e: print("note: Husary not available:", e)
 f = b.fleurs("ar_eg"); sets.append(("ar", "FLEURS Arabic, many speakers", f["wav"], f["ref"], f["sentences"]))
 
+def tail(t, n=30): return " ".join(t.split()[-n:])
+if VARIANTS:
+    import difflib
+    for lang, name, wav, ref, sentences in sets:
+        pieces = quiet_pieces(wav)
+        print(f"STUDY | {name} | {len(pieces)} pieces: " + ", ".join(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p], capture_output=True, text=True).stdout.strip()[:5] for p in pieces), flush=True)
+        for mode in ("pieces, no hints", "pieces + language", "pieces + previous words", "pieces + language + previous words"):
+            out = []; prev = ""
+            for p in pieces:
+                j = groq(p, "whisper-large-v3", language="ar" if "language" in mode else None, prompt=(tail(prev) or None) if "previous" in mode else None)
+                out.append(j.get("text", "")); prev = j.get("text", "")
+                if mode == "pieces, no hints": print(f"   piece: lang={j.get('language')} starts {j.get('text','')[:80]!r} ends {j.get('text','')[-60:]!r}", flush=True)
+            text = " ".join(out)
+            print(f"STUDY | {name} | whisper-large-v3 | {mode} | WER {b.wer(ref, text, lang)*100:.1f}% | {b.skipped(sentences, text, lang)} of {len(sentences)} skipped", flush=True)
+    sys.exit(0)
 for lang, name, wav, ref, sentences in sets:
     dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav], capture_output=True, text=True).stdout)
     whole = mp3_of(wav); pieces = quiet_pieces(wav)

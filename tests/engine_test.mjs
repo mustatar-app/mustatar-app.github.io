@@ -150,12 +150,17 @@ check(resp.status === 429 && body.code === 'smaller' && body.maxChars >= 1500 &&
 resp = await AI.talk(env, ctx, h, { system: 'S', user: 'x'.repeat(body.maxChars) });
 check(resp.ok && groqCalls.length === 1, 'a part of that size is then written by Groq');
 
-// 12. Owner allows paying past the free allowance → the brake lets Cloudflare go on
+// 12. Owner allows paying past the free allowance → only a paid plan goes on; a free user still stops ($0 rule)
 reset();
 brake = { cfLimit: 10, paid: true }; meterRows['cf.neurons'] = 20;
 cf.run = (m, input) => input.stream ? sse([delta('ok', 'stop')]) : null;
 resp = await AI.talk(env, ctx, h, { system: 'S', user: 'x'.repeat(60000), direct: true });
-check(resp.ok && cfCalls.length === 1, 'with paid use switched on, the brake lets Cloudflare go on');
+check(cfCalls.length === 0, 'a free user never goes past the free allowance, even with paid use switched on');
+reset();
+brake = { cfLimit: 10, paid: true }; meterRows['cf.neurons'] = 20;
+cf.run = (m, input) => input.stream ? sse([delta('ok', 'stop')]) : null;
+resp = await AI.talk(env, ctx, h, { system: 'S', user: 'x'.repeat(60000), direct: true, paidPlan: true });
+check(resp.ok && cfCalls.length === 1, 'with paid use switched on, a paid plan goes on past the brake');
 
 // 13. Page reading: a bad answer from Gemma counts as a failure, Qwen on Groq reads two pages instead
 reset();

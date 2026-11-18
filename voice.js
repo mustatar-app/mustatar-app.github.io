@@ -210,6 +210,8 @@ async function ask(T, blob) {
     if (store.get('voiceAuto', true)) setTimeout(() => { if (S === T && T.gen === gen) listen(); }, 350);
     else { state('idle'); status(idleText()); }
   };
+  // Basic: voice questions count as assistant messages (they use the shared free AI allowance)
+  try { window.JundPlan?.check('msg'); window.JundPlan?.add('msg'); } catch (e) { setText(me, '…'); const b = bubble('ai', ''); setText(b, e.message); state('idle'); status(idleText()); return; }
   try {
     T.abort = new AbortController();
     const history = T.turns.slice(0, -1).slice(-8).map(t => `${t.who === 'me' ? 'Person' : 'You'}: ${t.text}`).join('\n');

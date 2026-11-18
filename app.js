@@ -350,12 +350,12 @@ function renderPaletteSettings() {
 }
 
 /* ---------- navigation ---------- */
-const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox'];
+const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me'];
 function show(name) {
   for (const s of SCREENS) { const el = $('#screen-' + s); if (el) el.hidden = s !== name; }
-  const tab = name === 'result' || name === 'new' ? 'library' : name;
+  const tab = name === 'result' || name === 'new' ? 'library' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
   document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;
-  noteUse(name);   // Home: no bottom bar, only the message box (the ☰ menu has everything)
+  noteUse(name);
   $$('.tabbar [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === tab));
   if (name === 'library') { renderLibrary(); window.JundRecorder?.list(); }
   if (name === 'calendar') window.JundCal?.render();
@@ -364,6 +364,7 @@ function show(name) {
   if (name === 'pending') window.JundPending?.open();
   if (name === 'inbox') window.JundInbox?.open();
   if (name === 'assistant') window.JundAssistant?.open();
+  if (name === 'me') window.JundNav?.me();
   if (name === 'settings') { renderPaletteSettings(); renderSpend(); window.__syncEngine?.(); renderTools(); renderLearned(); }
   if (name === 'new') $('#key-missing').hidden = engineKind() !== 'claude' || !!store.get('key');
   if (name === 'result') requestAnimationFrame(fitPages);
@@ -479,7 +480,8 @@ function initSettings() {
     if (!r.ok) throw new Error(j.error || 'Something went wrong (' + r.status + ')');
     return j;
   }
-  const acctSay = t => { $('#acct-status').textContent = t; };
+  let sayTo = null;   // the opening screen sets this while it is open
+  const acctSay = t => { if (sayTo) sayTo(t); $('#acct-status').textContent = t; };
   function acctRender() {
     const u = space.user(), inn = space.on() && u;
     $('#acct-out').hidden = !!inn; $('#acct-in').hidden = !inn;
@@ -488,6 +490,7 @@ function initSettings() {
   }
   async function signedIn(j, first) {
     store.set('mstToken', j.token); store.set('mstUser', j.user);
+    window.dispatchEvent(new Event('mustatar-signed-in'));
     acctRender(); acctSay('✓ Signed in. Moving your notes into your space…');
     try { await space.moveIn(); acctSay(first ? '✓ Your account is ready, and your notes are in your own private space.' : '✓ Signed in. Your notes are in sync.'); renderLibrary(); window.JundCal?.render?.(); }
     catch (e) { acctSay('✓ Signed in. Your notes will move in when the internet is back.'); }
@@ -502,14 +505,16 @@ function initSettings() {
       await signedIn(await acctPost('/auth/passkey/register/finish', { flow: s.flow, response: credJSON(c) }), true);
     } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled. Nothing was made.' : '✗ ' + e.message); }
   };
-  $('#acct-signin').onclick = async () => {
+  async function passkeySignIn() {
     acctSay('Choose your Mustatar passkey…');
     try {
       const s = await acctPost('/auth/passkey/login/start', {});
       const c = await navigator.credentials.get({ publicKey: getOpts(s.options) });
       await signedIn(await acctPost('/auth/passkey/login/finish', { flow: s.flow, response: credJSON(c) }), false);
-    } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled.' : '✗ ' + e.message); }
-  };
+      return true;
+    } catch (e) { acctSay(e.name === 'NotAllowedError' ? 'Cancelled.' : '✗ ' + e.message); return false; }
+  }
+  $('#acct-signin').onclick = passkeySignIn;
   $('#acct-device').onclick = async () => {
     acctSay('Follow your phone to make a passkey for this account…');
     try {
@@ -534,16 +539,17 @@ function initSettings() {
     try { await acctPost('/space/delete-all', { confirm: 'DELETE' }); space.signOut(); acctRender(); acctSay('✓ Your account and your space were deleted.'); }
     catch (e) { acctSay('✗ ' + e.message); }
   };
-  // "Continue with Google" — shown only when the server has a Google client id
-  (async () => {
+  // "Continue with Google" — shown only when the server has a Google client id; `box` is where the button goes
+  async function mountGoogle(box) {
+    let ok = false;
     // inside the Android app, Google's web window cannot open: the phone's own Google sheet is used instead
     if (window.MustatarAndroid) {
-      if (!window.JundNative?.googleSignIn) return;
+      if (!window.JundNative?.googleSignIn) return false;
       try {
         const base = await getServer();
         const cfg = await (await fetch(base + '/auth/config')).json();
-        if (!cfg.googleClientId) return;
-        const b = $('#acct-google');
+        if (!cfg.googleClientId) return false;
+        const b = box;
         b.innerHTML = '<button type="button" class="ghost g-native"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg> ' + (window.ZadLang === 'ar' ? 'المتابعة باستخدام Google' : 'Continue with Google') + '</button>';
         b.querySelector('button').onclick = async () => {
           acctSay('Signing in with Google…');
@@ -552,26 +558,29 @@ function initSettings() {
           try { const j = await acctPost('/auth/google', { credential: r.token }); await signedIn(j, j.created); }
           catch (e) { acctSay('✗ ' + e.message); }
         };
-        b.hidden = false;
+        b.hidden = false; ok = true;
       } catch {}
-      return;
+      return ok;
     }
-    if (!pkOk) return;
+    if (!pkOk) return false;
     try {
       const base = await getServer();
       const cfg = await (await fetch(base + '/auth/config')).json();
-      if (!cfg.googleClientId) return;
-      await new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.onload = ok; sc.onerror = bad; document.head.appendChild(sc); });
-      google.accounts.id.initialize({ client_id: cfg.googleClientId, ux_mode: 'popup', callback: async res => {
+      if (!cfg.googleClientId) return false;
+      if (!window.google?.accounts) await new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.onload = ok; sc.onerror = bad; document.head.appendChild(sc); });
+      if (!window.__gsiInit) { window.__gsiInit = true; google.accounts.id.initialize({ client_id: cfg.googleClientId, ux_mode: 'popup', callback: async res => {
         acctSay('Signing in with Google…');
         try { const j = await acctPost('/auth/google', { credential: res.credential }); await signedIn(j, j.created); }
         catch (e) { acctSay('✗ ' + e.message); }
-      } });
-      google.accounts.id.renderButton($('#acct-google'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: window.ZadLang === 'ar' ? 'ar' : 'en' });
-      $('#acct-google').hidden = false;
+      } }); }
+      google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: window.ZadLang === 'ar' ? 'ar' : 'en' });
+      box.hidden = false; ok = true;
     } catch {}
-  })();
+    return ok;
+  }
+  mountGoogle($('#acct-google'));
   window.addEventListener('mustatar-account', acctRender);
+  window.JundAcct = { mountGoogle, passkeySignIn, canPasskey: pkOk, on: () => space.on(), say: f => { sayTo = f; } };
   acctRender();
   if (space.on()) space.pull().then(n => { if (n) renderLibrary(); }).catch(() => {});
 
@@ -855,6 +864,7 @@ async function hearPiece(piece, signal, onText) {
 // a whole audio or video file, piece by piece
 async function hearFile(item, signal, onStatus) {
   if (item.images) {
+    window.JundPlan?.check('text'); window.JundPlan?.add('text');
     const out = [];
     for (let i = 0; i < item.images.length; i++) {
       const f = item.images[i];
@@ -865,6 +875,7 @@ async function hearFile(item, signal, onStatus) {
     }
     return out.filter(Boolean).join('\n\n');
   }
+  window.JundPlan?.check('rec');   // Basic: one free hour a day of recordings into notes
   onStatus('Taking out the sound…');
   const cut = sec => window.JundMedia.prepare(item.file, f => onStatus('Taking out the sound… ' + ar(Math.round(f * 100)) + '%'), signal, { pieceSec: sec });
   let prep = await cut(60), recut = false;
@@ -1627,6 +1638,11 @@ $('#yt-go').onclick = async () => {
     const notes = items.filter(x => x.note).map(x => x.note);
     const vids = items.filter(x => x.yt);
     if (!vids.length) throw new Error('I found no video in these links.');
+    if (window.JundPlan) {
+      const n = window.JundPlan.left('yt');
+      if (n < vids.length) { if (!n) window.JundPlan.check('yt'); throw new Error(window.ZadLang === 'ar' ? `بقي لك هذا الشهر ${ar(n)} فيديو مجاني؛ أضف عددًا أقل.` : `You have ${ar(n)} free YouTube videos left this month; add fewer.`); }
+      window.JundPlan.add('yt', vids.length);
+    }
     pending = pending.filter(p => p.media || p.text).concat(vids.map(v => ({ media: true, yt: v.yt, unit: v.unit, text: '', status: '⏳ Waiting' })));
     hearNote = notes[0] || '';
     $('#yt').value = '';
@@ -2171,6 +2187,13 @@ $('#make').onclick = async () => {
     pending = []; renderPending(); $('#transcript').value = ''; $('#unit').value = ''; countWords();
     err.textContent = 'No internet right now. A quick draft is saved in the Library, and the full notes are written automatically when you are back online.'; err.hidden = false;
     return;
+  }
+  if (engineKind() !== 'phone') {
+    const files = jobs.filter(j => !j.media && !j.images).length;   // recordings, videos and photos were counted when heard or read
+    if (files) {
+      if (window.JundPlan && window.JundPlan.left('text') < files) { err.textContent = window.JundPlan.left('text') ? (window.ZadLang === 'ar' ? `بقي لك هذا الشهر ${ar(window.JundPlan.left('text'))} ملفات مجانية؛ اختر عددًا أقل.` : `You have ${ar(window.JundPlan.left('text'))} free files left this month; choose fewer.`) : (() => { try { window.JundPlan.check('text'); } catch (e) { return e.message; } })(); err.hidden = false; return; }
+      window.JundPlan?.add('text', files);
+    }
   }
   $('#make').disabled = true; $('#progress').hidden = false;
   setBar('#progress-bar-wrap', '#progress-bar', 0); $('#progress-pct').textContent = '';

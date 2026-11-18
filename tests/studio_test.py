@@ -93,7 +93,7 @@ async def open_app(browser, init=None):
                                     service_workers="block", accept_downloads=True)
     if init:
         await ctx.add_init_script(init)
-    await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');")
+    await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan',JSON.stringify('test'));localStorage.setItem('welcomed','1');")
     page = await ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)[:300]))
@@ -102,11 +102,11 @@ async def open_app(browser, init=None):
     await page.goto(BASE, wait_until="load")
     await page.wait_for_timeout(1500)
     for _ in range(6):
-        closed = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click(); return true}""")
+        closed = await page.evaluate("""()=>{const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) return false; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip|Continue without|بدون حساب/i.test(b.innerText))||bs[0])?.click(); return true}""")
         if not closed:
             break
         await page.wait_for_timeout(300)
-    await page.evaluate("document.querySelector('[data-nav=\"studio\"]').click()")
+    await page.evaluate("JN.show('studio')")
     await page.wait_for_timeout(800)
     return ctx, page, errors
 

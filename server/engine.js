@@ -104,7 +104,9 @@ export async function brakeState(env) {
   return v;
 }
 export const resetBrakeCache = () => { brakeCache = { at: 0, day: '', v: null }; };
-const cfAllowed = b => b.paid || b.cfUsed < b.cfLimit;
+// free users (Basic) only ever use the free daily allowance, so they cost nothing; paying past it is allowed only when the
+// owner has switched it on AND the request is from a paid plan (paid plans arrive with payments; until then nobody is)
+const cfAllowed = (b, paidPlan = false) => (b.paid && paidPlan === true) || b.cfUsed < b.cfLimit;
 export function meter(env, ctx, items) {
   const clean = Object.fromEntries(Object.entries(items).filter(([, n]) => Number.isFinite(n) && n > 0).map(([k, n]) => [k, Math.round(n * 1000) / 1000]));
   if (!Object.keys(clean).length) return;
@@ -213,7 +215,7 @@ async function cfHear(env, audio, mime, language) {
 // audio: an ArrayBuffer (any size), or a stream (only for pieces too big to keep in memory: Cloudflare alone, no second try).
 // langs: the languages the person speaks. One language: Whisper is told it. Several: Whisper finds it, and if it finds a
 // language the person does not speak (a quiet start can fool it), it hears the piece again in their first language.
-export async function hear(env, ctx, { audio, mime, langs = [], fast = false }) {
+export async function hear(env, ctx, { audio, mime, langs = [], fast = false, paidPlan = false }) {
   const tally = new Tally();
   const size = audio instanceof ReadableStream ? Infinity : audio.byteLength;
   const told = langs.length === 1 ? langs[0] : undefined;
@@ -237,7 +239,7 @@ export async function hear(env, ctx, { audio, mime, langs = [], fast = false }) 
   }
   if (env.AI) {
     const b = await brakeState(env);
-    if (!cfAllowed(b)) tally.no('cf:brake', { status: 429, daily: true });
+    if (!cfAllowed(b, paidPlan)) tally.no('cf:brake', { status: 429, daily: true });
     else {
       const r = await cfHear(env, audio, mime, told);
       if (r.ok) {
@@ -263,7 +265,7 @@ const textOf = j => { const c = j?.choices?.[0]; return { text: c?.message?.cont
 
 // prefer: 'cf' for notes, long text and pages; 'groq' for the assistant and voice, which must answer fast.
 // formatResult: when set, the whole answer is checked first (for page reading) and a bad one counts as a failure.
-export async function talk(env, ctx, h, { system = '', user = '', images = [], json: wantJson = false, maxTokens = 8000, prefer = 'cf', stream = true, formatResult, direct = false, prefix = '', think = false }) {
+export async function talk(env, ctx, h, { system = '', user = '', images = [], json: wantJson = false, maxTokens = 8000, prefer = 'cf', stream = true, formatResult, direct = false, prefix = '', think = false, paidPlan = false }) {
   const tally = new Tally();
   const inTok = estTokens(system) + estTokens(user) + images.length * 1100;
   const streaming = stream && !formatResult;
@@ -271,7 +273,7 @@ export async function talk(env, ctx, h, { system = '', user = '', images = [], j
   for (const source of order) {
     if (source === 'cf' && env.AI) {
       const b = await brakeState(env);
-      if (!cfAllowed(b)) { tally.no('cf:brake', { status: 429, daily: true }); continue; }
+      if (!cfAllowed(b, paidPlan)) { tally.no('cf:brake', { status: 429, daily: true }); continue; }
       const out = Math.max(256, Math.min(Number(maxTokens) || 8000, CF_OUT_MAX));
       const input = {
         messages: chatMessages(system, user, images), max_tokens: out, temperature: formatResult ? 0 : 0.3,

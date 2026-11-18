@@ -93,12 +93,21 @@ def husary(surah=36, ayat=40):
     return wav, " ".join(texts), texts
 
 VARIANTS = os.environ.get("STUDY") in ("variants", "quran-text", "short")
+ENGLISH = os.environ.get("STUDY") == "english"
 sets = []
 if not VARIANTS:
   try: sets.append(("en", "LibriSpeech, one reader", *librispeech()))
   except Exception as e: print("note: LibriSpeech not available:", e)
 try: sets.append(("ar", "Quran, al-Husary", *husary()))
 except Exception as e: print("note: Husary not available:", e)
+if ENGLISH:
+    sets = [x for x in sets if x[0] == "en"]
+    f = b.fleurs("en_us"); sets.append(("en", "FLEURS English, many speakers", f["wav"], f["ref"], f["sentences"]))
+    for lang, name, wav, ref, sentences in sets:
+        for label, pieces in (("whole", [mp3_of(wav)]), ("pieces of ~55 s", quiet_pieces(wav, target=55, window=4, tag="s55")), ("pieces of ~120 s", quiet_pieces(wav))):
+            text = " ".join(groq(p, "whisper-large-v3-turbo").get("text", "") for p in pieces)
+            print(f"STUDY | {name} | whisper-large-v3-turbo | {label} ({len(pieces)}) | WER {b.wer(ref, text, lang)*100:.1f}% | {b.skipped(sentences, text, lang)} of {len(sentences)} skipped | words {len(text.split())} of {len(ref.split())}", flush=True)
+    sys.exit(0)
 f = b.fleurs("ar_eg"); sets.append(("ar", "FLEURS Arabic, many speakers", f["wav"], f["ref"], f["sentences"]))
 
 def tail(t, n=30): return " ".join(t.split()[-n:])

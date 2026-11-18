@@ -6,8 +6,11 @@
 (() => {
 'use strict';
 
-const PIECE_SEC = 120;                  // about 2 minutes of speech per piece (Whisper skips less)
-const WHOLE_SEC = 150;                  // recordings up to 2½ minutes are sent whole
+// Seconds of speech per piece. Whisper skips sentences in long sound; tests on real speech (Nov 2026):
+// Arabic hears best in ~1-minute pieces (Quran recitation 4% errors vs 13–27% in 2-minute pieces or whole),
+// English in ~2-minute pieces. The app starts with 1 minute and switches to 2 if the first piece is English.
+let PIECE_SEC = 60;
+let WHOLE_SEC = 75;                      // recordings this short are sent whole
 const WHOLE_MAX = 18 * 1024 * 1024;     // smaller files are sent as they are
 const HARD_MAX = 95 * 1024 * 1024;      // the server accepts up to this per piece
 const FAST_MAX = 23 * 1024 * 1024;      // pieces up to this go to the fastest free hearing service (Groq takes 25 MB)
@@ -312,24 +315,33 @@ async function cutWav(file) {
   return { pieces, audio: file };
 }
 
+// raw AAC: cut at quiet moments, then each piece becomes M4A (Groq refuses raw AAC)
+async function aacPieces(file) {
+  const r = await cutAtFrames(file, 'audio/aac', (a, b) => a === 0xFF && (b & 0xF6) === 0xF0);
+  r.pieces = await Promise.all(r.pieces.map(async p => {
+    const m = adtsToM4a(new Uint8Array(await p.blob.arrayBuffer()));
+    return m ? { ...p, blob: m, mime: 'audio/mp4' } : p;
+  }));
+  return r;
+}
+
 /* ---------- the one function the app calls ---------- */
-async function prepare(file, onStatus, signal) {
+async function prepare(file, onStatus, signal, { pieceSec = 60 } = {}) {
+  PIECE_SEC = pieceSec; WHOLE_SEC = Math.round(pieceSec * 1.25);
   const k = kindOf(file);
   if (!k) throw cannot();
   let r = null;
   if (k === 'mp4') {
     r = await fromMp4(file, onStatus, signal);
+    // cut the sound at quiet moments like an AAC file, then each piece becomes a small M4A
+    if (r) r = { ...r, pieces: (await aacPieces(new File([r.audio], 'sound.aac', { type: 'audio/aac' }))).pieces };
     if (!r) { // not plain AAC inside: send it as it is if it is small enough
       if (file.size > HARD_MAX) throw tooBig();
       const mime = /^audio/.test(file.type) || ext(file) === 'm4a' ? 'audio/m4a' : (file.type || 'video/mp4');
       r = { pieces: [{ blob: file, mime }], audio: null };
     }
   } else if (k === 'mp3') r = await cutAtFrames(file, 'audio/mp3', (a, b) => a === 0xFF && (b & 0xE0) === 0xE0);
-  else if (k === 'aac') {
-    r = await cutAtFrames(file, 'audio/aac', (a, b) => a === 0xFF && (b & 0xF6) === 0xF0);
-    r.pieces = await Promise.all(r.pieces.map(async p => ({ ...p, blob: adtsToM4a(new Uint8Array(await p.blob.arrayBuffer())) || p.blob, mime: 'audio/mp4' })));
-    r.pieces.forEach(p => { if (p.blob.type !== 'audio/mp4') p.mime = 'audio/aac'; });
-  }
+  else if (k === 'aac') r = await aacPieces(file);
   else if (k === 'wav') r = await cutWav(file);
   else if (MIME[k]) {
     if (file.size > HARD_MAX) throw tooBig();
@@ -339,5 +351,5 @@ async function prepare(file, onStatus, signal) {
   return r;
 }
 
-window.JundMedia = { isMedia, kindOf, prepare, PIECE_SEC, adtsToM4a };
+window.JundMedia = { isMedia, kindOf, prepare, adtsToM4a };
 })();

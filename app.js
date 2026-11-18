@@ -865,9 +865,10 @@ async function hearFile(item, signal, onStatus) {
     return out.filter(Boolean).join('\n\n');
   }
   onStatus('Taking out the sound…');
-  const prep = await window.JundMedia.prepare(item.file, f => onStatus('Taking out the sound… ' + ar(Math.round(f * 100)) + '%'), signal);
+  const cut = sec => window.JundMedia.prepare(item.file, f => onStatus('Taking out the sound… ' + ar(Math.round(f * 100)) + '%'), signal, { pieceSec: sec });
+  let prep = await cut(60), recut = false;
   item.audio = prep.audio || null;
-  const out = [];
+  let out = [];
   let lastSent = 0;
   for (let i = 0; i < prep.pieces.length; i++) {
     const pre = prep.pieces.length > 1 ? `Transcribing part ${ar(i + 1)} of ${ar(prep.pieces.length)}` : 'Transcribing';
@@ -896,6 +897,10 @@ async function hearFile(item, signal, onStatus) {
         if (++tries >= 2) throw e;
         onStatus(pre + '… failed, trying again');
       }
+    }
+    // English is heard best in 2-minute pieces, Arabic in 1-minute ones: if the first minute is English, cut again
+    if (i === 0 && !recut && prep.pieces.length > 2 && langOf(r.text) === 'en') {
+      recut = true; prep = await cut(120); out = []; i = -1; continue;
     }
     out.push(cleanHeard(r.text));
   }

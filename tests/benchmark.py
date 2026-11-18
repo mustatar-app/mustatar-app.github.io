@@ -39,8 +39,9 @@ def post(path, data, ctype="application/json", headers=None, timeout=600):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read().decode("utf-8", "replace"); status = r.status
+            post.model = r.headers.get("x-model", "")
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace"); status = e.code
+        body = e.read().decode("utf-8", "replace"); status = e.code; post.model = ""
     return status, body, time.time() - t0
 
 def sse_text(body):
@@ -152,26 +153,26 @@ def chunks(s, kind, secs=60):
 
 def hearing(lang, s):
     texts = {}
-    for kind, mime in (("mp3", "audio/mpeg"), ("aac", "audio/aac")):
-        engine = "Groq" if kind == "mp3" else "Cloudflare"
-        for mode in ("whole", "1-minute pieces"):
-            parts = [s[kind]] if mode == "whole" else chunks(s, kind, 60)
-            text, secs, bad = "", 0.0, None
+    for kind, mime, modes in (("mp3", "audio/mpeg", ("whole", 120, 60)), ("aac", "audio/aac", ("whole",))):
+        for mode in modes:
+            parts = [s[kind]] if mode == "whole" else chunks(s, kind, mode)
+            text, secs, bad, used = "", 0.0, None, {}
             for part in parts:
                 status, body, t = post(f"/transcribe?mime={mime}&langs=ar,en", open(part, "rb").read(), mime)
                 secs += t
                 if status != 200:
                     bad = f"failed {status}: {body[:100]}"; break
+                used[post.model] = used.get(post.model, 0) + 1
                 piece, _ = sse_text(body)
                 text += ("\n" if text else "") + ("" if piece.strip() == "[[NOSPEECH]]" else piece)
-            name = f"{lang} {kind.upper()} → {engine}, {mode}, {s['minutes']:.1f} min"
+            label = "whole recording" if mode == "whole" else f"{mode}-second pieces"
+            who = ", ".join(f"{m.split('/')[-1]}×{n}" for m, n in used.items())
+            name = f"{lang} {kind.upper()}, {label}"
             if bad:
                 bench("Hearing", name, "failed", bad); problems.append(f"hearing {lang} {kind} {mode}"); continue
             w = wer(s["ref"], text, lang); miss = skipped(s["sentences"], text, lang)
-            bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · {secs:.1f} s wait ({secs / s['minutes']:.1f} s per minute)")
+            bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · heard by {who} · {secs / s['minutes']:.1f} s per minute")
             texts[f"{kind} {mode}"] = text
-            print(f"HEARD {lang} {kind} {mode}: {text[:300]}")
-    print(f"REF {lang}: {s['ref'][:300]}")
     return {"mp3": texts.get("mp3 whole", "")}
 
 def notes(lang, transcript):

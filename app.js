@@ -548,7 +548,7 @@ function initSettings() {
         b.querySelector('button').onclick = async () => {
           acctSay('Signing in with Google…');
           const r = await window.JundNative.googleSignIn(cfg.googleClientId);
-          if (!r.ok) { acctSay(r.error === 'cancelled' ? '' : /DEVELOPER|10:|28444|Configuration/i.test(r.error || '') ? '✗ Google sign-in in the app is not switched on yet. Use your fingerprint for now.' : '✗ ' + (r.error || 'Google sign-in failed')); return; }
+          if (!r.ok) { acctSay(r.error === 'cancelled' ? '' : /NoCredential/i.test(r.error || '') ? '✗ There is no Google account on this phone. Add one in the phone’s Settings → Accounts, then try again.' : /DEVELOPER|10:|28444|Configuration/i.test(r.error || '') ? '✗ Google sign-in in the app is not switched on yet. Use your fingerprint for now.' : '✗ ' + (r.error || 'Google sign-in failed')); return; }
           try { const j = await acctPost('/auth/google', { credential: r.token }); await signedIn(j, j.created); }
           catch (e) { acctSay('✗ ' + e.message); }
         };

@@ -1,0 +1,32 @@
+name: Benchmark (live server, real speech)
+# Real Arabic and English speech (FLEURS) through the live server: hearing accuracy and speed, notes,
+# page reading, the assistant, voice, and the whole app making a note from a recording.
+# It uses part of the free AI allowance that everyone shares (about 25 minutes of hearing and a few notes),
+# so it runs once a week and when started by hand, never on every change.
+on:
+  schedule:
+    - cron: '17 2 * * 1'   # every Monday morning (Makkah time), to catch a slower or worse free AI early
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: benchmark
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libraqm0 > /dev/null
+          pip install -q playwright==1.* pillow && python -m playwright install --with-deps chromium > /dev/null
+      - name: Cache the speech samples
+        uses: actions/cache@v4
+        with: { path: bench-work, key: fleurs-test-v1 }
+      - name: Run the benchmark
+        run: |
+          (python3 -m http.server 8765 > /dev/null 2>&1 &)
+          python3 tests/benchmark.py

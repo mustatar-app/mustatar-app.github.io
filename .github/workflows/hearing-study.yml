@@ -1,6 +1,8 @@
 name: Hearing study (Groq, one-speaker speech)
 on:
   workflow_dispatch:
+  push:
+    branches: [hearing-study]
 permissions:
   contents: read
 jobs:

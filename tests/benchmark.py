@@ -153,7 +153,7 @@ def chunks(s, kind, secs=60):
 
 def hearing(lang, s):
     texts = {}
-    for kind, mime, modes in (("mp3", "audio/mpeg", ("whole", 120, 60)), ("aac", "audio/aac", ("whole",))):
+    for kind, mime, modes in (("mp3", "audio/mpeg", ("whole", 120)), ("aac", "audio/aac", ("whole",))):
         for mode in modes:
             parts = [s[kind]] if mode == "whole" else chunks(s, kind, mode)
             text, secs, bad, used = "", 0.0, None, {}
@@ -287,6 +287,7 @@ async def whole_app(s_ar, s_en):
             secs = time.time() - t0
             ok = bool(saved)
             if ok:
+                print(f"APP TRANSCRIPT {lang}: {saved[0]['tr'][:300]!r}")
                 bench("Whole app", f"{lang}: what the app heard", f"WER {wer(s['ref'], saved[0]['tr'], lang)*100:.1f}%",
                       f"{skipped(s['sentences'], saved[0]['tr'], lang)} of {len(s['sentences'])} sentences skipped")
             bench("Whole app", f"{lang}: a {s['minutes']:.1f}-minute recording → saved note", f"{secs:.0f} s" if ok else "no note after 5 min",

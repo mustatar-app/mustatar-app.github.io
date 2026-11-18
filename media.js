@@ -1,11 +1,13 @@
 // Audio and video files → small audio pieces the server can transcribe.
-// Videos and long recordings are cut into pieces of about 10 minutes, so each
-// piece uploads quickly and a long lecture never hits the AI's answer limit.
+// Long recordings are cut into pieces of about 2 minutes, at a quiet moment (between words).
+// Measured on real Arabic speech (tests/benchmark.py): sent whole, a 5-minute recording lost
+// 5 of 26 sentences (Whisper skips parts of long audio); cut into 2-minute pieces, none were lost.
 // Nothing here uses the internet; it all runs on the phone.
 (() => {
 'use strict';
 
-const PIECE_SEC = 600;                  // about 10 minutes of speech per piece
+const PIECE_SEC = 120;                  // about 2 minutes of speech per piece (Whisper skips less)
+const WHOLE_SEC = 150;                  // recordings up to 2½ minutes are sent whole
 const WHOLE_MAX = 18 * 1024 * 1024;     // smaller files are sent as they are
 const HARD_MAX = 95 * 1024 * 1024;      // the server accepts up to this per piece
 const FAST_MAX = 23 * 1024 * 1024;      // pieces up to this go to the fastest free hearing service (Groq takes 25 MB)
@@ -131,26 +133,79 @@ async function fromMp4(file, onStatus, signal) {
   return { pieces, audio: new Blob(pieces.map(p => p.blob), { type: 'audio/aac' }), audioName: 'aac', duration };
 }
 
-/* ---------- MP3 and ADTS-AAC: cut at frame starts ---------- */
+/* ---------- how long is it, and where is it quiet? ---------- */
+// the length of a sound file, from the phone's own player (no decoding of the whole file)
+function durationOf(file) {
+  return new Promise(res => {
+    const a = document.createElement('audio'), url = URL.createObjectURL(file);
+    const done = d => { URL.revokeObjectURL(url); a.removeAttribute('src'); res(Number.isFinite(d) && d > 0 ? d : 0); };
+    a.preload = 'metadata'; a.onloadedmetadata = () => done(a.duration); a.onerror = () => done(0);
+    setTimeout(() => done(0), 8000);
+    a.src = url;
+  });
+}
+let actx = null;
+const audioCtx = () => (actx ||= new (window.AudioContext || window.webkitAudioContext)());
+// the quietest moment (in seconds from the window's start) in a few seconds of sound
+function quietestIn(buf) {
+  const ch = buf.getChannelData(0), win = Math.max(1, Math.round(buf.sampleRate * 0.05));
+  let best = Infinity, at = ch.length / 2;
+  for (let i = 0; i + win <= ch.length; i += win) {
+    let e = 0; for (let j = i; j < i + win; j++) e += ch[j] * ch[j];
+    // prefer the middle a little, so pieces stay close to 2 minutes
+    const mid = Math.abs(i + win / 2 - ch.length / 2) / ch.length;
+    const score = e * (1 + mid);
+    if (score < best) { best = score; at = i + win / 2; }
+  }
+  return at / buf.sampleRate;
+}
+
+/* ---------- MP3 and ADTS-AAC: cut at frame starts, at a quiet moment ---------- */
 async function cutAtFrames(file, mime, isSync) {
-  if (file.size <= WHOLE_MAX) return { pieces: [{ blob: file, mime }], audio: file };
-  const n = Math.ceil(file.size / (12 * 1024 * 1024));
+  const nextSync = async from => {
+    const win = new Uint8Array(await file.slice(from, Math.min(file.size, from + 65536)).arrayBuffer());
+    let j = 0; while (j < win.length - 1 && !isSync(win[j], win[j + 1])) j++;
+    return from + j;
+  };
+  let seconds = await durationOf(file);
+  // raw AAC has no length in it: estimate it from the first frames (each holds 1024 sound samples)
+  if (!seconds && mime === 'audio/aac') {
+    const h = new Uint8Array(await file.slice(0, Math.min(file.size, 262144)).arrayBuffer());
+    const RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+    let i = 0, frames = 0, bytes = 0, rate = 0;
+    while (i + 7 < h.length && h[i] === 0xFF && (h[i + 1] & 0xF6) === 0xF0) {
+      rate ||= RATES[(h[i + 2] >> 2) & 15] || 44100;
+      const len = ((h[i + 3] & 3) << 11) | (h[i + 4] << 3) | (h[i + 5] >> 5);
+      if (len < 7) break;
+      i += len; frames++; bytes += len;
+    }
+    if (frames > 20 && rate) seconds = file.size / (bytes / (frames * 1024 / rate));
+  }
+  if (seconds && seconds <= WHOLE_SEC && file.size <= FAST_MAX) return { pieces: [{ blob: file, mime }], audio: file };
+  if (!seconds && file.size <= WHOLE_MAX) return { pieces: [{ blob: file, mime }], audio: file };
+  const bps = seconds ? file.size / seconds : 16000;           // bytes per second (an unknown file: 128 kbit/s)
+  const total = seconds || file.size / bps;
+  const n = Math.max(1, Math.round(total / PIECE_SEC));
   const cuts = [0];
   for (let k = 1; k < n; k++) {
-    const at = Math.floor(file.size * k / n);
-    const win = new Uint8Array(await file.slice(at, Math.min(file.size, at + 65536)).arrayBuffer());
-    let j = 0; while (j < win.length - 1 && !isSync(win[j], win[j + 1])) j++;
-    cuts.push(at + j);
+    let at = Math.floor(file.size * k / n);
+    // look 6 seconds either side for the quietest moment, and cut there
+    try {
+      const from = await nextSync(Math.max(cuts[cuts.length - 1] + 1, at - Math.round(bps * 6)));
+      const to = Math.min(file.size, at + Math.round(bps * 6));
+      const buf = await audioCtx().decodeAudioData(await file.slice(from, to).arrayBuffer());
+      at = from + Math.round((to - from) * quietestIn(buf) / buf.duration);
+    } catch {}
+    cuts.push(await nextSync(at));
   }
   cuts.push(file.size);
   const pieces = [];
-  for (let k = 0; k < cuts.length - 1; k++) if (cuts[k + 1] > cuts[k]) pieces.push({ blob: file.slice(cuts[k], cuts[k + 1], mime), mime });
+  for (let k = 0; k < cuts.length - 1; k++) if (cuts[k + 1] > cuts[k]) pieces.push({ blob: file.slice(cuts[k], cuts[k + 1], mime), mime, start: cuts[k] / bps, end: cuts[k + 1] / bps });
   return { pieces, audio: file };
 }
 
 /* ---------- WAV: cut the sound data, give each piece its own header ---------- */
 async function cutWav(file) {
-  if (file.size <= WHOLE_MAX) return { pieces: [{ blob: file, mime: 'audio/wav' }], audio: file };
   const head = new Uint8Array(await file.slice(0, Math.min(file.size, 1 << 16)).arrayBuffer());
   const dv = new DataView(head.buffer);
   let p = 12, fmt = null, dataOff = -1, dataLen = 0;
@@ -162,11 +217,28 @@ async function cutWav(file) {
   }
   if (!fmt || dataOff < 0) throw cannot();
   const fdv = new DataView(fmt.buffer);
-  const byteRate = fdv.getUint32(8, true), align = fdv.getUint16(12, true) || 1;
+  const byteRate = fdv.getUint32(8, true), align = fdv.getUint16(12, true) || 1, bits = fdv.getUint16(14, true);
+  if (dataLen / byteRate <= WHOLE_SEC && file.size <= FAST_MAX) return { pieces: [{ blob: file, mime: 'audio/wav' }], audio: file };
   let step = Math.min(byteRate * PIECE_SEC, 15 * 1024 * 1024); step -= step % align;
+  // the quietest 50 ms within 6 seconds of a planned cut (16-bit sound; other kinds cut where planned)
+  const quiet = async at => {
+    if (bits !== 16) return at;
+    const span = byteRate * 6, from = Math.max(0, at - span), to = Math.min(dataLen, at + span);
+    const pcm = new Int16Array((await file.slice(dataOff + from, dataOff + to).arrayBuffer()).slice(0, Math.floor((to - from) / 2) * 2));
+    const win = Math.max(align / 2, Math.round(byteRate * 0.05 / 2));
+    let best = Infinity, pos = at - from;
+    for (let i = 0; i + win <= pcm.length; i += win) {
+      let e = 0; for (let j = i; j < i + win; j += 4) e += pcm[j] * pcm[j];
+      if (e < best) { best = e; pos = (i + win / 2) * 2; }
+    }
+    const cut = from + pos; return cut - (cut % align);
+  };
+  const ends = [];
+  for (let o = step; o < dataLen - byteRate * 20; o += step) ends.push(await quiet(o));
+  ends.push(dataLen);
   const pieces = [];
-  for (let o = 0; o < dataLen; o += step) {
-    const len = Math.min(step, dataLen - o);
+  for (let k = 0, o = 0; k < ends.length; o = ends[k], k++) {
+    const len = ends[k] - o; if (len <= 0) continue;
     const h = new Uint8Array(20 + fmt.length + 8), hv = new DataView(h.buffer);
     h.set([82, 73, 70, 70]); hv.setUint32(4, 12 + fmt.length + 8 + len, true); h.set([87, 65, 86, 69, 102, 109, 116, 32], 8);
     hv.setUint32(16, fmt.length, true); h.set(fmt, 20);

@@ -173,9 +173,6 @@ def hearing(lang, s):
             w = wer(s["ref"], text, lang); miss = skipped(s["sentences"], text, lang)
             bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · heard by {who} · {secs / s['minutes']:.1f} s per minute")
             texts[f"{kind} {mode}"] = text
-            if lang == "en" and mode in ("whole", 60):
-                for i, line in enumerate(text.splitlines()):
-                    print(f"TEXT {kind} {mode} {i:03d} {line}")
             if lang == "en":
                 words = set(norm(text, lang))
                 for snt in s["sentences"]:
@@ -284,11 +281,14 @@ async def whole_app(s_ar, s_en):
             saved = None
             for _ in range(300):
                 await page.wait_for_timeout(1000)
-                saved = await page.evaluate("""new Promise(r=>{const q=indexedDB.open('jund-notes');q.onsuccess=()=>{try{const t=q.result.transaction('lessons').objectStore('lessons').getAll();t.onsuccess=()=>r(t.result.filter(l=>!l.draft).map(l=>({t:l.notes?.title||l.unit, n:JSON.stringify(l.notes||{}).length})))}catch(e){r([])}};q.onerror=()=>r([])})""")
+                saved = await page.evaluate("""new Promise(r=>{const q=indexedDB.open('jund-notes');q.onsuccess=()=>{try{const t=q.result.transaction('lessons').objectStore('lessons').getAll();t.onsuccess=()=>r(t.result.filter(l=>!l.draft).map(l=>({t:l.notes?.title||l.unit, n:JSON.stringify(l.notes||{}).length, tr:l.transcript||''})))}catch(e){r([])}};q.onerror=()=>r([])})""")
                 if saved:
                     break
             secs = time.time() - t0
             ok = bool(saved)
+            if ok:
+                bench("Whole app", f"{lang}: what the app heard", f"WER {wer(s['ref'], saved[0]['tr'], lang)*100:.1f}%",
+                      f"{skipped(s['sentences'], saved[0]['tr'], lang)} of {len(s['sentences'])} sentences skipped")
             bench("Whole app", f"{lang}: a {s['minutes']:.1f}-minute recording → saved note", f"{secs:.0f} s" if ok else "no note after 5 min",
                   (f"note “{saved[0]['t']}”, {saved[0]['n']} characters" if ok else (await page.evaluate("document.body.innerText"))[:160].replace("\n", " ")) + (f"; page errors: {errs[:2]}" if errs else ""))
             if not ok: problems.append(f"whole app {lang}")

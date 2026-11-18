@@ -26,10 +26,6 @@ jobs:
       - name: Cache the speech samples
         uses: actions/cache@v4
         with: { path: bench-work, key: fleurs-test-v1 }
-      - name: Hearing diagnosis (Groq directly)
-        continue-on-error: true
-        env: { GROQ_API_KEY: "${{ secrets.GROQ_API_KEY }}" }
-        run: python3 tests/hear_diag.py
       - name: Run the benchmark
         run: |
           (python3 -m http.server 8765 > /dev/null 2>&1 &)

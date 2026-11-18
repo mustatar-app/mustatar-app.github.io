@@ -36,6 +36,10 @@ jobs:
           python3 tests/smaller_test.py http://localhost:8765/
       - name: Moving to the new address, recordings and privacy page
         run: python3 tests/move_test.py
+      - name: Long recordings are cut into 2-minute pieces at quiet moments
+        run: |
+          command -v ffmpeg > /dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null)
+          python3 tests/media_test.py http://localhost:8765/
       - name: Studio saves and shares pictures, videos and carousels (browser, and as inside the Android app)
         run: |
           command -v ffmpeg > /dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null)

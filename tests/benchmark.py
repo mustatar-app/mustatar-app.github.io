@@ -96,9 +96,9 @@ def fleurs(lang_dir, n=26):
     rows_ = list(csv.reader(open(tsv, encoding="utf-8"), delimiter="\t", quoting=csv.QUOTE_NONE))
     seen, picked = set(), []
     for r in rows_:
-        if r[1] in seen:
+        if r[0] in seen:          # the same sentence is read by several people: keep one reading of each
             continue
-        seen.add(r[1]); picked.append(r)
+        seen.add(r[0]); picked.append(r)
         if len(picked) == n:
             break
     names = {r[1] for r in picked}
@@ -141,6 +141,7 @@ def hearing(lang, s):
               f"{secs:.1f} s wait = {secs / s['minutes']:.1f} s per minute of sound")
         texts[kind] = text
         print(f"HEARD {lang} {kind}: {text[:400]}")
+    print(f"REF {lang}: {s['ref'][:400]}")
     return texts
 
 def notes(lang, transcript):

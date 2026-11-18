@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+      - run: pip install playwright==1.* && python -m playwright install --with-deps chromium > /dev/null
       - uses: actions/cache@v4
         with: { path: bench-work, key: fleurs-test-v1 }
       - name: Study

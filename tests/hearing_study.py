@@ -10,11 +10,11 @@ KEY = os.environ["GROQ_API_KEY"].strip()
 W = b.WORK
 UA = {"user-agent": "Mozilla/5.0 (Mustatar hearing study)"}
 
-def groq(path, model):
+def groq(path, model, name="a.mp3", mime="audio/mpeg"):
     bnd = uuid.uuid4().hex
     parts = [("model", model), ("response_format", "verbose_json"), ("temperature", "0")]
     body = b"".join(f"--{bnd}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode() for k, v in parts)
-    body += f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n".encode() + open(path, "rb").read() + f"\r\n--{bnd}--\r\n".encode()
+    body += f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n".encode() + open(path, "rb").read() + f"\r\n--{bnd}--\r\n".encode()
     for attempt in range(6):
         req = urllib.request.Request("https://api.groq.com/openai/v1/audio/transcriptions", data=body, method="POST",
                                      headers={"authorization": "Bearer " + KEY, "content-type": f"multipart/form-data; boundary={bnd}", **UA})
@@ -107,3 +107,35 @@ for lang, name, wav, ref, sentences in sets:
             t0 = time.time(); text = " ".join(groq(p, model).get("text", "") for p in files); secs = time.time() - t0
             w = b.wer(ref, text, lang); miss = b.skipped(sentences, text, lang)
             print(f"STUDY | {name} ({dur/60:.1f} min) | {model} | {mode} | WER {w*100:.1f}% | {miss} of {len(sentences)} skipped | {secs:.0f} s", flush=True)
+
+# A phone video (picture + AAC sound): the app turns its sound into M4A pieces; Groq must accept them and hear them as well as MP3
+import asyncio, base64, threading, http.server, functools
+from playwright.async_api import async_playwright
+en = [x for x in sets if x[0] == "en"]
+if en:
+    _, _, wav, ref, sentences = en[0]
+    vid = f"{W}/phone-video.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=black:s=320x240:r=10", "-i", wav, "-shortest", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2", vid], check=True)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8766), functools.partial(http.server.SimpleHTTPRequestHandler, directory=root))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    async def pieces_of(path):
+        async with async_playwright() as p:
+            br = await p.chromium.launch(); page = await br.new_page()
+            await page.route("**/*workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))
+            await page.goto("http://127.0.0.1:8766/"); await page.wait_for_timeout(1500)
+            out = await page.evaluate("""async b64 => {
+              const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+              const prep = await window.JundMedia.prepare(new File([bytes], 'video.mp4', { type: 'video/mp4' }));
+              const res = [];
+              for (const p of prep.pieces) { const u = new Uint8Array(await p.blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode(...u.subarray(i, i + 32768)); res.push({ mime: p.mime, b64: btoa(s) }); }
+              return res;
+            }""", base64.b64encode(open(path, "rb").read()).decode())
+            await br.close(); return out
+    got = asyncio.run(pieces_of(vid))
+    files = []
+    for i, pc in enumerate(got):
+        f = f"{W}/video-piece{i}.m4a"; open(f, "wb").write(base64.b64decode(pc["b64"])); files.append((f, pc["mime"]))
+    print("STUDY | phone video pieces:", [m for _, m in files])
+    t0 = time.time(); text = " ".join(groq(f, "whisper-large-v3", "audio.m4a", m).get("text", "") for f, m in files)
+    print(f"STUDY | phone video ({len(files)} M4A pieces made by the app) | whisper-large-v3 | WER {b.wer(ref, text, 'en')*100:.1f}% | {b.skipped(sentences, text, 'en')} of {len(sentences)} skipped | {time.time()-t0:.0f} s", flush=True)

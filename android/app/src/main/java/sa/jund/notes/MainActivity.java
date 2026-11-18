@@ -197,6 +197,9 @@ public class MainActivity extends Activity {
                             // reading the assistant's answer aloud (a web view has no voice of its own)
                             case "speak": speak(command.optString("id"), command.optString("text"), command.optString("lang"), command.optDouble("rate", 1), reply); return;
                             case "stopSpeaking": if (tts != null) tts.stop(); return;
+                            // "Continue with Google" inside the app: Android's own Google sheet gives a signed ID token,
+                            // which the page sends to the server (the same check as on the website)
+                            case "googleSignIn": googleSignIn(command.optString("job"), command.optString("clientId"), reply); return;
                             case "print":
                                 getSystemService(PrintManager.class).print("Mustatar",
                                     web.createPrintDocumentAdapter("Mustatar"), null);
@@ -251,6 +254,34 @@ public class MainActivity extends Activity {
                 }, 25000);
             }
         }
+    }
+
+    private void googleSignIn(String job, String clientId, androidx.webkit.JavaScriptReplyProxy reply) {
+        java.util.function.BiConsumer<String, String> answer = (token, problem) -> reply.postMessage("{\"file\":" + JSONObject.quote(job)
+            + ",\"result\":{\"ok\":" + (token != null) + (token != null ? ",\"token\":" + JSONObject.quote(token) : "")
+            + (problem != null ? ",\"error\":" + JSONObject.quote(problem) : "") + "}}");
+        try {
+            androidx.credentials.CredentialManager cm = androidx.credentials.CredentialManager.create(this);
+            com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption option =
+                new com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(clientId).build();
+            androidx.credentials.GetCredentialRequest request = new androidx.credentials.GetCredentialRequest.Builder().addCredentialOption(option).build();
+            cm.getCredentialAsync(this, request, null, androidx.core.content.ContextCompat.getMainExecutor(this),
+                new androidx.credentials.CredentialManagerCallback<androidx.credentials.GetCredentialResponse, androidx.credentials.exceptions.GetCredentialException>() {
+                    @Override public void onResult(androidx.credentials.GetCredentialResponse response) {
+                        androidx.credentials.Credential c = response.getCredential();
+                        if (c instanceof androidx.credentials.CustomCredential && com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+                                .TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(c.getType())) {
+                            try {
+                                answer.accept(com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(c.getData()).getIdToken(), null);
+                            } catch (Exception e) { answer.accept(null, "unreadable answer from Google"); }
+                        } else answer.accept(null, "not a Google account");
+                    }
+                    @Override public void onError(androidx.credentials.exceptions.GetCredentialException e) {
+                        String kind = e.getClass().getSimpleName();
+                        answer.accept(null, kind.contains("Cancellation") ? "cancelled" : kind + ": " + e.getMessage());
+                    }
+                });
+        } catch (Exception e) { answer.accept(null, "Google sign-in is not available on this phone: " + e.getMessage()); }
     }
 
     private void speak(String id, String text, String lang, double rate, androidx.webkit.JavaScriptReplyProxy reply) {

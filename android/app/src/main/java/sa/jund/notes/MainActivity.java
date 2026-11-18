@@ -72,6 +72,8 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        // Studio plays the chosen video while it makes the new one (a few moments after the tap): allow it
+        web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.getSettings().setGeolocationEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(true);

@@ -136,6 +136,10 @@ def main():
     shot("00-start")
     page = Page()
     check(wait(page, "document.readyState === 'complete' && !!window.JundNative"), "the app opens the pages, and its save, share and voice are connected")
+    # at the very first start the app's offline copy is put in place, and the page reloads once: wait for that
+    wait(page, "!!navigator.serviceWorker?.controller", 40)
+    time.sleep(4)
+    wait(page, "document.readyState === 'complete' && !!window.JundNative", 20)
     page.js("""(()=>{for(let i=0;i<6;i++){const o=[...document.querySelectorAll('body > *')].find(e=>{const s=getComputedStyle(e);return s.position==='fixed'&&s.display!=='none'&&e.offsetHeight>300&&/wl|welcome/i.test(e.className+e.id)}); if(!o) break; const bs=[...o.querySelectorAll('button')]; (bs.find(b=>/تخط|Skip/i.test(b.innerText))||bs[0])?.click();} return true})()""")
     time.sleep(1)
     def open_studio():

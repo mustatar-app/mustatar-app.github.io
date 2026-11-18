@@ -153,7 +153,7 @@ def chunks(s, kind, secs=60):
 
 def hearing(lang, s):
     texts = {}
-    for kind, mime, modes in (("mp3", "audio/mpeg", ("whole", 120, 60)), ("aac", "audio/aac", ("whole",))):
+    for kind, mime, modes in (("mp3", "audio/mpeg", ("whole", 120)), ("aac", "audio/aac", ("whole",))):
         for mode in modes:
             parts = [s[kind]] if mode == "whole" else chunks(s, kind, mode)
             text, secs, bad, used = "", 0.0, None, {}
@@ -256,7 +256,8 @@ async def whole_app(s_ar, s_en):
         b = await p.chromium.launch()
         for lang, s in (("ar", s_ar), ("en", s_en)):
             ctx = await b.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
-            await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');")
+            # the app rewrites the transcript after hearing (headings, fillers removed); switch that off here so the number measures hearing only
+            await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('welcomed','1');localStorage.setItem('jn_autoCorrect','false');")
             page = await ctx.new_page()
             errs = []
             page.on("pageerror", lambda e: errs.append(str(e)[:200]))
@@ -287,7 +288,8 @@ async def whole_app(s_ar, s_en):
             secs = time.time() - t0
             ok = bool(saved)
             if ok:
-                bench("Whole app", f"{lang}: what the app heard", f"WER {wer(s['ref'], saved[0]['tr'], lang)*100:.1f}%",
+                print(f"APP TRANSCRIPT {lang}: {saved[0]['tr'][:300]!r}")
+                bench("Whole app", f"{lang}: what the app heard (before the tidy-up rewrite)", f"WER {wer(s['ref'], saved[0]['tr'], lang)*100:.1f}%",
                       f"{skipped(s['sentences'], saved[0]['tr'], lang)} of {len(s['sentences'])} sentences skipped")
             bench("Whole app", f"{lang}: a {s['minutes']:.1f}-minute recording → saved note", f"{secs:.0f} s" if ok else "no note after 5 min",
                   (f"note “{saved[0]['t']}”, {saved[0]['n']} characters" if ok else (await page.evaluate("document.body.innerText"))[:160].replace("\n", " ")) + (f"; page errors: {errs[:2]}" if errs else ""))

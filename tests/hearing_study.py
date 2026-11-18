@@ -92,7 +92,7 @@ def husary(surah=36, ayat=40):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-ar", "16000", "-ac", "1", wav], check=True)
     return wav, " ".join(texts), texts
 
-VARIANTS = os.environ.get("STUDY") == "variants"
+VARIANTS = os.environ.get("STUDY") in ("variants", "quran-text")
 sets = []
 if not VARIANTS:
   try: sets.append(("en", "LibriSpeech, one reader", *librispeech()))

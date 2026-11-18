@@ -93,7 +93,7 @@ async def open_app(browser, init=None):
                                     service_workers="block", accept_downloads=True)
     if init:
         await ctx.add_init_script(init)
-    await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan','"test"');localStorage.setItem('welcomed','1');")
+    await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan',JSON.stringify('test'));localStorage.setItem('welcomed','1');")
     page = await ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)[:300]))

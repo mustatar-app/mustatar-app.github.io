@@ -30,7 +30,7 @@ async def main():
     async with async_playwright() as p:
         br = await p.chromium.launch()
         ctx = await br.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
-        await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan','"test"');localStorage.setItem('welcomed','1');")
+        await ctx.add_init_script("localStorage.setItem('jn_welcomed','1');localStorage.setItem('jn_plan',JSON.stringify('test'));localStorage.setItem('welcomed','1');")
         page = await ctx.new_page(); errors = []
         page.on("pageerror", lambda e: errors.append(str(e)[:300]))
         await page.route("**/*workers.dev/**", server); await page.route("**/api.aladhan.com/**", lambda r: r.abort())

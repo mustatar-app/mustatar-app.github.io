@@ -722,6 +722,7 @@ async function serverFetch(path, init = {}) {
   if (!res.ok) {
     let j = {}; try { j = await res.json(); } catch {}
     if (j.code === 'quota') throw Object.assign(new Error(window.ZadLang === 'ar' ? 'انتهت حصة مستطر المجانية من الذكاء الاصطناعي لهذا اليوم. ما بدأته محفوظ؛ أكمله غدًا.' : 'Mustatar’s free AI is used up for today. What you started is saved; finish it tomorrow.'), { code: 'quota', retryAfter: Number(j.retryAfter) || 0 });
+    if (j.code === 'smaller') throw Object.assign(new Error(window.ZadLang === 'ar' ? 'هذا الجزء طويل على الذكاء الاحتياطي اليوم؛ سأقسمه أصغر.' : 'This part is too long for today’s backup AI; splitting it smaller.'), { code: 'smaller', maxChars: Number(j.maxChars) || 9000 });
     if (j.code === 'rate' || res.status === 429) throw aiRetryError('rate', Number(j.retryAfter) || Number(res.headers.get('retry-after')));
     if (j.code === 'toolong') throw Object.assign(new Error('Too big for one go. Choose fewer pages or a shorter file.'), { code: 'toolong' });
     if (j.code === 'upload') throw Object.assign(new Error('The AI server could not read this attachment. Try again or choose a smaller file.'), { code: 'upload' });
@@ -1839,7 +1840,8 @@ ${src.name}>>>`;
         const status = en ? `Planning the document (${i + 1}/${planSources.length})` : `تخطيط الملاحظات (${i + 1}/${planSources.length})`;
         onStatus(status, 0.02, 'write');
         let preferBackup = false;
-        const plan = await retryNoteStep(async signal => {
+        let plan;
+        try { plan = await retryNoteStep(async signal => {
           const result = await callBig({
             system: planSystem, messages: [{ role: 'user', content: source }],
             deep: true, studyNotes: true, maxTokens: 12000, signal, preferBackup,
@@ -1849,7 +1851,12 @@ ${src.name}>>>`;
         }, controller.signal, (_, seconds) => {
           preferBackup = true;
           onStatus(`${status} · ${seconds}s`, 0.02, 'write');
-        }, { retryFormat: true, retryTimeout: true });
+        }, { retryFormat: true, retryTimeout: true }); }
+        catch (e) {
+          // too long for today's backup AI: the plan only keeps headings consistent, so write without it
+          if (e.code !== 'smaller') throw e;
+          outlines[i] = { title: '', outline: '' }; await persist(); continue;
+        }
         const outline = plan.sections.map(section =>
           [section.heading, ...section.blocks.map(block => block.text)].filter(Boolean).join(' · ')).join('\n');
         outlines[i] = { title: plan.title, outline };
@@ -1907,17 +1914,35 @@ ${src.name}>>>`;
           if (depth) { fragments[path] = retained; await persist(); }
           return retained;
         } catch (e) {
-          if (!canSplit || !['notes_limit', 'ai_format'].includes(e.code)) throw e;
-          fragments[path] = { split: true };
+          // 'smaller': the main AI is used up for today and the backup takes shorter texts — cut to its size
+          if (e.code === 'smaller' && sourceWords >= 100 && depth < 6) fragments[path] = { split: true, n: Math.max(2, Math.ceil(source.length / e.maxChars)) };
+          else if (!canSplit || !['notes_limit', 'ai_format'].includes(e.code)) throw e;
+          else fragments[path] = { split: true };
           await persist();
         }
       }
-      const smaller = splitText(source, Math.ceil(sourceWords / 2));
+      const smaller = splitText(source, Math.ceil(sourceWords / (fragments[path]?.n || 2)));
       onStatus(`Writing part ${i + 1} of ${parts.length} in smaller sections…`, null, 'write');
       const results = [];
       for (const [j, fragment] of smaller.entries()) results.push(await writeComplete(fragment, i, `${path}.${j}`, depth + 1));
       const notes = mergeParts(results.map(result => structuredClone(result.notes)));
       return { stop: 'STOP', usd: results.reduce((sum, result) => sum + (result.usd || 0), 0), notes };
+    };
+    // the main AI is used up for today and the backup takes shorter texts ('smaller'): cut the part to its size and join the notes
+    const oneFit = async (part, i, depth = 0) => {
+      try { return await one(part, i); }
+      catch (e) {
+        const words = part.trim().split(/\s+/).length;
+        if (e.code !== 'smaller' || words < 100 || depth > 4) throw e;
+        const pieces = splitText(part, Math.ceil(words / Math.max(2, Math.ceil(part.length / e.maxChars))));
+        const got = [];
+        for (const [j, piece] of pieces.entries()) {
+          onStatus(`Writing part ${i + 1} in smaller pieces (${j + 1}/${pieces.length})…`, null, 'write');
+          const r = await oneFit(piece, i, depth + 1);
+          got.push(r.notes ? r : { ...r, notes: await getJSON(r.text, controller.signal) });
+        }
+        return { stop: got.some(x => cutOff(x.stop)) ? 'max_tokens' : 'STOP', usd: got.reduce((n, x) => n + (x.usd || 0), 0), notes: mergeParts(got.map(x => structuredClone(x.notes))) };
+      }
     };
     const writePart = async i => {
       if (!rs[i]) {
@@ -1926,7 +1951,7 @@ ${src.name}>>>`;
           for (const path of Object.keys(fragments)) {
             if (path === String(i) || path.startsWith(`${i}.`)) delete fragments[path];
           }
-        } else rs[i] = await one(parts[i], i);
+        } else rs[i] = await oneFit(parts[i], i);
         await persist();
       } else if (complete && rs[i].notes) rs[i] = retainSource(rs[i], parts[i], i);
       done++; onStatus(`Writing… part ${ar(done)} of ${ar(parts.length)} done`, Math.min(0.95, done / parts.length), 'write');

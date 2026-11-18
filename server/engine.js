@@ -131,7 +131,7 @@ export function cfProblem(e) {
   return { status: 502, msg: m.slice(0, 200) };
 }
 class Tally {
-  constructor() { this.rate = 0; this.quota = false; this.last = 502; this.tried = []; }
+  constructor() { this.rate = 0; this.quota = false; this.last = 502; this.tried = []; this.fitChars = 0; }
   no(who, r) {
     this.tried.push(who + ':' + r.status);
     this.last = r.status || 502;
@@ -140,6 +140,9 @@ class Tally {
   answer(h) {
     console.warn('AI sources said no', this.tried);
     if (this.rate) return json({ code: 'rate', retryAfter: Math.ceil(Math.min(this.rate, 900)), status: 429 }, 429, h);
+    // Cloudflare's daily allowance is used up and the text is too long for Groq's free plan in one go:
+    // ask for smaller parts (they fit Groq) instead of saying "come back tomorrow"
+    if (this.quota && this.fitChars) return json({ code: 'smaller', maxChars: this.fitChars, status: 429 }, 429, h);
     if (this.quota) return json({ code: 'quota', retryAfter: secondsToTomorrow(), status: 429 }, 429, h);
     if (!this.tried.length) return json({ error: 'no AI source is set up', code: 'nokey' }, 500, h);
     return json({ code: 'ai_busy', status: this.last }, 502, h);
@@ -299,7 +302,12 @@ export async function talk(env, ctx, h, { system = '', user = '', images = [], j
     if (source === 'groq' && groqKey(env)) {
       const models = images.length ? (images.length <= 2 ? [MODELS.groqVision] : []) : MODELS.groqText;
       const room = GROQ_TPM - inTok - 300;
-      if (!models.length || room < 500) { tally.tried.push('groq:too-big'); continue; }
+      if (!models.length || room < 500) {
+        tally.tried.push('groq:too-big');
+        // the longest text (in characters) that leaves Groq room to write about as much as it reads
+        if (models.length) tally.fitChars = Math.max(1500, Math.floor((GROQ_TPM - 300 - estTokens(system)) / 2) * 3);
+        continue;
+      }
       const out = Math.min(Number(maxTokens) || 8000, room, images.length ? 3400 : 7000);
       for (const model of models) {
         const body = {

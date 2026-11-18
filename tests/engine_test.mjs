@@ -141,12 +141,14 @@ cf.run = () => { throw new Error('should not be called'); };
 resp = await AI.talk(env, ctx, h, { system: 'S', user: 'hi', prefer: 'groq', direct: true });
 check(resp.ok && !cfCalls.length && groqCalls.length === 1, 'the assistant goes to Groq first');
 
-// 11. A long lecture is too big for Groq's free plan, and Cloudflare's brake is reached → "quota"
+// 11. A long lecture is too big for Groq's free plan, and Cloudflare's brake is reached → "smaller" (the app cuts it to Groq's size)
 reset();
 brake = { cfLimit: 10, paid: false }; meterRows['cf.neurons'] = 20;
 resp = await AI.talk(env, ctx, h, { system: 'S', user: 'x'.repeat(60000) });
 body = await resp.json();
-check(resp.status === 429 && body.code === 'quota' && !groqCalls.length, 'a long lecture with Cloudflare used up and too big for Groq → "quota", nothing sent');
+check(resp.status === 429 && body.code === 'smaller' && body.maxChars >= 1500 && body.maxChars < 12000 && !groqCalls.length, `a long lecture with Cloudflare used up and too big for Groq → "smaller" (${body.maxChars} characters a part), nothing sent`);
+resp = await AI.talk(env, ctx, h, { system: 'S', user: 'x'.repeat(body.maxChars) });
+check(resp.ok && groqCalls.length === 1, 'a part of that size is then written by Groq');
 
 // 12. Owner allows paying past the free allowance → the brake lets Cloudflare go on
 reset();

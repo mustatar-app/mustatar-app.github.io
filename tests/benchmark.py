@@ -34,7 +34,7 @@ def get(url, dest):
 
 def post(path, data, ctype="application/json", headers=None, timeout=600):
     req = urllib.request.Request(SERVER + path, data=data, method="POST",
-                                 headers={"origin": ORIGIN, "content-type": ctype, **(headers or {})})
+                                 headers={"origin": ORIGIN, "content-type": ctype, "user-agent": "Mozilla/5.0 (Mustatar benchmark)", **(headers or {})})
     t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:

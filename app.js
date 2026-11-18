@@ -1461,11 +1461,21 @@ async function hearAll() {
     }
   }
 }
+// saves a file made in the app; answers { ok, where } (inside the Android app, where the phone put it)
 function download(blob, name) {
+  if (window.JundNative) {
+    return window.JundNative.save(blob, name).then(r => {
+      const ar = window.ZadLang === 'ar';
+      window.JundCal?.toast(r.ok ? (ar ? '✓ حُفظ في ' : '✓ Saved in ') + (r.where === 'chosen' ? (ar ? 'المكان الذي اخترته' : 'the place you chose') : r.where)
+        : r.cancelled ? (ar ? 'لم يُحفظ' : 'Not saved') : (ar ? '✗ تعذّر الحفظ: ' : '✗ Could not save: ') + (r.error || ''));
+      return r;
+    });
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  return Promise.resolve({ ok: true, where: 'downloads' });
 }
 const safeName = s => String(s || 'file').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80);
 // listen to an audio or video file before / while it is transcribed (one player under the list, so it keeps playing)
@@ -2797,10 +2807,8 @@ $('#backup').onclick = async () => {
       return;
     }
   } catch (e) { if (e.name === 'AbortError') { st.textContent = 'Cancelled.'; return; } }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(file); a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  st.textContent = `✓ Backup downloaded (${ar(lessons.length)} lessons). Upload it to Google Drive from your phone's files.`;
+  const r = await download(file, name);
+  st.textContent = r?.ok === false ? '✗ ' + (r.error || 'Not saved') : `✓ Backup saved (${ar(lessons.length)} lessons). Upload it to Google Drive from your phone's files.`;
 };
 $('#restore').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;

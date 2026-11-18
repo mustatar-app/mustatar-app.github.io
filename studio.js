@@ -473,6 +473,11 @@ async function carousel() {
   }
   layers = keep; sel = keepSel; draw();
   if (navigator.canShare?.({ files })) { try { await navigator.share({ files }); $('#st-car-st').textContent = '✓ Shared ' + files.length + ' slides.'; return; } catch (e) { if (e.name === 'AbortError') return; } }
+  if (window.JundNative) {
+    const r = await window.JundNative.saveAll(files);
+    $('#st-car-st').textContent = r.ok ? `✓ Saved ${files.length} slides in your gallery (${r.where === 'chosen' ? 'the place you chose' : r.where}).` : r.cancelled ? '' : '✗ Could not save: ' + (r.error || '');
+    return;
+  }
   for (const f of files) { J.download(f, f.name); await new Promise(r => setTimeout(r, 400)); }
   $('#st-car-st').textContent = `✓ Saved ${files.length} slides to your downloads.`;
 }
@@ -507,11 +512,15 @@ function renderCaps() {
 function status(t) { const s = $('#st-status'); if (s) s.textContent = t; }
 async function deliver(blob, name, share) {
   const file = new File([blob], name, { type: blob.type });
+  if (!blob || !blob.size) { status('✗ The picture could not be made. Try again, or pick a smaller photo.'); return; }
   if (share && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file] }); status('✓ Shared.'); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
-  J.download(blob, name);
-  status('✓ Saved to your downloads. Open Instagram and pick it from your gallery.');
+  const r = await J.download(blob, name);
+  if (r?.ok === false) { status(r.cancelled ? '' : '✗ Could not save: ' + (r.error || 'unknown problem')); return; }
+  status(r?.where && r.where !== 'downloads'
+    ? `✓ Saved in your gallery (${r.where === 'chosen' ? 'the place you chose' : r.where}). Open Instagram and pick it.`
+    : '✓ Saved to your downloads. Open Instagram and pick it from your gallery.');
 }
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
 async function exportIt(share) {
@@ -523,7 +532,11 @@ async function exportIt(share) {
     c.toBlob(b => deliver(b, `jund-studio-${stamp()}.jpg`, share), 'image/jpeg', 0.93);
     return;
   }
-  await exportVideo(share);
+  try { await exportVideo(share); }
+  catch (e) {
+    status('✗ The video could not be made: ' + (e.message || e) + '. Try a shorter part, or save the image.');
+    window.JundReport?.problem('studio video: ' + (e.message || e));
+  } finally { const p = $('#st-progress'); if (p) p.hidden = true; const b = $('#st-export'); if (b) b.disabled = false; }
 }
 let audioCtx = null, audioSrc = null;
 async function exportVideo(share) {
@@ -554,10 +567,18 @@ async function exportVideo(share) {
   await v.play();
   const len = trim.end - trim.start;
   await new Promise(res => {
+    // the last frame of a video brings no "next frame" call, so the end is also watched by the "ended" event,
+    // a timer, and a limit of the clip's length plus 15 seconds (before, saving a whole video waited forever at 98%)
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearInterval(watch); clearTimeout(cap); v.removeEventListener('ended', finish); res(); };
+    v.addEventListener('ended', finish);
+    const watch = setInterval(() => { if (v.ended || v.currentTime >= trim.end - 0.04) finish(); }, 150);
+    const cap = setTimeout(finish, (len + 15) * 1000);
     const step = () => {
+      if (done) return;
       paint(ctx, W, H, false);
       $('#st-progress-text').textContent = `Making the video… ${Math.min(100, Math.round((v.currentTime - trim.start) / len * 100))}% (keep the screen on)`;
-      if (v.currentTime >= trim.end || v.ended) return res();
+      if (v.currentTime >= trim.end || v.ended) return finish();
       (v.requestVideoFrameCallback ? v.requestVideoFrameCallback.bind(v) : requestAnimationFrame)(step);
     };
     step();

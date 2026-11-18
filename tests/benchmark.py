@@ -111,7 +111,8 @@ def fleurs(lang_dir, n=26):
                 with open(f"{out}/{base}", "wb") as f:
                     f.write(t.extractfile(m).read())
     files = [f"{out}/{r[1]}" for r in picked if os.path.exists(f"{out}/{r[1]}")]
-    ref = " ".join(r[2] for r in picked if os.path.exists(f"{out}/{r[1]}"))
+    sentences = [r[2] for r in picked if os.path.exists(f"{out}/{r[1]}")]
+    ref = " ".join(sentences)
     # one recording, with a short pause between the sentences
     lst = f"{WORK}/{lang_dir}.txt"
     sil = f"{WORK}/silence.wav"
@@ -125,24 +126,53 @@ def fleurs(lang_dir, n=26):
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav, "-b:a", "64k", mp3], check=True)
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav, "-c:a", "aac", "-b:a", "64k", "-f", "adts", aac], check=True)
     dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav], capture_output=True, text=True).stdout.strip())
-    return {"mp3": mp3, "aac": aac, "ref": ref, "minutes": dur / 60, "clips": files}
+    return {"mp3": mp3, "aac": aac, "wav": wav, "ref": ref, "sentences": sentences, "minutes": dur / 60, "clips": files}
+
+def skipped(sentences, hyp, lang):
+    """how many of the real sentences are mostly missing from what was heard (skipped, not just misheard)"""
+    words = set(norm(hyp, lang))
+    miss = 0
+    for snt in sentences:
+        w = norm(snt, lang)
+        if w and sum(x in words for x in w) / len(w) < 0.5:
+            miss += 1
+    return miss
+
+def chunks(s, kind, secs=60):
+    """the same recording cut into pieces of about a minute, the way the app could send it"""
+    d = f"{WORK}/{os.path.basename(s['wav'])}-{kind}-{secs}"
+    os.makedirs(d, exist_ok=True)
+    ext = "mp3" if kind == "mp3" else "aac"
+    args = ["-b:a", "64k"] if kind == "mp3" else ["-c:a", "aac", "-b:a", "64k", "-f", "segment", "-segment_format", "adts"]
+    if kind == "mp3":
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", s["wav"], "-f", "segment", "-segment_time", str(secs), *args, f"{d}/p%03d.{ext}"], check=True)
+    else:
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", s["wav"], "-segment_time", str(secs), *args, f"{d}/p%03d.{ext}"], check=True)
+    return sorted(os.path.join(d, f) for f in os.listdir(d))
 
 def hearing(lang, s):
     texts = {}
     for kind, mime in (("mp3", "audio/mpeg"), ("aac", "audio/aac")):
-        data = open(s[kind], "rb").read()
-        status, body, secs = post(f"/transcribe?mime={mime}&langs=ar,en", data, mime)
-        text, _ = sse_text(body)
-        engine = "Groq Whisper large-v3" if kind == "mp3" else "Cloudflare Whisper turbo"
-        if status != 200:
-            bench("Hearing", f"{lang} {kind.upper()} ({engine})", f"failed {status}", body[:120]); problems.append(f"hearing {lang} {kind}"); continue
-        w = wer(s["ref"], text, lang)
-        bench("Hearing", f"{lang} {kind.upper()} ({engine}), {s['minutes']:.1f} min", f"WER {w*100:.1f}%",
-              f"{secs:.1f} s wait = {secs / s['minutes']:.1f} s per minute of sound")
-        texts[kind] = text
-        print(f"HEARD {lang} {kind}: {text[:400]}")
-    print(f"REF {lang}: {s['ref'][:400]}")
-    return texts
+        engine = "Groq" if kind == "mp3" else "Cloudflare"
+        for mode in ("whole", "1-minute pieces"):
+            parts = [s[kind]] if mode == "whole" else chunks(s, kind, 60)
+            text, secs, bad = "", 0.0, None
+            for part in parts:
+                status, body, t = post(f"/transcribe?mime={mime}&langs=ar,en", open(part, "rb").read(), mime)
+                secs += t
+                if status != 200:
+                    bad = f"failed {status}: {body[:100]}"; break
+                piece, _ = sse_text(body)
+                text += ("\n" if text else "") + ("" if piece.strip() == "[[NOSPEECH]]" else piece)
+            name = f"{lang} {kind.upper()} → {engine}, {mode}, {s['minutes']:.1f} min"
+            if bad:
+                bench("Hearing", name, "failed", bad); problems.append(f"hearing {lang} {kind} {mode}"); continue
+            w = wer(s["ref"], text, lang); miss = skipped(s["sentences"], text, lang)
+            bench("Hearing", name, f"WER {w*100:.1f}%", f"{miss} of {len(s['sentences'])} sentences skipped · {secs:.1f} s wait ({secs / s['minutes']:.1f} s per minute)")
+            texts[f"{kind} {mode}"] = text
+            print(f"HEARD {lang} {kind} {mode}: {text[:300]}")
+    print(f"REF {lang}: {s['ref'][:300]}")
+    return {"mp3": texts.get("mp3 whole", "")}
 
 def notes(lang, transcript):
     sys_notes = ("You write clear notes from a lecture or meeting transcript, in the transcript's language. "

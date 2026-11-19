@@ -156,6 +156,21 @@ async def main():
               "Settings → Your tools shows the same choice")
         check(await page.evaluate("!document.querySelector('#user-key')"), "the personal AI key is gone")
         check(not errors, "no errors anywhere: " + "; ".join(errors[:3]))
+        # ---- a new version updates by itself ----
+        c7 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True)
+        await c7.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');")
+        p7 = await c7.new_page()
+        await p7.route("**/*workers.dev/**", fake_server); await p7.route("**/api.aladhan.com/**", lambda r: r.abort())
+        await p7.goto(BASE); await p7.wait_for_timeout(2500)
+        await p7.evaluate("window.__mark=1; navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))"); await p7.wait_for_timeout(2500)
+        check(await p7.evaluate("window.__mark === undefined"), "a new version loads by itself when nothing is going on")
+        await p7.fill("#as-text", "half-written message")
+        await p7.evaluate("window.__mark=1; navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))"); await p7.wait_for_timeout(1000)
+        check(await p7.evaluate("window.__mark === 1 && !!document.querySelector('.update-bar')"), "while typing, the update waits (and offers the bar)")
+        await p7.evaluate("Object.defineProperty(document,'hidden',{get:()=>true,configurable:true}); document.dispatchEvent(new Event('visibilitychange'))"); await p7.wait_for_timeout(3000)
+        check(await p7.evaluate("window.__mark === undefined && document.querySelector('#as-text').value === 'half-written message'"), "the update happens when the app is left, keeping the half-written message")
+        await c7.close()
+
         # ---- "Continue with Google" ----
         GSI_STUB = "window.google={accounts:{id:{initialize(c){window.__gcfg=c}, renderButton(el){el.innerHTML='<button type=button id=fake-g>Google</button>'}, prompt(){}}}};"
         async def gsi(route):

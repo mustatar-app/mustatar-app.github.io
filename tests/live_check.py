@@ -125,6 +125,14 @@ async def app_speed():
         say(g["shown"] and g["frame"], "the opening screen shows the Google button")
         say(not bad, "Google accepts this app's address " + "; ".join(bad[:2]))
         say(g["pk"], "the opening screen shows the passkey button")
+        # the page the Android app opens in the phone's browser for Google
+        pg3 = await c2.new_page(); logs3 = []
+        pg3.on("console", lambda m: logs3.append(m.text))
+        await pg3.goto(APP + "/google.html?from=app&lang=en"); await pg3.wait_for_timeout(6000)
+        g3 = await pg3.evaluate("({frame: !!document.querySelector('#g iframe'), st: document.querySelector('#st').textContent})")
+        bad3 = [l for l in logs3 if 'origin' in l.lower() and 'not allowed' in l.lower()]
+        print("  google.html:", g3, bad3[:2])
+        say(g3["frame"] and not g3["st"].startswith("✗") and not bad3, "the browser page for Google (google.html) shows Google's button")
         await pg2.click("#op-skip"); await pg2.wait_for_timeout(500)
         say(await pg2.evaluate("!!document.querySelector('.wl .wl-dots')"), "'Continue without an account' goes on to the first questions")
         await b.close()

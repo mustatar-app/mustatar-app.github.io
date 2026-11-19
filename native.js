@@ -54,6 +54,8 @@
     stopSpeaking: () => A.postMessage(JSON.stringify({ action: 'stopSpeaking' })),
     // "Continue with Google": the phone's own Google sheet → a signed token for the server
     googleSignIn: clientId => ask({ action: 'googleSignIn', clientId }, 180000),
+    // the same, in the phone's browser (it comes back with app.mustatar://signin)
+    openBrowser: url => ask({ action: 'openBrowser', url }, 20000),
   };
   // the browser's own share, done by the app (a web view has none, or one that does nothing)
   const share = async data => {

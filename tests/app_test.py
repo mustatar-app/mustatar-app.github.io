@@ -209,6 +209,9 @@ async def main():
         check(got["t"] == "test-token-1234567890" and got["hash"] == "" and not got["opening"], f"the app keeps the Google sign-in from its address, cleans the address, and skips the sign-in screen ({got})")
         await p5.evaluate("document.querySelectorAll('.wl').forEach(x=>x.remove()); document.body.classList.remove('vx-open'); JN.show('me')"); await p5.wait_for_timeout(400)
         check(await p5.evaluate("/Test User/.test(document.querySelector('#screen-me').innerText) && !document.querySelector('#me-signin')"), "Me shows the signed-in Google account")
+        # the app already open on the same page: only the part after # changes
+        await p5.evaluate("localStorage.removeItem('jn_mstToken'); location.hash = '#signin=" + payload + "'"); await p5.wait_for_timeout(1200)
+        check(await p5.evaluate("JSON.parse(localStorage.getItem('jn_mstToken')||'null') === 'test-token-1234567890' && location.hash === ''"), "the sign-in also arrives while the app is already open")
         # google.html opened in a normal browser goes back to the website, signed in
         await p5.goto(BASE + "google.html?lang=en"); await p5.wait_for_timeout(1200)
         await p5.evaluate("localStorage.removeItem('jn_mstToken'); window.__gcfg.callback({credential: 'fake-google-id-token'})"); await p5.wait_for_timeout(2500)

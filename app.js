@@ -594,9 +594,10 @@ function initSettings() {
   mountGoogle($('#acct-google'));
   window.addEventListener('mustatar-account', acctRender);
   // back from "Continue with Google" in the browser (google.html): the sign-in arrives in the address, which is cleaned at once
-  if (location.hash.startsWith('#signin=')) {
+  const fromLink = () => {
+    if (!location.hash.startsWith('#signin=')) return;
     const raw = location.hash.slice(8);
-    history.replaceState(null, '', location.pathname + location.search);
+    history.replaceState(null, '', location.pathname + location.search.replace(/[?&]signin=\d+/, '').replace(/^&/, '?'));
     try {
       const j = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
       if (j && typeof j.token === 'string' && j.token.length > 10) {
@@ -605,7 +606,10 @@ function initSettings() {
         setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم الدخول بحساب Google' : '✓ Signed in with Google'), 600);
       }
     } catch { setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✗ لم يكتمل الدخول. أعد المحاولة.' : '✗ The sign-in did not finish. Try again.'), 600); }
-  }
+  };
+  fromLink();
+  // the app may already be open on the same page: then only the part after # changes
+  window.addEventListener('hashchange', fromLink);   // the opening screen, if open, moves on by itself when signed in
   window.JundAcct = { mountGoogle, passkeySignIn, canPasskey: pkOk, on: () => space.on(), say: f => { sayTo = f; } };
   acctRender();
   if (space.on()) space.pull().then(n => { if (n) renderLibrary(); }).catch(() => {});

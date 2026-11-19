@@ -255,7 +255,7 @@ public class MainActivity extends Activity {
             String home = testHome != null ? testHome.toString() : ORIGIN;
             if (t != null && t.matches("[A-Za-z0-9_-]{20,20000}")) {
                 getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply();
-                web.loadUrl(home + "/#signin=" + t);
+                web.loadUrl(home + "/?signin=" + System.currentTimeMillis() + "#signin=" + t);   // a new address, so the page loads again
                 return;
             }
         }

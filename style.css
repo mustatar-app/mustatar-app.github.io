@@ -1305,3 +1305,7 @@ body.nav2 .topbar .bar-right { margin-inline-start: auto; }
 .pl-ph span { color: var(--ink-2); font-size: .9rem; }
 .pl-plan ul { margin: 8px 0; padding-inline-start: 18px; font-size: .86rem; color: var(--ink-2); }
 .pl-cta { display: inline-block; font-size: .82rem; text-decoration: none; }
+
+/* the assistant's words while they are still being written */
+.msg.ai.working .ws-live:empty { display: none; }
+.msg.ai.working .ws-live { white-space: pre-wrap; line-height: 1.6; margin-top: 6px; }

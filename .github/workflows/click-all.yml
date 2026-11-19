@@ -1,0 +1,25 @@
+name: Click every button
+# Clicks every button on every screen, in English and Arabic, with a fake AI server; fails if any click throws an error.
+on:
+  pull_request:
+    paths: ['*.js', '*.html', '*.css', 'tests/click_all.py', '.github/workflows/click-all.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: click-all-${{ github.ref }}
+jobs:
+  click:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Tools
+        run: pip install -q playwright==1.* && python -m playwright install --with-deps chromium > /dev/null
+      - name: Click every button
+        run: |
+          (python3 -m http.server 8765 > /dev/null 2>&1 &)
+          sleep 1
+          python3 tests/click_all.py http://localhost:8765/

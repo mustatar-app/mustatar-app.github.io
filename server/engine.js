@@ -10,7 +10,7 @@ let GROQ = 'https://api.groq.com/openai/v1';   // GROQ_BASE replaces it only in 
 export const MODELS = {
   cfText: '@cf/google/gemma-4-26b-a4b-it',
   cfHear: '@cf/openai/whisper-large-v3-turbo',
-  groqText: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+  groqText: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],   // each has its own 8,000 tokens a minute
   groqVision: 'qwen/qwen3.8-27b',
   groqHear: ['whisper-large-v3', 'whisper-large-v3-turbo'],
 };

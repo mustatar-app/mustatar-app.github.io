@@ -1441,3 +1441,37 @@ body[data-screen="studio"] .toast { top: calc(env(safe-area-inset-top, 0px) + 60
 .lib-ask-row { display: flex; gap: 8px; align-items: center; }
 .lib-ask-row .search { flex: 1; min-width: 0; }
 .lib-ask { flex: none; white-space: nowrap; min-height: 44px; }
+/* how much of the recording was heard */
+.heard { display: flex; align-items: center; gap: 10px; margin: -2px 0 10px; font-size: .82rem; color: var(--ink-2); }
+.heard-bar { flex: 0 0 72px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.heard-bar i { display: block; height: 100%; background: #22c55e; border-radius: 3px; }
+/* where is this from? */
+body.proof-on #pages-notes .col > *, body.proof-on #pages-notes li, body.proof-on #pages-notes td { cursor: pointer; }
+body.proof-on #frame-notes { outline: 2px dashed color-mix(in srgb, var(--accent, #3b82f6) 60%, transparent); outline-offset: 4px; border-radius: 6px; }
+.proof-picked { background: color-mix(in srgb, #facc15 35%, transparent) !important; border-radius: 4px; }
+#rt-proof[aria-pressed="true"] { background: var(--accent, #3b82f6); color: #fff; border-color: transparent; }
+.proof-sheet { margin: auto auto 0; width: min(560px, 100%); max-height: 78vh; border: 0; border-radius: 18px 18px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--surface); color: var(--ink); box-shadow: 0 -8px 30px rgba(0,0,0,.25); }
+.proof-sheet::backdrop { background: rgba(0,0,0,.35); }
+.pf-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.pf-line { margin: 0 0 10px; color: var(--ink-2); font-size: .88rem; border-inline-start: 3px solid #facc15; padding-inline-start: 8px; }
+.pf-src { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.pf-time { font-weight: 700; }
+.pf-lvl { font-size: .74rem; padding: 2px 8px; border-radius: 99px; background: var(--line); }
+.pf-lvl.strong { background: #dcfce7; color: #166534; } .pf-lvl.some { background: #fef9c3; color: #854d0e; }
+.proof-sheet blockquote { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--line) 45%, transparent); line-height: 1.75; font-size: .92rem; max-height: 34vh; overflow: auto; }
+.proof-sheet blockquote b { background: color-mix(in srgb, #facc15 45%, transparent); font-weight: 600; border-radius: 3px; }
+.pf-none { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: .9rem; }
+.pf-act { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pf-act a.primary { text-decoration: none; display: inline-flex; align-items: center; }
+.pf-gone { display: block; width: 100%; }
+#pf-audio audio { margin-top: 10px; }
+/* bring your work */
+.bring { width: min(560px, calc(100% - 20px)); max-height: 88vh; border: 0; border-radius: 18px; padding: 16px; background: var(--surface); color: var(--ink); }
+.bring::backdrop { background: rgba(0,0,0,.4); }
+.bring-h { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; }
+.bring-list { display: grid; gap: 6px; margin: 10px 0 14px; }
+.bring-src { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.bring-src summary { cursor: pointer; font-weight: 600; }
+.bring-src ol { margin: 8px 0 6px; padding-inline-start: 20px; font-size: .88rem; color: var(--ink-2); }
+.bring-act { display: flex; gap: 8px; flex-wrap: wrap; }
+.bring-st { margin-top: 10px; font-size: .9rem; }

@@ -45,6 +45,10 @@ jobs:
           command -v ffmpeg > /dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null)
           python3 tests/studio_test.py http://localhost:8765/
           python3 tests/batch_test.py http://localhost:8765/
+      - name: Proof for each line, how much was heard, and bringing work from Keep, Evernote, Notion and Word
+        run: |
+          pip install -q python-docx
+          python3 tests/proof_import_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)
         run: |
           (python3 -m http.server 8765 > /dev/null 2>&1 &) || true

@@ -171,6 +171,6 @@ async function summary() {
   const list = await rows().catch(() => []);
   return { left: list.filter(r => r.status !== 'done'), done: list.filter(r => r.status === 'done') };
 }
-window.JundRecs = { started, finished, keepText, open: () => { cleanup().finally(paint); }, summary, paint };
+window.JundRecs = { started, finished, keepText, audioFor: async id => { if (!id) return null; const it = await get(id).catch(() => null); return it?.audio || null; }, open: () => { cleanup().finally(paint); }, summary, paint };
 setTimeout(() => cleanup().catch(() => {}), 5000);
 })();

@@ -34,6 +34,7 @@ const IC = {
   study: '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5"/>',
   field: '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/>',
   words: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/><path d="M17 13l3 3-3 3"/>',
+  bring: '<path d="M12 4v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 const chev = `<span class="mx-chev" aria-hidden="true">${AR ? '‹' : '›'}</span>`;
@@ -121,6 +122,7 @@ function me() {
       ${row('left', L('Left to do', 'ما تبقّى'), '', '<span id="me-left"></span>')}
       ${row('bell', L('Reminders', 'التذكيرات'), '')}
       ${row('studio', L('Studio', 'الاستوديو'), L('Text on photos and videos', 'نص على الصور والفيديو'))}
+      ${row('bring', L('Bring your work', 'انقل أعمالك'), L('From Google Keep, Drive, Evernote, Notion…', 'من Google Keep وDrive وEvernote وNotion…'))}
     </div>
     <div class="mx-h">${L('Settings', 'الإعدادات')}</div>
     <div class="mx-group">
@@ -146,6 +148,7 @@ function me() {
   on('left', () => J.show('pending'));
   on('bell', () => J.show('inbox'));
   on('studio', () => J.show('studio'));
+  on('bring', () => window.JundImport?.open());
   const card = sel => () => { J.show('settings'); setTimeout(() => { const c = typeof sel === 'function' ? sel() : $(sel); if (!c) return; c.scrollIntoView({ block: 'start', behavior: 'smooth' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1600); }, 80); };
   const cardOf = sel => () => $(sel)?.closest('.card');
   const cardTitled = t => () => $$('#screen-settings .card').find(c => (c.querySelector('.card-h')?.textContent || '').trim().startsWith(t));

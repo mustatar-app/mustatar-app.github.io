@@ -97,3 +97,6 @@ only paid plans go past it — free users never cost money); Groq 8 hours of sou
 view (Settings → Send feedback → owner) shows today's use against each allowance and sets the brake.
 
 Me → Your field and My words (nav.js) shape the notes prompt (app.js `fieldAndWords`) and are sent to hearing as `words` (worker.js → engine.js `hear`, as the prompt). The result screen saves Word (.doc) as well as PDF. Recording shows a one-time consent note. Checks: tests/batch_test.py.
+
+`import.js`: Bring your work (Me → Bring your work, or empty Notes): reads Google Keep Takeout, Evernote .enex, Notion zips, Word, Markdown, text and web pages on the phone (its own small zip reader, zip64 too) and saves each as an ordinary note under its label, tag or folder; importing twice never doubles. Also the backup file (Settings → Save a backup) with every list the app keeps, never the sign-in. New notes reads Word (.docx) through it.
+`proof.js`: under a note made from a recording, how much was heard (minutes with speech, quiet minutes); "Where is this from?" on any note: tap a line to see the minute and the words it came from (▶ listen from there while the sound is kept), or plainly "not found" when it was added while writing. Runs on the phone with no AI. hearFile (app.js) keeps each piece's place in time as `timeline` and `heard` on the note. Checks: tests/proof_import_test.py.

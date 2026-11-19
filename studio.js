@@ -384,7 +384,9 @@ function loadMedia(f) {
   if ((f.type || '').startsWith('video/') || /\.(mp4|mov|webm|3gp)$/i.test(f.name)) {
     const v = document.createElement('video');
     v.src = url; v.playsInline = true; v.preload = 'auto'; v.muted = true; v.crossOrigin = 'anonymous';
-    v.onloadedmetadata = () => {
+    v.onloadedmetadata = async () => {
+      // some videos say "unknown length" at first: ask the player for the real end before setting the part to keep
+      if (!Number.isFinite(v.duration) || !v.duration) { v.currentTime = 1e7; await new Promise(r => { v.ondurationchange = r; setTimeout(r, 3000); }); v.currentTime = 0; }
       trim = { start: 0, end: v.duration };
       for (const id of ['st-t0', 'st-t1']) $('#' + id).max = String(v.duration);
       $('#st-t0').value = '0'; $('#st-t1').value = String(v.duration);
@@ -772,7 +774,11 @@ async function exportVideo(share) {
   v.pause(); rec.stop(); await finished;
   $('#st-progress').hidden = true; $('#st-export').disabled = false;
   const type = (mime || 'video/webm').split(';')[0];
-  await deliver(new Blob(chunks, { type }), `jund-studio-${stamp()}.${type === 'video/mp4' ? 'mp4' : 'webm'}`, share);
+  let out = new Blob(chunks, { type });
+  // the phone records in small pieces with no total length; some players and WhatsApp then show only the first 3 seconds.
+  // Rewritten as one ordinary MP4 with its full length (same picture and sound).
+  if (type === 'video/mp4' && window.JundMp4) { $('#st-progress-text').textContent = 'Finishing the video…'; out = await window.JundMp4.fix(out); }
+  await deliver(out, `jund-studio-${stamp()}.${type === 'video/mp4' ? 'mp4' : 'webm'}`, share);
   draw();
 }
 

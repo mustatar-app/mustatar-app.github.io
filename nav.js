@@ -36,6 +36,7 @@ const IC = {
   words: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/><path d="M17 13l3 3-3 3"/>',
   timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
   count: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/>',
+  note: '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8 12h8M8 16h5"/>',
   bring: '<path d="M12 4v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
@@ -51,6 +52,7 @@ function buildSheet() {
     <div class="px-grip"></div>
     <div class="mx-h">${L('Capture', 'التقاط')}</div>
     <div class="mx-group">
+      ${row('note', L('Note', 'ملاحظة'), L('A quick note, list or voice note', 'ملاحظة سريعة أو قائمة أو ملاحظة صوتية'))}
       ${row('rec', L('Record', 'تسجيل'), L('Meeting, lesson or a thought', 'اجتماع أو درس أو فكرة'))}
       ${row('up', L('Upload a file', 'رفع ملف'), L('Audio, video, PDF or text', 'صوت أو فيديو أو PDF أو نص'))}
       ${row('scan', L('Scan pages', 'تصوير صفحات'), L('Book pages or a whiteboard', 'صفحات كتاب أو سبّورة'))}
@@ -75,6 +77,7 @@ function buildSheet() {
   sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
   const go = (k, fn) => { $(`[data-k="${k}"]`, sheet).onclick = () => { closeSheet(); fn(); }; };
   go('rec', () => window.JundFeatures?.record());
+  go('note', () => window.JundKeep?.newNote());
   // the file pickers must open in the same tap, so these do not wait for the sheet to close
   $('[data-k="up"]', sheet).onclick = () => { J.show('new'); $('#file')?.click(); closeSheet(); };
   $('[data-k="scan"]', sheet).onclick = () => { $('#px-scan', sheet).click(); };

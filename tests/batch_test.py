@@ -41,6 +41,7 @@ async def main():
         ok(await pg.query_selector('#save-word') is not None, 'b9 result screen has the Word button')
         ok(await pg.is_visible('#lib-ask') or await pg.query_selector('#lib-ask') is not None, 'b10 Notes has Ask my notes')
         await pg.click('.tabbar [data-nav="library"]'); await pg.wait_for_timeout(300)
+        await pg.click('#lib-seg [data-seg="files"]'); await pg.wait_for_timeout(200)
         await pg.fill('#lib-search', 'fasting'); await pg.click('#lib-ask'); await pg.wait_for_timeout(500)
         v = await pg.evaluate("document.querySelector('#as-text')?.value||''")
         ok(v.startswith('From my notes: fasting'), f'b11 Ask my notes opens a fresh chat with the question ({v!r})')

@@ -85,15 +85,17 @@ const when = c => c.inside ? (c.len > 1 ? t(`day ${num(c.dayOf)}`, `اليوم $
   : c.days === 0 ? t('today', 'اليوم') : c.days === 1 ? t('tomorrow', 'غدًا')
   : AR() ? `بعد ${num(c.days)} ${c.days <= 10 ? 'أيام' : 'يومًا'}` : `${num(c.days)} days`;
 
-/* ---------- the row on Today ---------- */
+/* ---------- on Today: one quiet line with the nearest countdown (tap for all, and to add your own) ---------- */
 function paint() {
-  const home = $('#screen-assistant'); if (!home || !$('#hm-next')) return;
-  let row = $('#hm-count');
-  if (!row) { row = document.createElement('div'); row.id = 'hm-count'; row.className = 'cd-row'; ($('#hm-study') || $('.home-head', home))?.after(row); }
-  const items = list().filter(c => c.days <= 400).slice(0, 6);
-  row.innerHTML = items.map(c => `<button type="button" class="cd-chip${c.inside || c.days === 0 ? ' now' : ''}" data-cd="${esc(c.id)}"><span class="cd-ic" aria-hidden="true">${c.ic}</span><span class="cd-t"><b>${esc(when(c))}</b><small dir="auto">${esc(c.title)}</small></span></button>`).join('')
-    + `<button type="button" class="cd-chip cd-add" data-cd="+" aria-label="${t('Countdowns and timers', 'العدّ التنازلي والمؤقتات')}"><span class="cd-ic">＋</span><span class="cd-t"><b>${t('Countdown', 'عدّ تنازلي')}</b><small>${t('or a timer', 'أو مؤقت')}</small></span></button>`;
-  row.querySelectorAll('[data-cd]').forEach(b => b.onclick = () => open(b.dataset.cd === '+' ? 'add' : 'list'));
+  const card = $('#screen-assistant .hm-card'); if (!card) return;
+  $('#hm-count:not(.cd-line)')?.remove();
+  let line = $('#hm-count');
+  if (!line) { line = document.createElement('button'); line.type = 'button'; line.id = 'hm-count'; line.className = 'cd-line'; card.appendChild(line); line.onclick = () => open('list'); }
+  const c = list().find(x => x.days <= 400);
+  line.hidden = !c;
+  if (!c) return;
+  line.classList.toggle('now', !!(c.inside || c.days === 0));
+  line.innerHTML = `<span aria-hidden="true">${c.ic}</span><span dir="auto"><b>${esc(c.title)}</b> · ${esc(when(c))}</span><span class="cd-more" aria-hidden="true">›</span>`;
 }
 
 /* ---------- timers and the stopwatch ---------- */

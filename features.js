@@ -165,7 +165,8 @@ function streak(h) {
 function renderHabits() {
   const box = $('#hm-habits'); if (!box) return;
   const list = habits();
-  const wrap = $('#hm-habits-wrap'); if (wrap) wrap.hidden = !list.length && !store.get('habitAdd');
+  // Today stays quiet: your habits show only if you have some; the box for a new habit and the ideas only while adding one
+  const wrap = $('#hm-habits-wrap'); if (wrap) wrap.hidden = !list.length && !document.body.classList.contains('habit-adding');
   const open = new Set($$('details[open]', box).map(el => el.dataset.track));
   const days = Array.from({length:7}, (_, i) => { const date = new Date(); date.setDate(date.getDate() + i - 6); return date; });
   box.innerHTML = `<div class="habit-tracker"><h3>${habitText('Habit tracker','متابعة العادات')}</h3>` +
@@ -382,7 +383,7 @@ $('#focus-close').onclick = () => { $('#focus-dialog').close(); clearInterval(fo
 setInterval(() => { const r = store.get('focusRun'); if (r && Date.now() >= r.end) finishFocus(true); }, 15000);
 
 /* ---------- start ---------- */
-function addHabit() { store.set('habitAdd', true); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
+function addHabit() { document.body.classList.add('habit-adding'); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
 window.JundFeatures = { addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
 // prayer place setting
 function placeSetting() {

@@ -318,6 +318,7 @@ function reminderList() {
   }
   const run = store.get('focusRun');
   if (run && run.end > Date.now()) out.push({ at: run.end, title: 'Focus time done', body: `${run.min} min of ${run.subject}. Take a short break.`, tag: 'focus-' + run.start });
+  for (const x of window.JundCount?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });
@@ -332,6 +333,7 @@ function nativeReminders() {
   items.push(...(window.JundFeatures?.habitReminders?.() || []));
   const run = store.get('focusRun');
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
+  items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
   return items;
 }
 function nativeMessage(action, details = {}) { android.postMessage(JSON.stringify({ action, ...details })); }

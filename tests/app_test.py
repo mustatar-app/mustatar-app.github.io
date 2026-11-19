@@ -138,7 +138,7 @@ async def main():
         check(await page.evaluate("document.querySelectorAll('.tabbar button').length === 5 && getComputedStyle(document.querySelector('.tabbar')).display !== 'none'"), "the bottom bar shows Today, Notes, ＋, Calendar and Me")
         await page.evaluate("document.querySelector('#tab-plus').click()")
         await page.wait_for_timeout(400)
-        check(await page.evaluate("!!document.querySelector('.px.in') && document.querySelectorAll('.px .mx-row').length === 9 && !!document.querySelector('.px [data-k=studio]')"), "＋ opens the sheet: five ways to capture, Studio, three ways to plan")
+        check(await page.evaluate("!!document.querySelector('.px.in') && document.querySelectorAll('.px .mx-row').length === 11 && !!document.querySelector('.px [data-k=studio]') && !!document.querySelector('.px [data-k=timer]') && !!document.querySelector('.px [data-k=count]')"), "＋ opens the sheet: five ways to capture, Studio, five ways to plan (with Timer and Countdown)")
         await page.evaluate("JundNav.closeSheet()")
         await page.wait_for_timeout(300)
         await page.evaluate("document.querySelector('.tabbar [data-nav=\"me\"]').click()")

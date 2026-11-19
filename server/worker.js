@@ -467,7 +467,7 @@ export default {
     const direct = req.headers.get('x-mst-stream') === 'openai';
     if (req.method === 'OPTIONS') return new Response(null, { headers: h });
     if (req.method === 'GET' && path === '/') return json({
-      ok: true, app: 'mustatar', version: 15, key: AI.ready(env), push: !!env.PUSH,
+      ok: true, app: 'mustatar', version: 16, key: AI.ready(env), push: !!env.PUSH, share: !!env.SHARES,
       engine: { hear: [...(AI.groqKey(env) ? AI.MODELS.groqHear.map(m => 'groq/' + m) : []), ...(env.AI ? ['cloudflare/' + AI.MODELS.cfHear] : [])],
         write: [...(env.AI ? ['cloudflare/' + AI.MODELS.cfText] : []), ...(AI.groqKey(env) ? AI.MODELS.groqText.map(m => 'groq/' + m) : [])],
         youtube: !!env.GEMINI_API_KEY },

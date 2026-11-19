@@ -3170,16 +3170,23 @@ const APP_VERSION = '8.13';
 renderQueue(); setTimeout(processQueue, 2500);
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { r.update(); document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update().catch(() => {}); }); }).catch(() => {});
-  // when a new version takes over, reload once so every file is the new one
-  let reloaded = false;
+  // a new version updates by itself: at once if nothing is going on, otherwise as soon as the person leaves the app
+  // (switches app or locks the phone) with nothing going on; the bar stays for anyone who wants it now
+  let reloaded = false, waiting = false;
+  const working = () => !!(controller || queueBusy || window.JundRecorder?.active?.()
+    || document.querySelector('.vx:not([hidden]), .wl, .msg.ai.working, dialog[open], .px.in'));
+  const typing = () => !!(($('#as-text')?.value || '').trim() || document.activeElement?.matches?.('input:not([type=checkbox]), textarea, [contenteditable="true"]'));
+  const applyUpdate = () => { if (reloaded) return; reloaded = true; try { sessionStorage.setItem('jn_updated', '1'); sessionStorage.setItem('jn_draft', $('#as-text')?.value || ''); } catch {} location.reload(); };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded) return;
-    const busy = controller || window.JundRecorder?.active?.() || document.querySelector('.vx:not([hidden]), .wl');
-    if (!busy) { reloaded = true; location.reload(); return; }
-    // busy (recording, making notes, talking): offer the update instead of interrupting
+    if (reloaded || waiting) return;
+    if (!working() && !typing()) return applyUpdate();
+    waiting = true;
     const b = document.createElement('button'); b.type = 'button'; b.className = 'update-bar'; b.textContent = window.ZadLang === 'ar' ? 'نسخة جديدة جاهزة — اضغط للتحديث' : 'A new version is ready — tap to update';
-    b.onclick = () => { reloaded = true; location.reload(); }; document.body.appendChild(b);
+    b.onclick = applyUpdate; document.body.appendChild(b);
   });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && waiting && !working()) applyUpdate(); });
+  // after updating by itself: a short note, once
+  try { const d = sessionStorage.getItem('jn_draft'); sessionStorage.removeItem('jn_draft'); if (d) setTimeout(() => { const t = $('#as-text'); if (t && !t.value) t.value = d; }, 1200); if (sessionStorage.getItem('jn_updated')) { sessionStorage.removeItem('jn_updated'); setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم تحديث مستطر' : '✓ Mustatar is up to date'), 900); } } catch {}
 }
 $('#app-version').textContent = 'version ' + APP_VERSION;
 setTimeout(checkServer, 1200);

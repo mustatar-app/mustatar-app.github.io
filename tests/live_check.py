@@ -61,6 +61,8 @@ def ask(label, ctx, message, rounds=1):
                 if first is None and line.strip(): first = time.time() - t0
                 text += line.decode("utf-8", "ignore")
             out.append((first or 0, time.time() - t0, model))
+            words = "".join(re.findall(r'"content":"((?:[^"\\]|\\.)*)"', text))[:160]
+            print(f"    reply: {words!r}")
         except urllib.error.HTTPError as e:
             out.append((0, time.time() - t0, f"HTTP {e.code} {e.read()[:200]!r}"))
         except Exception as e:
@@ -96,6 +98,19 @@ async def app_speed():
             t = time.time(); await pg.click(f'.tabbar [data-nav="{name}"]'); await pg.wait_for_selector(f"#screen-{name}:not([hidden])"); print(f"  switch to {name}: {(time.time()-t)*1000:.0f} ms")
         say(not errs, "the live app opens without errors " + "; ".join(errs[:3]))
         say(ready < 6, f"the live app is usable quickly ({ready:.1f} s)")
+        # the opening screen a new phone sees: Google button, passkey button, continue without an account
+        c2 = await b.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
+        pg2 = await c2.new_page(); logs = []
+        pg2.on("console", lambda m: logs.append(m.text))
+        await pg2.goto(APP); await pg2.wait_for_selector("#op-skip", timeout=20000); await pg2.wait_for_timeout(6000)
+        g = await pg2.evaluate("(()=>{const b=document.querySelector('#op-google'); return {shown: !!b && !b.hidden, frame: !!b?.querySelector('iframe'), pk: !!document.querySelector('#op-pk')}})()")
+        bad = [l for l in logs if 'origin' in l.lower() and 'not allowed' in l.lower() or 'GSI_LOGGER' in l]
+        print("  opening screen:", g, "google messages:", bad[:3])
+        say(g["shown"] and g["frame"], "the opening screen shows the Google button")
+        say(not bad, "Google accepts this app's address " + "; ".join(bad[:2]))
+        say(g["pk"], "the opening screen shows the passkey button")
+        await pg2.click("#op-skip"); await pg2.wait_for_timeout(500)
+        say(await pg2.evaluate("!!document.querySelector('.wl .wl-dots')"), "'Continue without an account' goes on to the first questions")
         await b.close()
 try:
     asyncio.run(app_speed())

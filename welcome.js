@@ -17,14 +17,17 @@ const HARD_AR = { forget: 'نسيان المهام', meetings: 'كثرة الا�
 const TOOLS_AR = { habits: 'متابعة العادات', prayer: 'أوقات الصلاة', study: 'أدوات المذاكرة (بطاقات، اختبارات، امتحانات)', meetings: 'التسجيلات والاجتماعات', studio: 'الاستوديو (نص على الصور والفيديو)' };
 let box;
 
+let openingOnly = false;
 function start(force) {
-  if (!force && store.get('welcomed')) return;
+  // people who used the app before this screen existed see the opening screen once (to sign in), not the questions again
+  openingOnly = !force && !!store.get('welcomed');
+  if (openingOnly && (store.get('mstToken', '') || store.get('opened'))) return;
   box = document.createElement('div');
   box.className = 'wl'; box.setAttribute('data-noi18n', ''); box.dir = AR ? 'rtl' : 'ltr';
   document.body.appendChild(box); document.body.classList.add('vx-open');
   // the opening screen first (sign in, or continue without an account), unless already signed in
   const st = store.get('welcomeStep', 0);
-  step(st <= 1 ? (store.get('mstToken', '') || store.get('opened') ? 2 : 0) : st);
+  step(force || openingOnly ? 0 : st <= 1 ? (store.get('mstToken', '') || store.get('opened') ? 2 : 0) : st);
 }
 // the opening screen: what Mustatar does, and how to come in
 function opening() {
@@ -46,7 +49,10 @@ function opening() {
   A?.say(say);
   A?.mountGoogle(box.querySelector('#op-google')).catch(() => {});
   const pk = box.querySelector('#op-pk'); if (pk) pk.onclick = () => A.passkeySignIn();
-  const next = () => { A?.say(null); store.set('opened', true); window.removeEventListener('mustatar-signed-in', onIn); step(2); };
+  const next = () => {
+    A?.say(null); store.set('opened', true); window.removeEventListener('mustatar-signed-in', onIn);
+    if (openingOnly) { box?.remove(); document.body.classList.remove('vx-open'); } else step(2);
+  };
   const onIn = () => setTimeout(next, 600);
   window.addEventListener('mustatar-signed-in', onIn);
   box.querySelector('#op-skip').onclick = next;

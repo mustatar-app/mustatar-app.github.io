@@ -383,7 +383,7 @@ setInterval(() => { const r = store.get('focusRun'); if (r && Date.now() >= r.en
 
 /* ---------- start ---------- */
 function addHabit() { store.set('habitAdd', true); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
-window.JundFeatures = { addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, timesFor, nextPrayer, prayerLine };
+window.JundFeatures = { addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
 // prayer place setting
 function placeSetting() {
   const sel = $('#prayer-place'); if (!sel) return;

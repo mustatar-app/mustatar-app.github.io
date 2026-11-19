@@ -1475,3 +1475,48 @@ body.proof-on #frame-notes { outline: 2px dashed color-mix(in srgb, var(--accent
 .bring-src ol { margin: 8px 0 6px; padding-inline-start: 20px; font-size: .88rem; color: var(--ink-2); }
 .bring-act { display: flex; gap: 8px; flex-wrap: wrap; }
 .bring-st { margin-top: 10px; font-size: .9rem; }
+/* countdowns on Today */
+.cd-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 4px 0 12px; padding-bottom: 2px; }
+.cd-row::-webkit-scrollbar { display: none; }
+.cd-chip { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; text-align: start; max-width: 190px; }
+.cd-chip.now { border-color: #22c55e; background: color-mix(in srgb, #22c55e 12%, var(--surface)); }
+.cd-chip .cd-ic { font-size: 1.15rem; }
+.cd-t { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.cd-chip .cd-t b { font-size: .9rem; white-space: nowrap; }
+.cd-chip .cd-t small { color: var(--ink-2); font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cd-add { border-style: dashed; color: var(--ink-2); }
+.cd-add .cd-ic { font-weight: 700; }
+/* the sheet */
+.cd-sheet { margin: auto auto 0; width: min(560px, 100%); max-height: 88vh; border: 0; border-radius: 18px 18px 0 0; padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--surface); color: var(--ink); overflow: auto; }
+.cd-sheet::backdrop { background: rgba(0,0,0,.4); }
+.cd-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cd-tabs { display: flex; gap: 4px; background: color-mix(in srgb, var(--line) 50%, transparent); padding: 3px; border-radius: 12px; }
+.cd-tab { border: 0; background: transparent; color: var(--ink-2); padding: 7px 12px; border-radius: 9px; font: inherit; font-size: .88rem; }
+.cd-tab[aria-selected="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.cd-list { display: grid; gap: 6px; margin-bottom: 12px; }
+.cd-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 12px; }
+.cd-item .cd-ic { font-size: 1.2rem; }
+.cd-item .cd-t { flex: 1; }
+.cd-item small { color: var(--ink-2); font-size: .76rem; }
+.cd-n { font-weight: 700; font-size: .9rem; white-space: nowrap; }
+.cd-n.now { color: #16a34a; }
+.cd-add-f { display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: color-mix(in srgb, var(--line) 35%, transparent); margin-bottom: 10px; }
+.cd-add-f input:not([type="checkbox"]) { width: 100%; min-height: 42px; }
+.cd-two { display: flex; gap: 8px; align-items: center; }
+.cd-two > * { flex: 1; min-width: 0; }
+.cd-chk { display: flex; align-items: center; gap: 6px; font-size: .88rem; }
+.cd-opts { display: grid; gap: 8px; }
+.tm-pre { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.tm-row { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 14px; margin-bottom: 8px; }
+.tm-ring { width: 44px; height: 44px; flex: none; }
+.tm-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.tm-ring circle { fill: none; stroke-width: 3.5; }
+.tm-bg { stroke: var(--line); } .tm-fg { stroke: #3b82f6; stroke-linecap: round; transition: stroke-dasharray .4s linear; }
+.tm-t { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.tm-clock { font-size: 1.5rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tm-t small { color: var(--ink-2); }
+.sw-face { text-align: center; font-size: 3rem; font-weight: 300; font-variant-numeric: tabular-nums; margin: 14px 0; }
+.sw-act { display: flex; gap: 10px; justify-content: center; }
+.sw-act button { min-width: 110px; }
+.sw-laps { margin: 12px 0 0; padding-inline-start: 0; list-style: none; text-align: center; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tm-pill { font-variant-numeric: tabular-nums; background: color-mix(in srgb, #3b82f6 18%, var(--surface)); color: #3b82f6; border-color: #3b82f6; }

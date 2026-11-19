@@ -185,6 +185,7 @@ async function renderHome() {
   $$('.nx', $('#hm-next')).forEach(b => b.onclick = () => window.JundCal.open(b.dataset.ev, b.dataset.d));
   const ls = (await J.allLessons()).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   $('#hm-recent-wrap').hidden = true;
+  window.JundCount?.paint();
   $('#hm-recent').innerHTML = ls.map(l => `<button type="button" class="rc" data-open="${l.id}" dir="auto">${l.draft ? '<span class="tag">Draft</span> ' : ''}<b>${esc(l.notes?.title || l.unit)}</b><small>${esc(l.subject?.name || '')} · ${new Date(l.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></button>`).join('');
   $$('[data-open]', $('#hm-recent')).forEach(b => b.onclick = async () => { const l = (await J.allLessons()).find(x => x.id === b.dataset.open); if (l) J.openLesson(l); });
 }
@@ -292,7 +293,7 @@ async function context(q) {
   for (const { l } of scored) { const tx = lessonText(l).slice(0, budget); budget -= tx.length; notes += tx + '\n\n'; if (budget < 800) break; }
   const subs = (J.me().use === 'work' ? [] : (window.SUBJECTS || [])).map(s => `${s.name}${s.book ? ' (' + s.book + ')' : ''}${s.place ? ' — ' + s.place : ''}`).join('; ');
   const pt = window.JundFeatures?.timesFor(t);
-  return `${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\nToday: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
+  return `${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\n${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
 Week starts on ${DAYS[Number(store.get('weekStart', 0))]}.
 
 CALENDAR (past 2 weeks to next 2 months, plus weekly items):
@@ -314,7 +315,9 @@ You can act on his calendar and habit tracker. Reply with JSON only, in this sha
    {"do": "move", "id": "calendar id", "date": "YYYY-MM-DD", "time": "HH:MM or empty"},
    {"do": "delete", "id": "calendar id"},
    {"do": "youtube", "url": "a YouTube video or playlist link he gave, to transcribe and make notes from"},
-   {"do": "habit", "title": "a daily habit the user explicitly asked to track", "time": "HH:MM if a daily reminder was requested, or empty"}
+   {"do": "habit", "title": "a daily habit the user explicitly asked to track", "time": "HH:MM if a daily reminder was requested, or empty"},
+   {"do": "timer", "minutes": number, "label": "short name or empty"},
+   {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false}
  ],
  "open": "a lesson id to offer to open, or empty"}
 Rules:
@@ -328,6 +331,7 @@ Rules:
 - Only use ids that appear in the calendar or lessons below. Never invent calendar items or lesson content.
 - If the user asks about their saved lesson or work notes, use those notes and cite the lesson title and section. Put that lesson's id in "open". If the supplied notes don't answer it, say so. For general questions, answer normally. In a quiz, ask one question at a time and wait for the user's answer before grading.
 - When he gives a YouTube link and wants it transcribed or made into notes, use the "youtube" action and say you started it.
+- "Set a timer for 10 minutes" / "مؤقت ربع ساعة" → a "timer" action. "Count down to my trip on 5 March" / "عدّ تنازلي لـ…" → a "countdown" action (yearly for birthdays and anniversaries). For "how many days until Ramadan/Eid/…" answer from COUNTDOWNS.
 - Delete only when he clearly asks. If something is unclear (for example no day was given), ask one short question instead of guessing, with actions empty.
 - For quick questions, keep "reply" short. For "what do I have", list the items with day and time. Use the reply for any draft, translation, explanation, or other requested text.`;
 
@@ -559,6 +563,10 @@ function apply(actions) {
     } else if (e && a.do === 'move' && /^\d{4}-\d\d-\d\d$/.test(a.date || '')) {
       if (!confirm(`Move "${e.title}" to ${nice(a.date, a.time)}?`)) continue;   // changes to existing items are always asked first
       e.date = a.date; if (a.time !== undefined) e.time = a.time; e.updated = Date.now(); done.push(`Moved: ${e.title} → ${nice(e.date, e.time)}`);
+    } else if (a.do === 'timer' && +a.minutes > 0 && window.JundCount) {
+      window.JundCount.startTimer(+a.minutes, a.label || ''); done.push((AR_() ? 'بدأ مؤقت: ' : 'Timer started: ') + (+a.minutes) + (AR_() ? ' د' : ' min') + (a.label ? ' — ' + a.label : ''));
+    } else if (a.do === 'countdown' && a.title && /^\d{4}-\d\d-\d\d$/.test(a.date || '') && window.JundCount) {
+      if (window.JundCount.addCountdown(a.title, a.date, !!a.yearly)) done.push((AR_() ? 'عدّ تنازلي: ' : 'Countdown: ') + a.title + ' — ' + nice(a.date));
     } else if (a.do === 'youtube' && /youtu\.?be/.test(a.url || '')) {
       setTimeout(() => J.startYouTube(a.url), 600); done.push('Started: transcribing the YouTube link');
     } else if (e && a.do === 'delete') {

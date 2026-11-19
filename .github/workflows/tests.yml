@@ -49,6 +49,7 @@ jobs:
         run: |
           pip install -q python-docx
           python3 tests/proof_import_test.py http://localhost:8765/
+          python3 tests/countdown_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)
         run: |
           (python3 -m http.server 8765 > /dev/null 2>&1 &) || true

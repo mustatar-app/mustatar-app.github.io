@@ -34,6 +34,8 @@ const IC = {
   study: '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5"/>',
   field: '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/>',
   words: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/><path d="M17 13l3 3-3 3"/>',
+  timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
+  count: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/>',
   bring: '<path d="M12 4v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
@@ -64,6 +66,8 @@ function buildSheet() {
       ${row('task', L('Task or reminder', 'مهمة أو تذكير'), '')}
       ${row('habit', L('Habit', 'عادة'), '')}
       ${row('focus', L('Focus session', 'جلسة تركيز'), '')}
+      ${row('timer', L('Timer or stopwatch', 'مؤقت أو ساعة إيقاف'), '')}
+      ${row('count', L('Countdown', 'عدّ تنازلي'), L('Ramadan, Eid, exams, your own dates', 'رمضان والعيد والاختبارات ومناسباتك'))}
     </div>
     <input type="file" id="px-scan" accept="image/*" capture="environment" multiple hidden>
   </div>`;
@@ -81,6 +85,8 @@ function buildSheet() {
   go('task', () => window.JundCal?.open());
   go('habit', () => window.JundFeatures?.addHabit());
   go('focus', () => window.JundFeatures?.openFocus());
+  go('timer', () => window.JundCount?.open('timer'));
+  go('count', () => window.JundCount?.open('add'));
   // swipe the sheet down to close it
   let y0 = null;
   $('.px-panel', sheet).addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
@@ -113,6 +119,7 @@ function me() {
       ${row('habit', L('Habits', 'العادات'), '', habits || '')}
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}
+      ${row('count', L('Countdowns and timers', 'العدّ التنازلي والمؤقتات'), '', (window.JundCount?.timers?.().length || '') || '')}
       ${tools.study ? row('study', L('Study tools', 'أدوات المذاكرة'), L('Flashcards, quizzes, exam plan', 'بطاقات واختبارات وخطة امتحان')) : ''}
     </div>
     <div class="mx-h">${L('Workspace', 'مساحة العمل')}</div>
@@ -142,6 +149,7 @@ function me() {
   on('habit', () => window.JundFeatures?.addHabit());
   on('review', () => { J.show('calendar'); setTimeout(() => $('#week-review')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80); });
   on('focus', () => window.JundFeatures?.openFocus());
+  on('count', () => window.JundCount?.open(window.JundCount.timers().length ? 'timer' : 'list'));
   on('study', () => window.JundStudy?.planner?.());
   on('chat', () => window.JundDrawer?.open());
   on('mic', () => J.show('recordings'));

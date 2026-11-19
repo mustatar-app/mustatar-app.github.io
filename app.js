@@ -942,7 +942,7 @@ async function hearFile(item, signal, onStatus) {
   const cut = sec => window.JundMedia.prepare(item.file, f => onStatus('Taking out the sound… ' + ar(Math.round(f * 100)) + '%'), signal, { pieceSec: sec });
   let prep = await cut(60), recut = false;
   item.audio = prep.audio || null;
-  let out = [];
+  let out = [], timeline = [];
   let lastSent = 0;
   for (let i = 0; i < prep.pieces.length; i++) {
     const pre = prep.pieces.length > 1 ? `Transcribing part ${ar(i + 1)} of ${ar(prep.pieces.length)}` : 'Transcribing';
@@ -974,11 +974,28 @@ async function hearFile(item, signal, onStatus) {
     }
     // English is heard best in 2-minute pieces, Arabic in 1-minute ones: if the first minute is English, cut again
     if (i === 0 && !recut && prep.pieces.length > 2 && langOf(r.text) === 'en') {
-      recut = true; prep = await cut(120); out = []; i = -1; continue;
+      recut = true; prep = await cut(120); out = []; timeline = []; i = -1; continue;
     }
     out.push(cleanHeard(r.text));
+    // where each piece sits in the recording: the proof for each line, and how much was heard
+    const pc = prep.pieces[i], step = prep.pieces.length > 1 ? (recut ? 120 : 60) : 0;
+    timeline.push({ s: Math.round(pc.start ?? i * step), e: Math.round(pc.end ?? (i + 1) * step), t: out[out.length - 1] });
   }
+  const total = prep.duration || timeline.at(-1)?.e || await secsOf(item.file);
+  if (timeline.length && total) { timeline.at(-1).e = Math.max(timeline.at(-1).e, Math.round(total)); timeline[0].e ||= Math.round(total); }
+  item.timeline = timeline;
+  item.heard = { total: Math.round(total || 0), speech: timeline.reduce((n, x) => n + (x.t ? x.e - x.s : 0), 0), pieces: timeline.length };
   return out.filter(Boolean).join('\n\n');
+}
+// the length of an audio or video file, in seconds (0 if the phone cannot tell)
+function secsOf(file) {
+  return new Promise(res => {
+    if (!file) return res(0);
+    const m = document.createElement(/^video\//.test(file.type || '') ? 'video' : 'audio'), url = URL.createObjectURL(file);
+    const done = v => { clearTimeout(tm); URL.revokeObjectURL(url); res(Number.isFinite(v) ? v : 0); };
+    const tm = setTimeout(() => done(0), 4000);
+    m.preload = 'metadata'; m.onloadedmetadata = () => done(m.duration); m.onerror = () => done(0); m.src = url;
+  });
 }
 // big phone photos are made smaller first (faster upload, same text)
 async function shrinkImage(f) {
@@ -1009,7 +1026,7 @@ async function hearYouTube(item, signal, onStatus) {
     }
     const ended = /\[\[END\]\]/.test(r.text);
     const t = cleanHeard(r.text);
-    if (t) out.push(t);
+    if (t) { out.push(t); (item.timeline ||= []).push({ s: start, e: end, t, yt: 1 }); }
     if (ended || (!t && w > 0)) break;
   }
   return out.join('\n\n');
@@ -1539,12 +1556,14 @@ async function hearAll() {
           : await hearFile(p, hearCtl.signal, st);
         if (!text) { p.bad = true; p.status = '✗ No speech was heard in this file.'; }
         else {
-          p.text = text; p.status = '✓ Transcribed';
+          const AR = window.ZadLang === 'ar';
+          const cov = p.heard?.total >= 90 ? ` · ${AR ? 'كلام في' : 'speech in'} ${ar(Math.round(p.heard.speech / 60))}/${ar(Math.max(1, Math.round(p.heard.total / 60)))} ${AR ? 'د' : 'min'}` : '';
+          p.text = text; p.status = cov ? (AR ? '✓ فُرّغ' : '✓ Transcribed') + cov : '✓ Transcribed';
           if (store.get('autoCorrect', true) && !offline && navigator.onLine && text.split(/\s+/).length > 30) {
             try {
               p.raw = text;
               const fixed = await cleanText(text, hearCtl.signal, (i, n) => st(n > 1 ? `Correcting the text… part ${i} of ${n}` : 'Correcting the text…'));
-              if (fixed) { p.text = fixed; p.status = '✓ Transcribed and corrected'; }
+              if (fixed) { p.text = fixed; p.status = cov ? (AR ? '✓ فُرّغ وصُحّح' : '✓ Transcribed and corrected') + cov : '✓ Transcribed and corrected'; }
             } catch (e) { if (hearCtl.signal.aborted) throw e; p.status = '✓ Transcribed (correction skipped)'; }
           }
         }
@@ -1727,7 +1746,16 @@ async function addFiles(files) {
     const unit = f.name.replace(/\.[^.]+$/, '');
     if (window.JundMedia?.isMedia(f)) { sawMedia = true; pending.push({ media: true, file: f, unit, text: '', status: '⏳ Waiting' }); continue; }
     const isPdf = isPdfFile(f);
-    if (!isPdf) { pending.push({ text: (await f.text()).trim(), unit }); continue; }
+    if (!isPdf) {
+      // Word and web pages are read as text (a .docx is a zip, not text)
+      let text = '';
+      try {
+        text = /\.docx$/i.test(f.name) && window.JundImport ? await window.JundImport.docxText(f)
+          : /\.html?$/i.test(f.name) && window.JundImport ? window.JundImport.htmlText(await f.text())
+          : (await f.text()).trim();
+      } catch { pending.push({ text: '', unit, bad: true, status: '✗ This file could not be opened. It may be password-protected or damaged.' }); continue; }
+      pending.push({ text, unit }); continue;
+    }
     sawPdf = true;
     try {
       const pages = await readPdf(f);
@@ -1827,7 +1855,7 @@ function fieldAndWords(en) {
 function myWords() { return String(store.get('myWords', '') || '').split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 60).join(', '); }
 
 const notesCheckpoints = new WeakMap();
-async function makeOne({ text, unit, sub, kind, lang, id, complete = false, sourceFile, sourceScope = '' }, onStatus) {
+async function makeOne({ text, unit, sub, kind, lang, id, complete = false, sourceFile, sourceScope = '', timeline, heard, txid, yt }, onStatus) {
   lang ||= langOf(text);
   const en = lang === 'en';
   const desc = String(store.get('kindOther', '') || '').trim();
@@ -2113,6 +2141,7 @@ ${src.name}>>>`;
     subject: { id: sub.id, name: sub.name, place: sub.place || '', book: sub.book || '' },
     unit, kind, lang, engine: engineKind(), date: new Date().toISOString(), transcript: text, notes,
     chat: [{ who: 'ai', text: note }],
+    ...(timeline?.length ? { timeline, heard, txid, yt } : {}),
   };
   await saveLesson(lesson);
   if (complete && sourceFile) {
@@ -2443,7 +2472,7 @@ function flattenNotes(n) {
   const items = [];
   if (n.opening_dua) items.push({ t: 'dua', text: n.opening_dua });
   for (const s of n.sections || []) {
-    items.push({ t: 'heading', text: s.heading });
+    if (s.heading) items.push({ t: 'heading', text: s.heading });
     for (const b of s.blocks || []) items.push(b);
   }
   if (n.mnemonics?.length) {
@@ -2654,6 +2683,7 @@ async function openLesson(lesson) {
   window.JundFeatures?.onLesson(lesson);
   window.JundStudy?.onLesson(lesson);
   window.JundVoice?.onLesson(lesson);
+  window.JundProof?.onLesson(lesson);
 }
 
 function renderReport(r) {
@@ -2841,7 +2871,11 @@ async function renderLibrary() {
   const all = (await allLessons()).filter(l => !q || norm([l.subject.name, l.unit, l.notes?.title, l.notes?.subtitle].join(' ')).toLowerCase().includes(q));
   $('#book-year').hidden = !all.length;
   $('#book-mawaiz').hidden = !all.some(l => l.notes?.mawaiz?.length);
-  if (!all.length) { list.innerHTML = '<div class="empty"><b>No lessons yet.</b><br>The first notes you make will appear here.</div>'; return; }
+  if (!all.length) {
+    list.innerHTML = q ? '<div class="empty"><b>No lessons yet.</b></div>' : `<div class="empty"><b>No lessons yet.</b><br>The first notes you make will appear here.<br><button type="button" class="ghost small" id="lib-bring" style="margin-top:10px">${window.ZadLang === 'ar' ? 'انقل ملاحظاتك من Keep أو Evernote أو Notion' : 'Bring your notes from Keep, Evernote or Notion'}</button></div>`;
+    const b = $('#lib-bring'); if (b) b.onclick = () => window.JundImport?.open();
+    return;
+  }
   all.sort((a, b) => b.date.localeCompare(a.date));
   const groups = {};
   for (const l of all) (groups[l.subject.id] ??= []).push(l);
@@ -2975,9 +3009,7 @@ $('#book-mawaiz').onclick = async () => {
 /* ---------- backup to Google Drive (or anywhere) ---------- */
 $('#backup').onclick = async () => {
   const st = $('#backup-status');
-  const lessons = await allLessons();
-  const data = { app: 'jund-notes', version: 2, saved: new Date().toISOString(), families: store.get('families', {}), lessons,
-    events: store.get('events', []), studio: store.get('studioSaved', []) };
+  const data = await window.JundImport.backupData(), lessons = data.lessons;   // notes, calendar, tasks, habits, studio and settings
   const name = `Mustatar backup ${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
   try {
@@ -2995,12 +3027,8 @@ $('#restore').onchange = async e => {
   const st = $('#backup-status');
   try {
     const data = JSON.parse(await f.text());
-    if (data.app !== 'jund-notes' || !Array.isArray(data.lessons)) throw new Error();
-    for (const l of data.lessons) await saveLesson(l);
-    if (data.families) store.set('families', { ...data.families, ...store.get('families', {}) });
-    if (Array.isArray(data.events)) window.JundCal?.merge(data.events);
-    if (Array.isArray(data.studio)) { const have = store.get('studioSaved', []); store.set('studioSaved', [...have, ...data.studio.filter(x => !have.some(h => h.id === x.id))]); }
-    st.textContent = `✓ Restored ${ar(data.lessons.length)} lessons.`;
+    const n = await window.JundImport.restore(data);
+    st.textContent = `✓ Restored ${ar(n)} lessons.`;
   } catch { st.textContent = '✗ This is not a backup file from the app.'; }
   e.target.value = '';
 };

@@ -200,6 +200,13 @@ public class MainActivity extends Activity {
                             // "Continue with Google" inside the app: Android's own Google sheet gives a signed ID token,
                             // which the page sends to the server (the same check as on the website)
                             case "googleSignIn": googleSignIn(command.optString("job"), command.optString("clientId"), reply); return;
+                            // "Continue with Google" in the phone's browser (works without the Android sign-in set-up in Google Cloud);
+                            // the browser comes back with app.mustatar://signin
+                            case "openBrowser": {
+                                boolean ok = openInBrowser(Uri.parse(command.optString("url")));
+                                reply.postMessage("{\"file\":" + JSONObject.quote(command.optString("job")) + ",\"result\":{\"ok\":" + ok + "}}");
+                                return;
+                            }
                             case "print":
                                 getSystemService(PrintManager.class).print("Mustatar",
                                     web.createPrintDocumentAdapter("Mustatar"), null);
@@ -225,8 +232,33 @@ public class MainActivity extends Activity {
         receive(intent, false);
     }
 
+    // opens a page in the phone's browser, never in this app (this app also opens the app's own address)
+    private boolean openInBrowser(Uri url) {
+        if (!"https".equals(url.getScheme())) return false;
+        android.content.pm.PackageManager pm = getPackageManager();
+        String pkg = null;
+        android.content.pm.ResolveInfo def = pm.resolveActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com")), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+        if (def != null && def.activityInfo != null && !"android".equals(def.activityInfo.packageName) && !getPackageName().equals(def.activityInfo.packageName)) pkg = def.activityInfo.packageName;
+        if (pkg == null) for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com")).addCategory(Intent.CATEGORY_BROWSABLE), 0)) {
+            if (!getPackageName().equals(r.activityInfo.packageName)) { pkg = r.activityInfo.packageName; if ("com.android.chrome".equals(pkg)) break; }
+        }
+        if (pkg == null) return false;
+        try { startActivity(new Intent(Intent.ACTION_VIEW, url).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true; }
+        catch (ActivityNotFoundException e) { return false; }
+    }
+
     private void receive(Intent intent, boolean first) {
         Uri data = intent.getData();
+        // back from Google in the browser: open the app with the sign-in, which the page keeps (and then removes from the address)
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) && data != null && "app.mustatar".equals(data.getScheme()) && "signin".equals(data.getHost())) {
+            String t = data.getQueryParameter("t");
+            String home = testHome != null ? testHome.toString() : ORIGIN;
+            if (t != null && t.matches("[A-Za-z0-9_-]{20,20000}")) {
+                getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply();
+                web.loadUrl(home + "/?signin=" + System.currentTimeMillis() + "#signin=" + t);   // a new address, so the page loads again
+                return;
+            }
+        }
         if (first && testHome != null) { getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply(); web.loadUrl(testHome.toString() + "/"); return; }
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);

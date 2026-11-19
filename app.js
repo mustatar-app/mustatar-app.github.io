@@ -551,10 +551,23 @@ function initSettings() {
         if (!cfg.googleClientId) return false;
         const b = box;
         b.innerHTML = '<button type="button" class="ghost g-native"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg> ' + (window.ZadLang === 'ar' ? 'المتابعة باستخدام Google' : 'Continue with Google') + '</button>';
+        const AR = window.ZadLang === 'ar';
+        // the phone's browser: Google's own sign-in page, which always works; it comes back to the app by itself
+        const viaBrowser = async () => {
+          const r = window.JundNative.openBrowser ? await window.JundNative.openBrowser(location.origin + '/google.html?from=app&lang=' + (AR ? 'ar' : 'en')) : { ok: false };
+          acctSay(r.ok ? (AR ? 'أكمل الدخول بـ Google في المتصفح، ثم تعود إلى مستطر تلقائيًا.' : 'Finish with Google in the browser; you will come back to Mustatar by yourself.')
+            : (AR ? '✗ لم يُفتح المتصفح. حدّث تطبيق مستطر ثم أعد المحاولة.' : '✗ The browser did not open. Update the Mustatar app, then try again.'));
+        };
         b.querySelector('button').onclick = async () => {
-          acctSay('Signing in with Google…');
-          const r = await window.JundNative.googleSignIn(cfg.googleClientId);
-          if (!r.ok) { acctSay(r.error === 'cancelled' ? '' : /NoCredential/i.test(r.error || '') ? '✗ There is no Google account on this phone. Add one in the phone’s Settings → Accounts, then try again.' : /DEVELOPER|10:|28444|Configuration/i.test(r.error || '') ? '✗ Google sign-in in the app is not switched on yet. Use your fingerprint for now.' : '✗ ' + (r.error || 'Google sign-in failed')); return; }
+          acctSay(AR ? 'جارٍ الدخول بـ Google…' : 'Signing in with Google…');
+          // first the phone's own Google sheet (quickest); if it is not available or not set up, the browser
+          let r;
+          try { r = await window.JundNative.googleSignIn(cfg.googleClientId); } catch (e) { r = { ok: false, error: String(e?.message || e) }; }
+          if (!r.ok) {
+            if (r.error === 'cancelled') { acctSay(''); return; }
+            window.JundReport?.event('google:native-failed');
+            return viaBrowser();
+          }
           try { const j = await acctPost('/auth/google', { credential: r.token }); await signedIn(j, j.created); }
           catch (e) { acctSay('✗ ' + e.message); }
         };
@@ -580,6 +593,23 @@ function initSettings() {
   }
   mountGoogle($('#acct-google'));
   window.addEventListener('mustatar-account', acctRender);
+  // back from "Continue with Google" in the browser (google.html): the sign-in arrives in the address, which is cleaned at once
+  const fromLink = () => {
+    if (!location.hash.startsWith('#signin=')) return;
+    const raw = location.hash.slice(8);
+    history.replaceState(null, '', location.pathname + location.search.replace(/[?&]signin=\d+/, '').replace(/^&/, '?'));
+    try {
+      const j = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
+      if (j && typeof j.token === 'string' && j.token.length > 10) {
+        store.set('mstToken', j.token); store.set('mstUser', j.user || {}); store.set('opened', true); store.set('signinLinkAt', Date.now());
+        signedIn(j, !!j.created);
+        setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم الدخول بحساب Google' : '✓ Signed in with Google'), 600);
+      }
+    } catch { setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✗ لم يكتمل الدخول. أعد المحاولة.' : '✗ The sign-in did not finish. Try again.'), 600); }
+  };
+  fromLink();
+  // the app may already be open on the same page: then only the part after # changes
+  window.addEventListener('hashchange', fromLink);   // the opening screen, if open, moves on by itself when signed in
   window.JundAcct = { mountGoogle, passkeySignIn, canPasskey: pkOk, on: () => space.on(), say: f => { sayTo = f; } };
   acctRender();
   if (space.on()) space.pull().then(n => { if (n) renderLibrary(); }).catch(() => {});

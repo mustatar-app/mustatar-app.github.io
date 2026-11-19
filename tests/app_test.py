@@ -33,7 +33,10 @@ async def fake_server(route):
         return await route.fulfill(status=204, headers=cors)
     if req.method == "GET":
         return await route.fulfill(status=200, headers={**cors, "content-type": "application/json"},
-                                   body=json.dumps({"ok": True, "app": "mustatar", "key": True, "push": True}))
+                                   body=json.dumps({"ok": True, "app": "mustatar", "key": True, "push": True, "googleClientId": "test-client.apps.googleusercontent.com"}))
+    if req.url.endswith("/auth/google"):
+        return await route.fulfill(status=200, headers={**cors, "content-type": "application/json"},
+                                   body=json.dumps({"token": "test-token-1234567890", "user": {"name": "Test User", "email": "test@example.com"}, "created": True}))
     try:
         b = json.loads(req.post_data or "{}")
     except Exception:
@@ -153,6 +156,78 @@ async def main():
               "Settings → Your tools shows the same choice")
         check(await page.evaluate("!document.querySelector('#user-key')"), "the personal AI key is gone")
         check(not errors, "no errors anywhere: " + "; ".join(errors[:3]))
+        # ---- "Continue with Google" ----
+        GSI_STUB = "window.google={accounts:{id:{initialize(c){window.__gcfg=c}, renderButton(el){el.innerHTML='<button type=button id=fake-g>Google</button>'}, prompt(){}}}};"
+        async def gsi(route):
+            await route.fulfill(status=200, headers={"content-type": "text/javascript"}, body=GSI_STUB)
+        # 1. the Android app: the phone's Google sheet fails (not set up) → the browser opens google.html instead
+        c3 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
+        await c3.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');")
+        p3 = await c3.new_page()
+        await p3.route("**/*workers.dev/**", fake_server); await p3.route("**/api.aladhan.com/**", lambda r: r.abort()); await p3.route("**/accounts.google.com/**", gsi)
+        await p3.goto(BASE); await p3.wait_for_timeout(1200)
+        await p3.evaluate("""(async()=>{window.MustatarAndroid={}; window.__opened=null;
+            window.JundNative={googleSignIn: async()=>({ok:false, error:'GetCredentialCustomException: [28444] Developer console is not set up correctly.'}),
+                               openBrowser: async u=>{window.__opened=u; return {ok:true}}};
+            const d=document.createElement('div'); d.id='gtest'; document.body.appendChild(d); window.__mounted=await JundAcct.mountGoogle(d);})()""")
+        await p3.wait_for_timeout(500)
+        await p3.evaluate("document.querySelector('#gtest .g-native').click()")
+        await p3.wait_for_timeout(800)
+        opened = await p3.evaluate("window.__opened")
+        st = await p3.evaluate("document.querySelector('#acct-status').textContent")
+        check(bool(opened) and "/google.html?from=app" in opened and "browser" in st.lower(), f"in the Android app, when the phone's Google sheet is not set up, Google opens in the browser ({opened}; '{st}')")
+        await p3.evaluate("window.JundNative.googleSignIn=async()=>({ok:false, error:'cancelled'}); window.__opened=null; document.querySelector('#gtest .g-native').click()")
+        await p3.wait_for_timeout(500)
+        check(await p3.evaluate("window.__opened === null"), "cancelling Google's sheet does not open the browser")
+        await c3.close()
+        # 2. google.html from the app: after Google, the way back to the app carries the sign-in
+        c4 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
+        p4 = await c4.new_page(); e4 = []
+        p4.on("pageerror", lambda e: e4.append(str(e)))
+        await p4.route("**/*workers.dev/**", fake_server); await p4.route("**/accounts.google.com/**", gsi)
+        await p4.goto(BASE + "google.html?from=app&lang=en"); await p4.wait_for_timeout(1500)
+        check(await p4.evaluate("!!document.querySelector('#g #fake-g') && window.__gcfg?.client_id === 'test-client.apps.googleusercontent.com'"), "google.html shows Google's button with the app's Google client")
+        await p4.evaluate("window.__gcfg.callback({credential: 'fake-google-id-token'})"); await p4.wait_for_timeout(1200)
+        back = await p4.evaluate("document.querySelector('#back').getAttribute('href') || ''")
+        import base64 as _b64, re as _re
+        tok = None
+        m = _re.search(r"t=([A-Za-z0-9_-]+)", back)
+        if m:
+            raw = m.group(1); raw += "=" * (-len(raw) % 4)
+            try: tok = json.loads(_b64.urlsafe_b64decode(raw))["token"]
+            except Exception: tok = None
+        check(back.startswith("intent://signin?t=") and "package=app.mustatar" in back and tok == "test-token-1234567890", f"after Google, the way back to the app carries the sign-in ({back[:60]}…)")
+        check(not e4, "google.html has no errors " + "; ".join(e4[:2]))
+        await c4.close()
+        # 3. the app receives the sign-in in its address (from the Android app, or google.html in a normal browser)
+        c5 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
+        p5 = await c5.new_page()
+        await p5.route("**/*workers.dev/**", fake_server); await p5.route("**/accounts.google.com/**", gsi); await p5.route("**/api.aladhan.com/**", lambda r: r.abort())
+        payload = _b64.urlsafe_b64encode(json.dumps({"token": "test-token-1234567890", "user": {"name": "Test User", "email": "test@example.com"}, "created": False}).encode()).decode().rstrip("=")
+        await p5.goto(BASE + "#signin=" + payload); await p5.wait_for_timeout(1800)
+        got = await p5.evaluate("({t: JSON.parse(localStorage.getItem('jn_mstToken')||'null'), hash: location.hash, opening: !!document.querySelector('#op-skip')})")
+        check(got["t"] == "test-token-1234567890" and got["hash"] == "" and not got["opening"], f"the app keeps the Google sign-in from its address, cleans the address, and skips the sign-in screen ({got})")
+        await p5.evaluate("document.querySelectorAll('.wl').forEach(x=>x.remove()); document.body.classList.remove('vx-open'); JN.show('me')"); await p5.wait_for_timeout(400)
+        check(await p5.evaluate("/Test User/.test(document.querySelector('#screen-me').innerText) && !document.querySelector('#me-signin')"), "Me shows the signed-in Google account")
+        # the app already open on the same page: only the part after # changes
+        await p5.evaluate("localStorage.removeItem('jn_mstToken'); location.hash = '#signin=" + payload + "'"); await p5.wait_for_timeout(1200)
+        check(await p5.evaluate("JSON.parse(localStorage.getItem('jn_mstToken')||'null') === 'test-token-1234567890' && location.hash === ''"), "the sign-in also arrives while the app is already open")
+        # google.html opened in a normal browser goes back to the website, signed in
+        await p5.goto(BASE + "google.html?lang=en"); await p5.wait_for_timeout(1200)
+        await p5.evaluate("localStorage.removeItem('jn_mstToken'); window.__gcfg.callback({credential: 'fake-google-id-token'})"); await p5.wait_for_timeout(2500)
+        check(await p5.evaluate("JSON.parse(localStorage.getItem('jn_mstToken')||'null') === 'test-token-1234567890' && location.pathname.endsWith('/')"), "google.html in a normal browser signs in the website")
+        await c5.close()
+        # 4. the website's opening screen: Continue with Google signs in and goes on to the first questions
+        c6 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
+        p6 = await c6.new_page()
+        await p6.route("**/*workers.dev/**", fake_server); await p6.route("**/accounts.google.com/**", gsi); await p6.route("**/api.aladhan.com/**", lambda r: r.abort())
+        await p6.goto(BASE); await p6.wait_for_timeout(1800)
+        check(await p6.evaluate("!!document.querySelector('#op-google:not([hidden]) #fake-g')"), "the opening screen shows Continue with Google")
+        await p6.evaluate("window.__gcfg.callback({credential: 'fake-google-id-token'})"); await p6.wait_for_timeout(1500)
+        got = await p6.evaluate("({t: JSON.parse(localStorage.getItem('jn_mstToken')||'null'), q: !!document.querySelector('.wl .wl-dots'), op: !!document.querySelector('#op-skip')})")
+        check(got["t"] == "test-token-1234567890" and got["q"] and not got["op"], f"Continue with Google on the opening screen signs in and goes on ({got})")
+        await c6.close()
+
         await browser.close()
 
     print(f"\n{len(failures)} problem(s)" if failures else "\nAll checks passed")

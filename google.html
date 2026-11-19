@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Mustatar · Continue with Google</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: radial-gradient(circle at 30% 0%, #16264a, #0b1222 70%); color: #e8ecf5;
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif; }
+  main { width: min(92vw, 420px); text-align: center; padding: 24px 0; }
+  img { width: 56px; height: 56px; border-radius: 14px; }
+  h1 { font-size: 1.35rem; margin: 14px 0 6px; font-weight: 650; }
+  p { color: #aab4c8; margin: 0 0 18px; }
+  #g { display: flex; justify-content: center; min-height: 48px; }
+  #st { min-height: 1.5em; margin-top: 16px; color: #c9d3e6; }
+  #st.bad { color: #ff8f8f; }
+  .back { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 52px; border-radius: 12px; background: #fff; color: #10172a;
+    font-weight: 700; text-decoration: none; margin-top: 14px; }
+  .back[hidden] { display: none; }
+  small { display: block; color: #7f8aa3; margin-top: 18px; }
+  [dir="rtl"] { direction: rtl; }
+</style>
+</head>
+<body>
+<main id="m">
+  <img src="icon-192.png" alt="">
+  <h1 id="h">Sign in to Mustatar</h1>
+  <p id="p">Continue with your Google account. You will come back to the app afterwards.</p>
+  <div id="g"></div>
+  <div id="st" aria-live="polite"></div>
+  <a id="back" class="back" hidden>Back to Mustatar</a>
+  <small id="fine">Mustatar only receives your name and email from Google.</small>
+</main>
+<script>
+/* "Continue with Google" for the Android app: the app's web view cannot show Google's sign-in, so the app opens this page in the
+   phone's browser. After Google, the server gives a sign-in, which goes back to the app with app.mustatar://signin?t=…
+   Opened in a normal browser (not from the app), it signs in the website instead. */
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const fromApp = q.get('from') === 'app';
+  const ar = q.get('lang') === 'ar' || (!q.get('lang') && /^ar/i.test(navigator.language || ''));
+  const T = (en, a) => ar ? a : en;
+  if (ar) {
+    document.documentElement.lang = 'ar'; document.getElementById('m').dir = 'rtl';
+    document.getElementById('h').textContent = 'الدخول إلى مستطر';
+    document.getElementById('p').textContent = 'تابع بحساب Google، ثم تعود إلى التطبيق.';
+    document.getElementById('back').textContent = 'العودة إلى مستطر';
+    document.getElementById('fine').textContent = 'لا يتلقى مستطر من Google إلا اسمك وبريدك.';
+  }
+  const st = document.getElementById('st');
+  const say = (t, bad) => { st.textContent = t; st.className = bad ? 'bad' : ''; };
+  const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  let server;
+  try {
+    server = (await (await fetch('server.json', { cache: 'no-cache' })).json()).url.replace(/\/$/, '');
+    const cfg = await (await fetch(server + '/auth/config')).json();
+    if (!cfg.googleClientId) throw new Error(T('Google sign-in is not set up yet.', 'الدخول بـ Google غير مفعّل بعد.'));
+    await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = ok; s.onerror = () => bad(new Error(T('Could not reach Google. Check the internet and try again.', 'تعذّر الوصول إلى Google. تحقق من الإنترنت وأعد المحاولة.'))); document.head.appendChild(s); });
+    google.accounts.id.initialize({
+      client_id: cfg.googleClientId, ux_mode: 'popup', use_fedcm_for_prompt: true, use_fedcm_for_button: true, auto_select: false,
+      callback: async res => {
+        say(T('Signing in…', 'جارٍ الدخول…'));
+        try {
+          const r = await fetch(server + '/auth/google', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential: res.credential }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.token) throw new Error(j.error || T('Google sign-in could not be checked. Try again.', 'تعذّر التحقق من الدخول بـ Google. أعد المحاولة.'));
+          const t = b64url(JSON.stringify({ token: j.token, user: j.user, created: !!j.created }));
+          if (fromApp) {
+            const link = `intent://signin?t=${t}#Intent;scheme=app.mustatar;package=app.mustatar;end`;
+            const back = document.getElementById('back'); back.href = link; back.hidden = false;
+            say(T('✓ Signed in. Going back to Mustatar…', '✓ تم الدخول. العودة إلى مستطر…'));
+            location.href = link;   // the browser may ask first; the button does the same
+          } else {
+            say(T('✓ Signed in. Opening Mustatar…', '✓ تم الدخول. فتح مستطر…'));
+            location.replace('./#signin=' + t);
+          }
+        } catch (e) { say('✗ ' + e.message, true); }
+      },
+    });
+    google.accounts.id.renderButton(document.getElementById('g'), { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', width: 300, locale: ar ? 'ar' : 'en' });
+    google.accounts.id.prompt();
+  } catch (e) { say('✗ ' + e.message, true); }
+})();
+</script>
+</body>
+</html>

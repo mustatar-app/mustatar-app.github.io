@@ -8,7 +8,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- reading answers aloud: lets the app find the phone's text-to-speech engine (Android 11 and newer) -->
-    <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
+    <queries>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <!-- "Continue with Google" in the browser: lets the app find the phone's browser (Android 11 and newer) -->
+        <intent><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" /></intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -29,6 +33,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="mustatar.dawajund.workers.dev" android:pathPrefix="/" />
                 <data android:scheme="https" android:host="mustatar-app.github.io" android:pathPrefix="/" />
+            </intent-filter>
+            <!-- back from signing in with Google in the browser: app.mustatar://signin?t=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app.mustatar" android:host="signin" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

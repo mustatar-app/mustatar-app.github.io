@@ -44,14 +44,14 @@ reports page is stored only as a hash in `server/worker.js`.
 | `local-ai.js`, `ai-worker.js` | An AI that runs on the phone |
 | `scan-ocr.js` | Reading text from photos and scans on the phone |
 | `quran.js`, `data/quran.json` | Checks quoted verses against the Mushaf text |
-| `calendar.js`, `ical.js`, `inbox.js`, `reminders.js`, `pending.js` | Calendar, other calendars, reminders, daily reminder, "left to do" |
-| `assistant.js`, `voice.js`, `dictate.js`, `attach.js`, `thumbs.js` | The assistant: typing, voice, dictation, attached files |
+| `calendar.js`, `ical.js`, `inbox.js`, `reminders.js`, `pending.js` | Calendar, other calendars, reminders, daily reminder, "left to do". `toast()` is the small banner under the top bar (coloured dot, tap or swipe up to hide) |
+| `assistant.js`, `voice.js`, `dictate.js`, `attach.js`, `thumbs.js` | The assistant: typing, voice, dictation, attached files. "From my notes: …" (Notes → Ask my notes) searches more notes and names the lesson |
 | `study.js` | Flashcards, quizzes, exam planner, memorisation |
 | `studio.js` | Studio, a full-screen editor like Instagram's: Aa writes over the picture (fonts, colours, the A style button, size, harakat); drag to move, two fingers to resize and turn, ↔ for the box width, ⤡ for size, drop on the bin to remove; ★ Saved texts; Colour, Translate, Ideas; More holds drafts, carousel, captions and post ideas |
 | `features.js` | Prayer times, morning brief, habits, focus timer and other tools |
 | `nav.js` | The bottom bar (Today · Notes · ＋ · Calendar · Me), the ＋ sheet (capture, create a post in Studio, or plan), the Me screen and the back arrow on screens that are not tabs. The phone's back button goes back through screens (app.js `remember`/`popstate`) |
 | `plan.js` | Plans and fair limits: Basic is free and runs only on the free daily AI allowance; the per-day and per-month counts, the plan card on Me and the plans page |
-| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu (chats and projects; opened from Me → Assistant chats or a swipe), "working" spinner, the logo mark, the opening screen (Google, passkey, or continue without an account) and first-open questions (name, roles, languages, hours, what is hard, tools), Arabic interface |
+| `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu like Claude's, opened by ☰ at the top of the tab screens: New chat, Studio card, past chats each with a one-line summary, projects, recent notes. The app starts a fresh chat when opened after 30 minutes and summarises the old one (assistant.js `summarize`), "working" spinner, the logo mark, the opening screen (Google, passkey, or continue without an account) and first-open questions (name, roles, languages, hours, what is hard, tools), Arabic interface |
 | `report.js` | Problem reports and anonymous usage counts to the owner |
 | `sw.js` | Offline opening and receiving shared files; change `CACHE` when shipping |
 | `vendor/` | Outside libraries kept in the project (PDF reader, MP3 maker, on-phone AI, video reader, HEIC photos) |
@@ -95,3 +95,5 @@ Passkeys inside the Android app use the app's identity (`android:apk-key-hash:�
 Free allowances: Cloudflare 10,000 units a day for the whole account (the brake stops at 9,500; when the owner allows paying,
 only paid plans go past it — free users never cost money); Groq 8 hours of sound a day per Whisper model and 200,000 tokens a day per text model. The owner
 view (Settings → Send feedback → owner) shows today's use against each allowance and sets the brake.
+
+Me → Your field and My words (nav.js) shape the notes prompt (app.js `fieldAndWords`) and are sent to hearing as `words` (worker.js → engine.js `hear`, as the prompt). The result screen saves Word (.doc) as well as PDF. Recording shows a one-time consent note. Checks: tests/batch_test.py.

@@ -5,7 +5,7 @@
 (() => {
 'use strict';
 const J = window.JN; if (!J) return;
-const { esc } = J;
+const { esc, store } = J;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const pad = n => String(n).padStart(2, '0');
@@ -64,9 +64,19 @@ async function convertPartNow(sid, part) {
 /* ---------- recording ---------- */
 let R = null;   // the running recording
 const MIMES = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
+// recording other people: a short reminder to tell them first, until the person says they know
+function consentNote(d) {
+  if (store.get('consentOk') || d.querySelector('.rec-consent')) return;
+  const ar = window.ZadLang === 'ar';
+  const n = document.createElement('div'); n.className = 'rec-consent'; n.setAttribute('data-noi18n', ''); n.dir = ar ? 'rtl' : 'ltr';
+  n.innerHTML = `<span>${ar ? 'إن كنت تسجّل أشخاصًا آخرين، أخبرهم أولًا؛ بعض الأماكن تشترط موافقتهم.' : 'Recording other people? Tell them first — some places require their consent.'}</span><button type="button" class="ghost small">${ar ? 'فهمت' : 'Got it'}</button>`;
+  n.querySelector('button').onclick = () => { store.set('consentOk', true); n.remove(); };
+  d.prepend(n);
+}
 async function start() {
   if (R) { $('#rec-dialog').showModal(); return; }
   const d = $('#rec-dialog'); d.showModal();
+  consentNote(d);
   $('#rec-status').textContent = 'Starting the microphone…';
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }

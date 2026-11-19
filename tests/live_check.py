@@ -12,7 +12,8 @@ problems = []
 def req(path, body=None, headers=None, timeout=120):
     data = json.dumps(body).encode() if body is not None else None
     r = urllib.request.Request(SERVER + path, data=data, method="POST" if body is not None else "GET",
-                               headers={"content-type": "application/json", "x-mst-stream": "openai", **(headers or {})})
+                               headers={"content-type": "application/json", "x-mst-stream": "openai", "origin": APP,
+                                        "user-agent": "Mozilla/5.0 (Linux; Android 15; SM-S938B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36 MustatarLiveCheck", **(headers or {})})
     return urllib.request.urlopen(r, timeout=timeout)
 
 def say(ok, text):
@@ -35,7 +36,8 @@ try:
     r = req("/auth/google", {"credential": "not-a-real-token"})
     say(False, "a fake Google sign-in is refused (it was accepted!)")
 except urllib.error.HTTPError as e:
-    say(e.code in (400, 401, 403), f"a fake Google sign-in is refused (HTTP {e.code})")
+    body = e.read()[:200]
+    say(e.code in (400, 401) and b"1010" not in body, f"a fake Google sign-in is refused (HTTP {e.code} {body!r})")
 except Exception as e:
     say(False, f"Google sign-in endpoint answers ({e})")
 

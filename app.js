@@ -191,6 +191,7 @@ const space = (() => {
           let data = null;
           if (!p.deleted) {
             if (p.kind === 'lesson') { const l = await idb.get(id.slice(7)).catch(() => null); if (!l) { p.deleted = true; } else data = JSON.stringify(l); }
+            else if (p.kind === 'keep') { const n = await window.JundKeep?.raw(id.slice(5)); if (!n) p.deleted = true; else data = JSON.stringify(n); }
             else data = JSON.stringify(store.get('mstData:' + id.slice(5), null));
           }
           if (data && new TextEncoder().encode(data).length > MAX_ITEM) { delete m[id]; setStatus('⚠ One lesson is too big to save to your space; it stays on this phone.'); continue; }
@@ -229,6 +230,10 @@ const space = (() => {
             const id = it.id.slice(7);
             if (it.deleted) await idb.del(id).catch(() => {}); else await idb.put(JSON.parse(it.data));
             changed++;
+          } else if (it.kind === 'keep') {
+            const k = it.id.slice(5), v = it.deleted ? null : JSON.parse(it.data);
+            if (window.JundKeep) await window.JundKeep.fromCloud(k, v); else (window.__keepIn ||= []).push({ id: k, note: v });
+            changed++;
           } else if (it.kind === 'data') {
             const v = it.deleted ? null : JSON.parse(it.data);
             store.set('mstData:' + it.id.slice(5), v);
@@ -249,6 +254,7 @@ const space = (() => {
     await pull();
     const m = pending(), now = Date.now();
     for (const l of await idb.all().catch(() => [])) if (!seen.has('lesson:' + l.id)) m['lesson:' + l.id] = { kind: 'lesson', updated: now };
+    for (const n of (await window.JundKeep?.raw()) || []) if (!seen.has('keep:' + n.id)) m['keep:' + n.id] = { kind: 'keep', updated: now };
     const snap = {
       calendar: { saved: store.get('eventsSaved', now), events: store.get('events', []) },
       habits: { saved: now, habits: store.get('habits', []) }, hifz: { saved: now, hifz: store.get('hifz', []) },
@@ -267,6 +273,7 @@ const space = (() => {
     signOut() { forget(); store.set('mstSeq', 0); store.set('mstPending', {}); for (const n of DATA_NAMES) store.set('mstData:' + n, null); },
     push(l) { if (tok()) mark('lesson:' + l.id, 'lesson'); },
     remove(id) { if (tok()) mark('lesson:' + id, 'lesson', true); },
+    keep(id, deleted = false) { if (tok()) mark('keep:' + id, 'keep', deleted); },
     async putData(name, obj) { if (!tok()) return; store.set('mstData:' + name, obj); mark('data:' + name, 'data'); },
     async getData(name) {
       if (!tok()) return null;
@@ -281,6 +288,7 @@ const cloud = {
   on: () => space.on() || ghCloud.on(),
   push: l => space.on() ? space.push(l) : ghCloud.push(l),
   remove: id => space.on() ? space.remove(id) : ghCloud.remove(id),
+  keep: (id, deleted) => space.on() && space.keep(id, deleted),   // My notes: one item per note in your private space
   pull: () => space.on() ? space.pull() : ghCloud.pull(),
   test: () => ghCloud.test(),
   status: () => space.on() ? space.status() : ghCloud.status(),
@@ -362,6 +370,8 @@ function remember(name) {
 }
 function closeTopLayer() {
   const d = [...document.querySelectorAll('dialog[open]')].pop(); if (d) { d.close(); return true; }
+  const pp = document.getElementById('kp-pop'); if (pp) { pp.remove(); return true; }
+  if (window.JundKeep?.back()) return true;
   const sh = document.querySelector('.px.in'); if (sh) { window.JundNav?.closeSheet(); return true; }
   if (window.JundStudio?.closeLayer?.()) return true;
   const dr = document.querySelector('.dr.in, .dr.open'); if (dr && window.JundDrawer?.close) { window.JundDrawer.close(); return true; }
@@ -387,6 +397,7 @@ function show(name) {
   const tab = name === 'result' || name === 'new' ? 'library' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
   document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;
   noteUse(name);
+  window.dispatchEvent(new Event('mustatar-screen'));
   $$('.tabbar [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === tab));
   if (name === 'library') { renderLibrary(); window.JundRecorder?.list(); }
   if (name === 'calendar') window.JundCal?.render();

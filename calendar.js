@@ -233,19 +233,20 @@ $('#ev-delete').onclick = () => {
 /* ---------- reminders ---------- */
 let toastTimer;
 // a short message: a small banner at the top that slides in and away (tap or swipe it up to close it sooner)
-function toast(t, ms = 3200) {
+function toast(t, ms = 3200, act = null) {
   const el = $('#toast'); if (!el) return;
   const s = String(t || '').trim(), kind = /^✓/.test(s) ? 'ok' : /^✗|^⚠/.test(s) ? 'bad' : 'info';
   el.dataset.kind = kind; el.setAttribute('dir', 'auto');
   el.innerHTML = `<i class="tst-dot" aria-hidden="true"></i><span class="tst-t"></span>`;
   el.querySelector('.tst-t').textContent = s.replace(/^[✓✗⚠]\uFE0F?\s*/, '');
+  if (act?.label) { const b = document.createElement('button'); b.type = 'button'; b.className = 'tst-act'; b.textContent = act.label; b.onclick = e => { e.stopPropagation(); hide(); act.fn?.(); }; el.appendChild(b); }
   el.hidden = false; el.classList.remove('out'); void el.offsetWidth; el.classList.add('in');
   const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 220); };
   el.onclick = hide;
   let y0 = null;
   el.ontouchstart = e => { y0 = e.touches[0].clientY; };
   el.ontouchend = e => { if (y0 !== null && e.changedTouches[0].clientY - y0 < -20) hide(); y0 = null; };
-  clearTimeout(toastTimer); toastTimer = setTimeout(hide, Math.max(2200, Math.min(ms, 6000)));
+  clearTimeout(toastTimer); toastTimer = setTimeout(hide, Math.max(act ? 5000 : 2200, Math.min(ms, 6000)));
 }
 const notified = () => store.get('notified', {});
 function dueTime(e, d) {
@@ -466,7 +467,7 @@ function upcoming(days = 7, max = 8) {
   for (let i = 0; i <= days; i++) { const d = addDays(today(), i); for (const e of on(d)) if (!isDone(e, d)) out.push({ e, d }); }
   return out.slice(0, max).map(x => ({ ...x, when: x.late ? 'Overdue' : when(x.d), time: hm(x.e.time), type: TYPES[x.e.type] || 'Task', color: colorOf(x.e.type) }));
 }
-window.JundCal = { pushSync, widgetSync, widgetId, render, onLesson, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { events.push({ id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }); save(); } };
+window.JundCal = { pushSync, widgetSync, widgetId, render, onLesson, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();

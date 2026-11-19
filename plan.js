@@ -10,8 +10,9 @@ const L = (en, ar) => AR ? ar : en;
 const $ = (s, r = document) => r.querySelector(s);
 const num = n => AR ? Number(n).toLocaleString('ar-EG') : String(n);
 
-// per day: minutes of recordings turned into notes, assistant messages; per month: files, YouTube videos, quiz sets
-const LIMITS = { basic: { rec: 60, msg: 10, text: 30, yt: 2, quiz: 10 } };
+// per day: minutes of recordings turned into notes; per month: files, YouTube videos, quiz sets.
+// Chatting with the assistant has no limit: it runs on free AI, and if that is busy for a moment the app says so.
+const LIMITS = { basic: { rec: 60, text: 30, yt: 2, quiz: 10 } };
 const DAILY = new Set(['rec', 'msg']);
 const NAMES = {
   rec: [L('Recordings into notes, today', 'تسجيلات إلى ملاحظات، اليوم'), L('min', 'د')],
@@ -59,8 +60,8 @@ function card(el) {
   el.innerHTML = p === 'owner'
     ? `<div class="pl-card"><div class="pl-top"><b>${L('Owner', 'المالك')}</b><span class="muted">${L('no limits on this phone', 'بلا حدود على هذا الهاتف')}</span></div></div>`
     : `<div class="pl-card"><div class="pl-top"><b>${L('Basic', 'الأساسية')}</b><span class="pl-free">${L('Free', 'مجانية')}</span><button type="button" class="link pl-see" id="pl-see">${L('See plans', 'الخطط')}</button></div>
-      ${['rec', 'msg', 'text', 'yt', 'quiz'].map(bar).join('')}
-      <p class="muted fine">${L('Calendar, tasks, habits, prayer, reminders, focus and Studio are unlimited. Daily limits reset at midnight, monthly ones on the 1st.', 'التقويم والمهام والعادات والصلاة والتذكيرات والتركيز والاستوديو بلا حدود. الحدود اليومية تتجدد منتصف الليل، والشهرية في أول الشهر.')}</p></div>`;
+      ${['rec', 'text', 'yt', 'quiz'].map(bar).join('')}
+      <p class="muted fine">${L('The assistant, notes, calendar, tasks, habits, prayer, reminders, focus and Studio are unlimited. Daily limits reset at midnight, monthly ones on the 1st.', 'المساعد والملاحظات والتقويم والمهام والعادات والصلاة والتذكيرات والتركيز والاستوديو بلا حدود. الحدود اليومية تتجدد منتصف الليل، والشهرية في أول الشهر.')}</p></div>`;
   const s = $('#pl-see', el); if (s) s.onclick = prices;
 }
 
@@ -70,8 +71,8 @@ function prices() {
   if (!d) { d = document.createElement('dialog'); d.id = 'pl-dialog'; d.setAttribute('data-noi18n', ''); document.body.appendChild(d); }
   d.dir = AR ? 'rtl' : 'ltr';
   const P = [
-    [L('Basic', 'الأساسية'), L('Free', 'مجانًا'), [L('1 hour of recordings into notes a day', 'ساعة تسجيلات إلى ملاحظات يوميًا'), L('30 files, PDFs or photos a month', '٣٠ ملفًا أو PDF أو صورة شهريًا'), L('10 assistant messages a day', '١٠ رسائل للمساعد يوميًا'), L('Calendar, tasks, habits, prayer: unlimited', 'التقويم والمهام والعادات والصلاة: بلا حدود'), L('Studio: free for everyone, no mark', 'الاستوديو: مجاني للجميع وبلا علامة')], L('Your plan', 'خطتك')],
-    [L('Plus', 'الميسّرة'), L('$3.99 a month', '٣٫٩٩$ شهريًا'), [L('30 hours a month, never waits', '٣٠ ساعة شهريًا، بلا انتظار'), L('60 files and 30 YouTube videos', '٦٠ ملفًا و٣٠ فيديو يوتيوب'), L('60 assistant messages a day', '٦٠ رسالة للمساعد يوميًا'), L('Priority: never waits for the free allowance', 'أولوية: لا انتظار للحصة المجانية')], L('Coming soon', 'قريبًا')],
+    [L('Basic', 'الأساسية'), L('Free', 'مجانًا'), [L('1 hour of recordings into notes a day', 'ساعة تسجيلات إلى ملاحظات يوميًا'), L('30 files, PDFs or photos a month', '٣٠ ملفًا أو PDF أو صورة شهريًا'), L('The assistant: unlimited', 'المساعد: بلا حدود'), L('Calendar, tasks, habits, prayer: unlimited', 'التقويم والمهام والعادات والصلاة: بلا حدود'), L('Studio: free for everyone, no mark', 'الاستوديو: مجاني للجميع وبلا علامة')], L('Your plan', 'خطتك')],
+    [L('Plus', 'الميسّرة'), L('$3.99 a month', '٣٫٩٩$ شهريًا'), [L('30 hours a month, never waits', '٣٠ ساعة شهريًا، بلا انتظار'), L('60 files and 30 YouTube videos', '٦٠ ملفًا و٣٠ فيديو يوتيوب'), L('A faster, stronger assistant', 'مساعد أسرع وأقوى'), L('Priority: never waits for the free allowance', 'أولوية: لا انتظار للحصة المجانية')], L('Coming soon', 'قريبًا')],
     [L('Elite', 'النخبة'), L('$14.99 a month', '١٤٫٩٩$ شهريًا'), [L('60 hours, 30 with the best hearing', '٦٠ ساعة، منها ٣٠ بأفضل سماع'), L('A full second check of every note', 'تدقيق ثانٍ كامل لكل ملاحظة'), L('The strongest AI for the assistant', 'أقوى ذكاء اصطناعي للمساعد')], L('Coming soon', 'قريبًا')],
     [L('Team and institutions', 'الفرق والمؤسسات'), L('From $9 a person', 'من ٩$ للشخص'), [L('Shared library, tasks to members, admin', 'مكتبة مشتركة، مهام للأعضاء، إدارة')], L('Contact us', 'تواصل معنا')],
   ];

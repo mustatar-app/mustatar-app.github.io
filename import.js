@@ -128,8 +128,11 @@ const keepJSON = j => {
   const items = (j.listContent || []).map(x => (x.isChecked ? '☑ ' : '☐ ') + (x.text || ''));
   const text = [j.textContent || '', items.join('\n')].filter(Boolean).join('\n\n');
   return { title: j.title || '', text, date: j.createdTimestampUsec ? new Date(j.createdTimestampUsec / 1000) : j.userEditedTimestampUsec ? new Date(j.userEditedTimestampUsec / 1000) : null,
-    group: j.labels?.[0]?.name || '', from: 'Google Keep', archived: !!j.isArchived };
+    group: j.labels?.[0]?.name || '', labels: (j.labels || []).map(l => l.name).filter(Boolean), from: 'Google Keep', archived: !!j.isArchived,
+    pinned: !!j.isPinned, color: KEEP_COLOR[j.color] || '' };
 };
+// Google Keep's colour names → the same colours in My notes
+const KEEP_COLOR = { RED: 'coral', ORANGE: 'peach', YELLOW: 'sand', GREEN: 'mint', TEAL: 'sage', BLUE: 'fog', CERULEAN: 'storm', DARK_BLUE: 'storm', PURPLE: 'dusk', PINK: 'blossom', BROWN: 'clay', GRAY: 'chalk' };
 function enex(xmlText) {
   const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
   const enDate = s => { const m = String(s || '').match(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)/); return m ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null; };
@@ -189,28 +192,29 @@ async function bring(files, onStatus = () => {}) {
   for (const f of files) { onStatus(t(`Reading ${f.name}…`, `قراءة ${f.name}…`), ++i / files.length); await readEntry(f.name, async () => f, '', found); }
   let saved = 0, empty = 0;
   if (found.backup) saved += await restore(found.backup);
-  const mine = store.get('mySubjects', []);
-  const by = {};
+  const by = {}, keep = [];
   for (const n of found) {
-    const text = String(n.text || '').trim(), title = String(n.title || '').trim() || text.split('\n')[0].slice(0, 60);
+    let text = String(n.text || '').trim(); const title = String(n.title || '').trim() || text.split('\n')[0].slice(0, 60);
     if (!text) { empty++; continue; }
-    const group = String(n.group || n.from || t('Imported', 'مستورد')).trim().slice(0, 40);
-    if (!mine.includes(group)) mine.push(group);
-    const lang = J.langOf(text || title);
-    const date = n.date && !isNaN(n.date) ? n.date : new Date();
-    const lesson = {
-      id: 'I' + hash(n.from + '|' + title + '|' + text.slice(0, 2000)),
-      subject: { id: 'other:' + group, name: group, place: '', book: '', family: (store.get('families', {})['mine:' + group]) || window.familyForName?.(group) },   // the same shape as notes made in your own subject
-      unit: title, kind: 'other', lang, engine: 'import', imported: n.from, date: date.toISOString(), transcript: text,
-      notes: toNotes(title, text, (lang === 'en' ? 'From ' : 'من ') + n.from),
-      chat: [{ who: 'ai', text: lang === 'en' ? `Brought in from ${n.from}. Ask me to tidy it, turn it into full study notes, or make a quiz from it.` : `نُقلت من ${n.from}. اطلب مني ترتيبها أو تحويلها إلى ملف دراسي كامل أو اختبار.` }],
-    };
-    await J.saveLesson(lesson);
-    saved++; by[n.from] = (by[n.from] || 0) + 1;
-    if (saved % 20 === 0) onStatus(t(`Saved ${saved} notes…`, `حُفظت ${J.ar(saved)} ملاحظة…`), 1);
+    const group = String(n.group || '').trim().slice(0, 40);
+    // Markdown (Notion, Obsidian) reads as plain text in a note: links keep their address, task boxes become ☐ / ☑, # marks go
+    if (/Notion|Markdown|Obsidian/.test(n.from || '') || /\.md$/i.test(n.name || '')) text = text
+      .replace(/^(\s*)[-*+]\s+\[( |x|X)\]\s+/gm, (m, sp, x) => sp + (x.trim() ? '☑ ' : '☐ '))
+      .replace(/!?\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, (m, tx, u) => tx ? (/^https?:/.test(u) ? `${tx} (${u})` : tx) : '')
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '');
+    const date = n.date && !isNaN(n.date) ? +n.date : Date.now();
+    // into My notes (like Keep): a checklist stays a checklist; the label, tag or folder becomes a label
+    const lines = text.split('\n').filter(x => x.trim()), list = lines.length && lines.every(x => /^\s*[☐☑]/.test(x));
+    keep.push({ id: 'I' + hash(n.from + '|' + title + '|' + text.slice(0, 2000)), title: n.title ? title : '', text: list ? '' : text,
+      items: list ? lines.map(x => ({ t: x.replace(/^\s*[☐☑]\s*/, ''), done: /^\s*☑/.test(x) })) : null,
+      labels: n.labels?.length ? n.labels.slice(0, 10) : group ? [group] : [], from: n.from, archived: !!n.archived, pinned: !!n.pinned, created: date, updated: date, color: n.color || '' });
+    by[n.from] = (by[n.from] || 0) + 1;
   }
-  store.set('mySubjects', mine);
-  return { saved, by, empty, skipped: found.skipped, failed: found.failed, why: found.why, restored: !!found.backup };
+  onStatus(t(`Saving ${keep.length} notes…`, `حفظ ${J.ar(keep.length)} ملاحظة…`), 1);
+  const fresh = window.JundKeep ? await window.JundKeep.addMany(keep) : 0;
+  const already = keep.length - fresh;   // brought in before: never doubled
+  saved += fresh;
+  return { saved, by, empty, already, skipped: found.skipped, failed: found.failed, why: found.why, restored: !!found.backup };
 }
 
 /* ---------- take everything with you: one file with all notes and the app's own lists ---------- */
@@ -226,7 +230,8 @@ async function backupData() {
     const name = k.slice(3);
     if (!SKIP_KEY.test(name)) data[name] = localStorage.getItem(k);
   }
-  return { app: 'jund-notes', version: 3, saved: new Date().toISOString(), families: store.get('families', {}), lessons,
+  const keep = window.JundKeep ? (await window.JundKeep.all()).filter(n => !n.trashed) : [];
+  return { app: 'jund-notes', version: 3, saved: new Date().toISOString(), families: store.get('families', {}), lessons, keep,
     events: store.get('events', []), studio: store.get('studioSaved', []), data };
 }
 async function backup() {
@@ -240,6 +245,7 @@ async function restore(j) {
   if (!isBackup(j)) throw new Error(t('This is not a backup file from the app.', 'هذا ليس ملف نسخة احتياطية من التطبيق.'));
   let n = 0;
   for (const l of j.lessons || []) { if (l && l.id && l.notes) { await J.saveLesson(l); n++; } }
+  if (Array.isArray(j.keep) && window.JundKeep) n += await window.JundKeep.addMany(j.keep.filter(x => x && x.id));
   if (j.families) store.set('families', { ...j.families, ...store.get('families', {}) });
   if (Array.isArray(j.events)) window.JundCal?.merge?.(j.events);
   if (Array.isArray(j.studio)) { const have = store.get('studioSaved', []); store.set('studioSaved', [...have, ...j.studio.filter(x => !have.some(h => h.id === x.id))]); }
@@ -280,7 +286,7 @@ function open() {
   const ar = AR();
   d.dir = ar ? 'rtl' : 'ltr';
   d.innerHTML = `<div class="bring-h"><b>${t('Bring your work to Mustatar', 'انقل أعمالك إلى مستطر')}</b><button type="button" class="icon-btn" id="bring-x" aria-label="${t('Close', 'إغلاق')}">✕</button></div>
-    <p class="muted">${t('Your notes come in as ordinary notes, each under its label, tag or folder. Free, on your phone, and nothing is sent anywhere.', 'تدخل ملاحظاتك كملاحظات عادية، كل واحدة تحت تصنيفها أو وسمها أو مجلدها. مجانًا، على هاتفك، ولا يُرسل شيء إلى أي مكان.')}</p>
+    <p class="muted">${t('Your notes come into My notes, each under its label, tag or folder. Free, on your phone, and nothing is sent anywhere.', 'تدخل ملاحظاتك إلى «ملاحظاتي»، كل واحدة تحت تصنيفها أو وسمها أو مجلدها. مجانًا، على هاتفك، ولا يُرسل شيء إلى أي مكان.')}</p>
     <div class="bring-list">${SOURCES.map(s => `<details class="bring-src" data-src="${s.id}"><summary>${esc(s.name)}</summary><ol>${(ar ? s.ar : s.en).map(x => `<li>${esc(x)}</li>`).join('')}</ol>${s.link ? `<a class="link small" href="${s.link}" target="_blank" rel="noopener">${t('Open the link', 'افتح الرابط')} ↗</a>` : ''}</details>`).join('')}</div>
     <input type="file" id="bring-file" multiple accept="${ACCEPT}" hidden>
     <div class="bring-act"><button type="button" class="primary" id="bring-pick">${t('Choose files', 'اختر الملفات')}</button>
@@ -303,10 +309,11 @@ function open() {
       const r = await bring(files, s => { st.textContent = s; });
       const parts = Object.entries(r.by).map(([k, v]) => `${k} ${J.ar(v)}`).join(' · ');
       const extra = [r.empty ? t(`${r.empty} empty skipped`, `${J.ar(r.empty)} فارغة تُركت`) : '', r.failed ? t(`${r.failed} could not be read`, `${J.ar(r.failed)} تعذّرت قراءتها`) : ''].filter(Boolean).join(' · ');
-      st.innerHTML = r.saved
-        ? `<b>${esc(t(`✓ Brought in ${r.saved} note${r.saved === 1 ? '' : 's'}`, `✓ نُقلت ${J.ar(r.saved)} ملاحظة`))}</b>${parts ? ` (${esc(parts)})` : ''}${extra ? `<br>${esc(extra)}` : ''}<br><button type="button" class="link" id="bring-see">${t('See them in Notes', 'اعرضها في الملاحظات')}</button>`
+      const again = r.already ? t(`${r.already} already in My notes (not doubled)`, `${J.ar(r.already)} موجودة من قبل في ملاحظاتي (لم تتكرر)`) : '';
+      st.innerHTML = r.saved || r.already
+        ? `<b>${esc(r.saved ? t(`✓ Brought in ${r.saved} note${r.saved === 1 ? '' : 's'}`, `✓ نُقلت ${J.ar(r.saved)} ملاحظة`) : t('✓ Nothing new: these notes are already here', '✓ لا جديد: هذه الملاحظات موجودة من قبل'))}</b>${r.saved && parts ? ` (${esc(parts)})` : ''}${[again, extra].filter(Boolean).length ? `<br>${esc([again, extra].filter(Boolean).join(' · '))}` : ''}<br><button type="button" class="link" id="bring-see">${t('See them in Notes', 'اعرضها في الملاحظات')}</button>`
         : esc(t('Nothing to bring in from these files. Check the steps above for your app.', 'لا شيء للنقل من هذه الملفات. راجع الخطوات أعلاه لتطبيقك.') + (r.why ? ' (' + r.why + ')' : ''));
-      const see = d.querySelector('#bring-see'); if (see) see.onclick = () => { d.close(); J.show('library'); };
+      const see = d.querySelector('#bring-see'); if (see) see.onclick = () => { d.close(); window.JundKeep ? window.JundKeep.open() : J.show('library'); };
       if (r.saved) window.JundCal?.toast(t(`✓ ${r.saved} note${r.saved === 1 ? '' : 's'} brought in`, `✓ نُقلت ${J.ar(r.saved)} ملاحظة`));
     } catch (err) { st.textContent = '✗ ' + J.errText(err); }
     finally { pick.disabled = false; }

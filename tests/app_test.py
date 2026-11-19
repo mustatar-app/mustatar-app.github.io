@@ -161,12 +161,12 @@ async def main():
         await c7.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');")
         p7 = await c7.new_page()
         await p7.route("**/*workers.dev/**", fake_server); await p7.route("**/api.aladhan.com/**", lambda r: r.abort())
-        await p7.goto(BASE); await p7.wait_for_timeout(2500)
+        await p7.goto(BASE); await p7.wait_for_timeout(2500); await p7.reload(); await p7.wait_for_timeout(2500)   # a version is in place
         await p7.evaluate("window.__mark=1; navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))"); await p7.wait_for_timeout(2500)
         check(await p7.evaluate("window.__mark === undefined"), "a new version loads by itself when nothing is going on")
         await p7.fill("#as-text", "half-written message")
         await p7.evaluate("window.__mark=1; navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))"); await p7.wait_for_timeout(1000)
-        check(await p7.evaluate("window.__mark === 1 && !!document.querySelector('.update-bar')"), "while typing, the update waits (and offers the bar)")
+        check(await p7.evaluate("window.__mark === 1 && document.body.classList.contains('has-update')"), "while typing, the update waits (and shows a small dot on Me)")
         await p7.evaluate("Object.defineProperty(document,'hidden',{get:()=>true,configurable:true}); document.dispatchEvent(new Event('visibilitychange'))"); await p7.wait_for_timeout(3000)
         check(await p7.evaluate("window.__mark === undefined && document.querySelector('#as-text').value === 'half-written message'"), "the update happens when the app is left, keeping the half-written message")
         await c7.close()
@@ -242,6 +242,25 @@ async def main():
         got = await p6.evaluate("({t: JSON.parse(localStorage.getItem('jn_mstToken')||'null'), q: !!document.querySelector('.wl .wl-dots'), op: !!document.querySelector('#op-skip')})")
         check(got["t"] == "test-token-1234567890" and got["q"] and not got["op"], f"Continue with Google on the opening screen signs in and goes on ({got})")
         await c6.close()
+        # a new version while the person is busy: no pop-up, a dot on Me and a quiet line; it updates on the next tab change
+        c8 = await browser.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True)
+        await c8.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');")
+        p8 = await c8.new_page()
+        await p8.route("**/*workers.dev/**", fake_server); await p8.route("**/api.aladhan.com/**", lambda r: r.abort())
+        await p8.goto(BASE); await p8.wait_for_timeout(2500); await p8.reload(); await p8.wait_for_timeout(2500)
+        await p8.evaluate("document.querySelector('#as-text').value='half-written'; document.querySelector('#as-text').focus(); navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))")
+        await p8.wait_for_timeout(300)
+        check(await p8.evaluate("document.body.classList.contains('has-update') && !document.querySelector('.update-bar:not([style*=none])')?.offsetParent"), "a new version shows only a small dot on Me, no pop-up")
+        await p8.evaluate("JN.show('me')"); await p8.wait_for_timeout(300)
+        check(await p8.evaluate("!!document.querySelector('#me-upd')"), "Me has a quiet 'new version' line with Restart")
+        await p8.evaluate("document.querySelector('#as-text').value=''; document.activeElement.blur()")
+        waiter = asyncio.ensure_future(p8.wait_for_event("load", timeout=8000))
+        await p8.click('.tabbar [data-nav="library"]')
+        try: await waiter; ok = True
+        except Exception: ok = False
+        await p8.wait_for_timeout(1500)
+        check(ok and await p8.evaluate("!document.querySelector('#screen-library').hidden"), "the next tap on the bottom bar updates and opens that screen")
+        await c8.close()
 
         await browser.close()
 

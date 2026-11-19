@@ -917,7 +917,8 @@ function speechLangs() {
   return [...new Set([...mine, 'ar', 'en'].filter(Boolean))].slice(0, 6).join(',');
 }
 async function hearPiece(piece, signal, onText) {
-  const res = await serverFetch('/transcribe?mime=' + encodeURIComponent(piece.mime) + '&langs=' + encodeURIComponent(speechLangs()), {
+  const w = myWords().slice(0, 400);
+  const res = await serverFetch('/transcribe?mime=' + encodeURIComponent(piece.mime) + '&langs=' + encodeURIComponent(speechLangs()) + (w ? '&words=' + encodeURIComponent(w) : ''), {
     method: 'POST', signal, headers: { 'content-type': piece.mime }, body: piece.blob,
   });
   return readStream(res, onText);
@@ -1802,6 +1803,29 @@ const SOURCE_TEXT_EN = {
   book: { name: 'TEXT', ask: 'This is a passage from a book or a written topic. Turn it into notes in the student\'s way: the study file, the mind map and the check report. Stay with the passage only, keep the author\'s key sentences in quotes and attribute them, and mention page numbers if present:' },
 };
 
+/* the person's field: what notes in that field need (Me → Your field); and their own words (Me → My words) */
+const FIELDS = {
+  business: ['FIELD: business and meetings. Make decisions, owners (who does what), deadlines, numbers and risks stand out; put actions in a clear list with the person and the date when said.',
+    'المجال: الأعمال والاجتماعات. أبرز القرارات، ومن يفعل ماذا، والمواعيد، والأرقام، والمخاطر؛ واجعل المهام قائمة واضحة مع الشخص والتاريخ إن ذُكرا.'],
+  medicine: ['FIELD: medicine and health. Keep drug names, doses, units and numbers exactly as said (never guess them); group signs, causes, tests and treatment; use tables for comparisons; add short mnemonics where they help.',
+    'المجال: الطب والصحة. احفظ أسماء الأدوية والجرعات والوحدات والأرقام كما قيلت تمامًا (لا تخمّنها)؛ ورتّب العلامات والأسباب والفحوص والعلاج؛ واستعمل الجداول للمقارنة؛ وأضف طرق حفظ قصيرة عند الحاجة.'],
+  engineering: ['FIELD: engineering and computing. Keep formulas, units, values and code exactly; show steps in order; put code in its own block unchanged; explain each symbol once.',
+    'المجال: الهندسة والحاسب. احفظ المعادلات والوحدات والقيم والكود كما هي؛ واعرض الخطوات بالترتيب؛ وضع الكود في كتلة مستقلة دون تغيير؛ واشرح كل رمز مرة واحدة.'],
+  law: ['FIELD: law. Keep article and section numbers, names of laws and cases exactly; give definitions, conditions (elements) and exceptions clearly; separate the rule from the example.',
+    'المجال: القانون. احفظ أرقام المواد والبنود وأسماء الأنظمة والقضايا كما هي؛ وبيّن التعريفات والشروط (الأركان) والاستثناءات بوضوح؛ وافصل القاعدة عن المثال.'],
+  teaching: ['FIELD: teaching. Bring out the lesson aims, key ideas, activities, homework and questions to ask the students; note what the teacher stressed.',
+    'المجال: التدريس. أبرز أهداف الدرس، والأفكار الرئيسة، والأنشطة، والواجبات، وأسئلة تُطرح على الطلاب؛ ودوّن ما أكّد عليه المعلم.'],
+  islamic: ['FIELD: Islamic studies. Quote verses and hadith exactly with their reference and source as said (and the grading if stated); give each ruling with its evidence and the scholars\' views; keep Arabic terms and harakat when given.',
+    'المجال: العلوم الشرعية. انقل الآيات والأحاديث بنصها مع موضعها ومصدرها كما ذُكر (ودرجة الحديث إن ذُكرت)؛ واذكر كل حكم بدليله وأقوال العلماء؛ واحفظ المصطلحات والتشكيل إن وُجد.'],
+};
+function fieldAndWords(en) {
+  const f = FIELDS[store.get('field', 'general')];
+  const w = myWords();
+  return (f ? '\n' + f[en ? 0 : 1] : '')
+    + (w ? '\n' + (en ? `The person's own words (names and terms; a transcript may have misheard them — spell them exactly like this): ${w}` : `كلمات الشخص الخاصة (أسماء ومصطلحات؛ قد يكون التفريغ أخطأ في سماعها — اكتبها هكذا تمامًا): ${w}`) : '');
+}
+function myWords() { return String(store.get('myWords', '') || '').split(/[,،\n]/).map(x => x.trim()).filter(Boolean).slice(0, 60).join(', '); }
+
 const notesCheckpoints = new WeakMap();
 async function makeOne({ text, unit, sub, kind, lang, id, complete = false, sourceFile, sourceScope = '' }, onStatus) {
   lang ||= langOf(text);
@@ -1822,7 +1846,7 @@ async function makeOne({ text, unit, sub, kind, lang, id, complete = false, sour
 Lesson / unit: ${unit}
 Input type: ${src.name}
 ${workMode() ? 'User' : 'Student'}: ${me().name || 'the user'}${me().study ? (workMode() ? ' — works as: ' : ' — studies at: ') + me().study : ''}
-Today's date: ${todayISO()} (${new Date().toLocaleDateString('en-GB', { weekday: 'long' })})
+Today's date: ${todayISO()} (${new Date().toLocaleDateString('en-GB', { weekday: 'long' })})${fieldAndWords(true)}
 
 ${src.ask}
 
@@ -1832,7 +1856,7 @@ ${src.name}>>>` : `المادة: ${sub.name}${sub.book ? ' (الكتاب: ' + su
 الدرس / الوحدة: ${unit}
 نوع المدخل: ${src.name}
 الطالب: ${me().nameAr || me().name || 'الطالب'}${me().study ? ' — يدرس في: ' + me().study : ''}
-تاريخ اليوم: ${todayISO()} (${['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'][new Date().getDay()]} )
+تاريخ اليوم: ${todayISO()} (${['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'][new Date().getDay()]} )${fieldAndWords(false)}
 
 ${src.ask}
 
@@ -2652,7 +2676,7 @@ function selectTab(name) {
   $('#frame-notes').hidden = name !== 'notes';
   $('#frame-map').hidden = name !== 'map';
   $('#frame-report').hidden = name !== 'report';
-  $('#save-pdf').hidden = name === 'report';
+  $('#save-pdf').hidden = name === 'report'; $('#save-word').hidden = name === 'report';
   $('#pdf-tip').hidden = name === 'report';
   fitPages();
 }
@@ -2681,6 +2705,23 @@ $('#save-pdf').onclick = () => {
     else window.print();
     setTimeout(() => { document.title = old; }, 1000);
   }, 50);
+};
+
+// a Word file of the notes (Word, Google Docs and Pages open it; Arabic stays right to left)
+$('#save-word').onclick = () => {
+  const src = $('#pages-' + (currentTab === 'map' ? 'map' : 'notes')); if (!src) return;
+  const rtl = (current?.lang || langOf(src.innerText || '')) !== 'en';
+  const clone = src.cloneNode(true);
+  clone.querySelectorAll('button, .no-print, script').forEach(e => e.remove());
+  const title = current ? `${current.subject.name} - ${current.unit}` : bookTitle;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(title)}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>@page{size:A4;margin:2cm} body{font-family:${rtl ? "'Traditional Arabic','Amiri','Arial'" : "'Calibri','Arial'"};font-size:13pt;line-height:1.6;direction:${rtl ? 'rtl' : 'ltr'};text-align:${rtl ? 'right' : 'left'}}
+h1,h2,h3{color:#14213d} table{border-collapse:collapse;width:100%} td,th{border:1px solid #999;padding:4px 6px;vertical-align:top}
+.page{page-break-after:always;box-shadow:none!important;border:0!important;width:auto!important;height:auto!important;transform:none!important}</style></head>
+<body dir="${rtl ? 'rtl' : 'ltr'}">${clone.innerHTML}</body></html>`;
+  download(new Blob(['\ufeff' + html], { type: 'application/msword' }), safeName(title) + '.doc');
 };
 
 /* ---------- chat: edits and questions ---------- */
@@ -3234,6 +3275,12 @@ if ('serviceWorker' in navigator) {
 $('#app-version').textContent = 'version ' + APP_VERSION;
 setTimeout(checkServer, 1200);
 $('#lib-search').addEventListener('input', () => renderLibrary());
+// ask a question across all your notes: the assistant answers from them and names the lesson
+$('#lib-ask').onclick = () => {
+  const q = $('#lib-search').value.trim(), ar = window.ZadLang === 'ar';
+  window.JundAssistant?.newChat(); show('assistant');
+  setTimeout(() => { const t = $('#as-text'); if (!t) return; t.value = (ar ? 'من ملاحظاتي: ' : 'From my notes: ') + q; t.focus(); t.dispatchEvent(new Event('input')); }, 150);
+};
 
 // start transcribing a YouTube link from anywhere (the Assistant, a share)
 function startYouTube(url) { show('new'); $('#yt').value = url; $('#yt-go').click(); }

@@ -186,13 +186,14 @@ function tidySegments(segments, text) {
   return out.trim();
 }
 
-async function groqHear(env, model, audio, mime, language) {
+async function groqHear(env, model, audio, mime, language, words = '') {
   const form = new FormData();
   form.append('file', new Blob([audio], { type: mime }), fileName(mime));
   form.append('model', model);
   form.append('response_format', 'verbose_json');
   form.append('temperature', '0');
   if (language) form.append('language', language);
+  if (words) form.append('prompt', words);   // spelling hints: names and terms the person uses
   let r;
   try {
     r = await fetch(GROQ + '/audio/transcriptions', { method: 'POST', headers: { authorization: 'Bearer ' + groqKey(env) }, body: form, signal: AbortSignal.timeout(180000) });
@@ -204,10 +205,10 @@ async function groqHear(env, model, audio, mime, language) {
   const j = await r.json().catch(() => ({}));
   return { ok: true, text: tidyTranscript(j.segments, j.text, Number(j.duration) || 0), lang: langCode(j.language), duration: Number(j.duration) || 0, model };
 }
-async function cfHear(env, audio, mime, language) {
+async function cfHear(env, audio, mime, language, words = '') {
   try {
     const body = audio instanceof ReadableStream ? audio : new Blob([audio]).stream();
-    const j = await env.AI.run(MODELS.cfHear, { audio: { body, contentType: mime }, vad_filter: true, ...(language ? { language } : {}) });
+    const j = await env.AI.run(MODELS.cfHear, { audio: { body, contentType: mime }, vad_filter: true, ...(language ? { language } : {}), ...(words ? { initial_prompt: words } : {}) });
     return { ok: true, text: tidyTranscript(j?.segments, j?.text, Number(j?.transcription_info?.duration) || 0), lang: langCode(j?.transcription_info?.language), duration: Number(j?.transcription_info?.duration) || 0, model: MODELS.cfHear };
   } catch (e) { return { ok: false, ...cfProblem(e) }; }
 }
@@ -215,7 +216,7 @@ async function cfHear(env, audio, mime, language) {
 // audio: an ArrayBuffer (any size), or a stream (only for pieces too big to keep in memory: Cloudflare alone, no second try).
 // langs: the languages the person speaks. One language: Whisper is told it. Several: Whisper finds it, and if it finds a
 // language the person does not speak (a quiet start can fool it), it hears the piece again in their first language.
-export async function hear(env, ctx, { audio, mime, langs = [], fast = false, paidPlan = false }) {
+export async function hear(env, ctx, { audio, mime, langs = [], fast = false, paidPlan = false, words = '' }) {
   const tally = new Tally();
   const size = audio instanceof ReadableStream ? Infinity : audio.byteLength;
   const told = langs.length === 1 ? langs[0] : undefined;
@@ -227,9 +228,9 @@ export async function hear(env, ctx, { audio, mime, langs = [], fast = false, pa
   // Groq refuses raw AAC (the sound taken out of phone videos and M4A files) whatever its name: those go to Cloudflare
   if (groqKey(env) && size <= GROQ_AUDIO_MAX && !GROQ_REFUSES.test(mime)) {
     for (const model of fast ? [...MODELS.groqHear].reverse() : MODELS.groqHear) {
-      const r = await groqHear(env, model, audio, mime, told);
+      const r = await groqHear(env, model, audio, mime, told, words);
       if (r.ok) {
-        const best = await settle(r, l => groqHear(env, model, audio, mime, l));
+        const best = await settle(r, l => groqHear(env, model, audio, mime, l, words));
         meter(env, ctx, { 'groq.audio_sec': Math.max(10, best.duration) * (best === r ? 1 : 2), 'hear.groq': 1 });
         return best;
       }
@@ -241,9 +242,9 @@ export async function hear(env, ctx, { audio, mime, langs = [], fast = false, pa
     const b = await brakeState(env);
     if (!cfAllowed(b, paidPlan)) tally.no('cf:brake', { status: 429, daily: true });
     else {
-      const r = await cfHear(env, audio, mime, told);
+      const r = await cfHear(env, audio, mime, told, words);
       if (r.ok) {
-        const best = size === Infinity ? r : await settle(r, l => cfHear(env, audio, mime, l));
+        const best = size === Infinity ? r : await settle(r, l => cfHear(env, audio, mime, l, words));
         const minutes = Math.max(r.duration, 1) / 60 * (best === r ? 1 : 2);
         meter(env, ctx, { 'cf.neurons': minutes * NEURONS.audioMin, 'cf.audio_sec': minutes * 60, 'hear.cf': 1 });
         return best;

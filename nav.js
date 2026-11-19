@@ -32,6 +32,8 @@ const IC = {
   save: '<path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/>',
   send: '<path d="M4 12l16-8-6 16-2-7z"/>',
   study: '<path d="M3 8l9-4 9 4-9 4zM7 10v5c3 2 7 2 10 0v-5"/>',
+  field: '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/>',
+  words: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/><path d="M17 13l3 3-3 3"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 const chev = `<span class="mx-chev" aria-hidden="true">${AR ? '‹' : '›'}</span>`;
@@ -123,6 +125,8 @@ function me() {
     <div class="mx-h">${L('Settings', 'الإعدادات')}</div>
     <div class="mx-group">
       ${row('user', L('Profile and languages', 'الملف الشخصي واللغات'), '')}
+      ${row('field', L('Your field', 'مجالك'), L('Notes written the way your field needs', 'ملاحظات بالطريقة التي يحتاجها مجالك'), esc(fieldName()))}
+      ${row('words', L('My words', 'كلماتي'), L('Names and terms the app should hear and spell right', 'أسماء ومصطلحات يسمعها التطبيق ويكتبها صحيحة'), (store.get('myWords', '') || '').split(/[,،\n]/).filter(w => w.trim()).length || '')}
       ${row('tools', L('Tools', 'الأدوات'), '', nTools ? L(nTools + ' on', nTools + ' مفعّلة') : '')}
       ${row('pin', L('Prayer and calendar', 'الصلاة والتقويم'), '', esc(place))}
       ${row('sun', L('Appearance', 'المظهر'), '', esc(theme))}
@@ -146,6 +150,8 @@ function me() {
   const cardOf = sel => () => $(sel)?.closest('.card');
   const cardTitled = t => () => $$('#screen-settings .card').find(c => (c.querySelector('.card-h')?.textContent || '').trim().startsWith(t));
   on('user', card('#about-card'));
+  on('field', pickField);
+  on('words', editWords);
   on('tools', card('#tools-card'));
   on('pin', card(cardOf('#prayer-place')));
   on('sun', card(cardOf('#theme')));
@@ -171,9 +177,45 @@ function me() {
   bar.prepend(b);
 })();
 
+/* ---------- your field: the notes are written the way the field needs (the instructions are in app.js FIELDS) ---------- */
+const FIELD_NAMES = {
+  general: [L('General', 'عام'), L('Clear notes for any subject', 'ملاحظات واضحة لأي موضوع')],
+  business: [L('Business and meetings', 'الأعمال والاجتماعات'), L('Decisions, who does what, deadlines, numbers', 'القرارات، ومن يفعل ماذا، والمواعيد، والأرقام')],
+  medicine: [L('Medicine and health', 'الطب والصحة'), L('Drugs and doses exactly, signs, tables, mnemonics', 'الأدوية والجرعات بدقة، والعلامات، والجداول، وطرق الحفظ')],
+  engineering: [L('Engineering and computing', 'الهندسة والحاسب'), L('Formulas, units, steps, code kept exactly', 'المعادلات والوحدات والخطوات والكود كما هو')],
+  law: [L('Law', 'القانون'), L('Articles and numbers, cases, definitions, exceptions', 'المواد وأرقامها، والقضايا، والتعريفات، والاستثناءات')],
+  teaching: [L('Teaching', 'التدريس'), L('Aims, activities, homework, questions to ask', 'الأهداف، والأنشطة، والواجبات، وأسئلة للطلاب')],
+  islamic: [L('Islamic studies', 'العلوم الشرعية'), L('Verses and hadith with sources, rulings with evidence', 'الآيات والأحاديث بمصادرها، والأحكام بأدلتها')],
+};
+function fieldName() { return (FIELD_NAMES[store.get('field', 'general')] || FIELD_NAMES.general)[0]; }
+function dlg(id, html) {
+  let d = document.getElementById(id);
+  if (!d) { d = document.createElement('dialog'); d.id = id; d.className = 'mx-dlg'; d.setAttribute('data-noi18n', ''); document.body.appendChild(d); }
+  d.dir = AR ? 'rtl' : 'ltr'; d.innerHTML = html; d.showModal();
+  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  return d;
+}
+function pickField() {
+  const now = store.get('field', 'general');
+  const d = dlg('field-dlg', `<b class="mx-dlg-h">${L('Your field', 'مجالك')}</b>
+    <p class="muted fine">${L('Mustatar writes your notes the way this field needs. You can change it any time.', 'يكتب مستطر ملاحظاتك بالطريقة التي يحتاجها هذا المجال، وتستطيع تغييره متى شئت.')}</p>
+    <div class="mx-group">${Object.entries(FIELD_NAMES).map(([k, v]) => `<button type="button" class="mx-row" data-f="${k}"><span class="mx-t"><b>${v[0]}</b><small>${v[1]}</small></span><span class="mx-x">${k === now ? '✓' : ''}</span></button>`).join('')}</div>
+    <div class="row-gap" style="justify-content:flex-end;margin-top:12px"><button type="button" class="ghost" data-x>${L('Close', 'إغلاق')}</button></div>`);
+  d.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { store.set('field', b.dataset.f); d.close(); me(); window.JundCal?.toast?.(L('✓ Your next notes follow this field', '✓ ملاحظاتك القادمة تتبع هذا المجال')); });
+  d.querySelector('[data-x]').onclick = () => d.close();
+}
+function editWords() {
+  const d = dlg('words-dlg', `<b class="mx-dlg-h">${L('My words', 'كلماتي')}</b>
+    <p class="muted fine">${L('Names, places and terms you use often (your teacher, your company, special terms). Mustatar listens for them in recordings and spells them exactly like this. One per line or separated by commas.', 'الأسماء والأماكن والمصطلحات التي تتكرر عندك (اسم شيخك، شركتك، مصطلحات خاصة). يسمعها مستطر في التسجيلات ويكتبها كما كتبتها هنا. كل كلمة في سطر أو بينها فواصل.')}</p>
+    <textarea id="words-t" rows="7" dir="auto" placeholder="${L('e.g. Ibn Uthaymeen, Kulliyat al-Haram, ROI, Q3 report', 'مثال: ابن عثيمين، كلية الحرم، العائد على الاستثمار')}">${esc(store.get('myWords', ''))}</textarea>
+    <div class="row-gap" style="justify-content:flex-end;margin-top:12px"><button type="button" class="ghost" data-x>${L('Cancel', 'إلغاء')}</button><button type="button" class="primary" data-s>${L('Save', 'حفظ')}</button></div>`);
+  d.querySelector('[data-x]').onclick = () => d.close();
+  d.querySelector('[data-s]').onclick = () => { store.set('myWords', d.querySelector('#words-t').value.trim().slice(0, 2000)); d.close(); me(); window.JundCal?.toast?.(L('✓ Saved', '✓ حُفظ')); };
+}
+
 /* ---------- wiring ---------- */
 $('#tab-plus')?.addEventListener('click', openSheet);
 // the Today screen: the ＋ button replaces the four quick buttons above the message box
 document.body.classList.add('nav2');
-window.JundNav = { me, openSheet, closeSheet };
+window.JundNav = { me, openSheet, closeSheet, pickField, editWords };
 })();

@@ -24,11 +24,31 @@ function saveChat() {
   all.unshift({ id: chatId, title: first.replace(/^📎[^\n]*\n/, '📎 ').slice(0, 60), t: Date.now(), log: log.slice(-60) });
   store.set('chats', all.slice(0, 50));
 }
-function newChat() { if (busy) return; saveChat(); chatId = 'c' + Date.now().toString(36); store.set('chatId', chatId); log = []; persist(); if (built) render(); }
+function newChat() { if (busy) return; const was = chatId; saveChat(); chatId = 'c' + Date.now().toString(36); store.set('chatId', chatId); log = []; persist(); if (built) render(); summarize(was); }
+// a one-line summary of a finished chat, for the list of chats (written once, in the background, on the free AI)
+async function summarize(id) {
+  const c = chats().find(x => x.id === id);
+  if (!c || c.summary || (c.log || []).filter(m => m.text).length < 3) return;
+  const talk = c.log.filter(m => m.text && !m.working).slice(-12).map(m => (m.who === 'me' ? 'User: ' : 'Assistant: ') + String(m.text).slice(0, 400)).join('\n');
+  try {
+    const r = await J.callServer({ json: false, maxTokens: 120, assistant: true, system: 'Summarise this chat in one short sentence (max 18 words), in the language the user wrote in. Only the sentence.', user: talk });
+    const sum = String(r.text || '').trim().replace(/^["“]|["”]$/g, '').slice(0, 160);
+    if (!sum) return;
+    store.set('chats', chats().map(x => x.id === id ? { ...x, summary: sum } : x));
+  } catch {}
+}
+// opening the app after a while starts a new chat, like Claude (the last one stays in the list)
+(() => {
+  const last = chats().find(c => c.id === chatId);
+  if (log.length && last && Date.now() - last.t > 30 * 60000) {
+    const was = chatId; chatId = 'c' + Date.now().toString(36); store.set('chatId', chatId); log = []; store.set('assistantLog', []);
+    setTimeout(() => summarize(was), 4000);
+  }
+})();
 function openChat(id) {
   if (busy) return;
   const c = chats().find(x => x.id === id); if (!c) return;
-  saveChat(); chatId = c.id; store.set('chatId', chatId); log = c.log || []; persist(); if (built) render();
+  const was = chatId; saveChat(); if (was !== id) summarize(was); chatId = c.id; store.set('chatId', chatId); log = c.log || []; persist(); if (built) render();
   setTimeout(() => $('#as-log')?.lastElementChild?.scrollIntoView({ block: 'end' }), 50);
 }
 function deleteChat(id) {
@@ -262,11 +282,13 @@ async function context(q) {
     .map(e => `- id ${e.id} | ${e.date}${e.time ? ' ' + e.time : ''} | ${e.type}${e.repeat === 'weekly' ? ' | every week' : ''} | ${e.title}${e.repeat === 'weekly' ? '' : e.done ? ' | DONE' : ''}${e.notes ? ' | ' + e.notes.replace(/\n/g, ' ').slice(0, 80) : ''}`).join('\n');
   const all = (await J.allLessons()).filter(l => !l.draft).sort((a, b) => b.date.localeCompare(a.date));
   // lesson notes go in only when the message really is about them (two or more meaningful words match, or one when the message is short)
-  const qw = [...words(q)].filter(w => !STOP.has(w));
-  const need = qw.length <= 2 ? 1 : 2;
+  // "From my notes: …" (Notes → Ask my notes) searches deeper: more notes, one matching word is enough
+  const deep = /^(from my notes|ask my notes|من ملاحظاتي)/i.test(String(q).trim());
+  const qw = [...words(String(q).replace(/^(from my notes|ask my notes|من ملاحظاتي)\s*[:：،,-]?/i, ''))].filter(w => !STOP.has(w));
+  const need = deep || qw.length <= 2 ? 1 : 2;
   const scored = qw.length ? all.map(l => { const w = lessonWords(l); let s = 0; for (const x of qw) if (w.has(x)) s++; return { l, s }; })
-    .filter(x => x.s >= need).sort((a, b) => b.s - a.s).slice(0, 2) : [];
-  let notes = '', budget = 6000;
+    .filter(x => x.s >= need).sort((a, b) => b.s - a.s).slice(0, deep ? 4 : 2) : [];
+  let notes = deep ? 'Answer from these notes and name the lesson for each point; if the notes do not say it, say so.\n\n' : '', budget = deep ? 10000 : 6000;
   for (const { l } of scored) { const tx = lessonText(l).slice(0, budget); budget -= tx.length; notes += tx + '\n\n'; if (budget < 800) break; }
   const subs = (J.me().use === 'work' ? [] : (window.SUBJECTS || [])).map(s => `${s.name}${s.book ? ' (' + s.book + ')' : ''}${s.place ? ' — ' + s.place : ''}`).join('; ');
   const pt = window.JundFeatures?.timesFor(t);

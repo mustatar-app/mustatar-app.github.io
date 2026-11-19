@@ -144,7 +144,7 @@
         <h1 class="screen-title" id="result-title" dir="auto"></h1>
         <div class="muted" id="result-meta" dir="auto"></div>
       </div>
-      <button type="button" class="primary" id="save-pdf">Save PDF</button>
+      <span class="row-gap" style="margin:0;flex-wrap:nowrap"><button type="button" class="ghost" id="save-word">Word</button><button type="button" class="primary" id="save-pdf">Save PDF</button></span>
     </div>
 
     <div class="intro found" id="found-tasks" hidden></div>
@@ -179,7 +179,7 @@
   <!-- library -->
   <section class="screen" id="screen-library" hidden>
     <div class="row-between"><h1 class="screen-title">Notes</h1><button type="button" class="primary" data-go="new">+ New notes</button></div>
-    <input id="lib-search" class="search" type="search" dir="auto" placeholder="Search your notes">
+    <div class="lib-ask-row"><input id="lib-search" class="search" type="search" dir="auto" placeholder="Search your notes"><button type="button" class="ghost lib-ask" id="lib-ask">✦ Ask my notes</button></div>
     <div id="cloud-status" class="muted"></div>
     <div class="card" hidden><div class="card-h">Recordings</div><div id="rec-list"></div></div>
     <div id="library-list"></div>

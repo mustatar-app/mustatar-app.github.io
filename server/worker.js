@@ -629,7 +629,9 @@ export default {
       }
       // a piece Groq can take is kept in memory (so Cloudflare can try it too); a bigger one goes straight to Cloudflare
       const audio = len <= AI.GROQ_AUDIO_MAX ? await req.arrayBuffer() : req.body;
-      const heard = await AI.hear(env, ctx, { audio, mime, langs: langList(url.searchParams.get('langs')) });
+      // the person's own names and terms (Me → My words): Whisper listens for them
+      const words = (url.searchParams.get('words') || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 400);
+      const heard = await AI.hear(env, ctx, { audio, mime, langs: langList(url.searchParams.get('langs')), words });
       if (!heard.ok) return heard.fail(h);
       return AI.modelResponse(h, heard.model, heard.text || '[[NOSPEECH]]', 'STOP');
     }

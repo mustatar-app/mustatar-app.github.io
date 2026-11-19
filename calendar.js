@@ -232,9 +232,20 @@ $('#ev-delete').onclick = () => {
 
 /* ---------- reminders ---------- */
 let toastTimer;
+// a short message: a small banner at the top that slides in and away (tap or swipe it up to close it sooner)
 function toast(t, ms = 3200) {
-  const el = $('#toast'); el.textContent = t; el.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  const el = $('#toast'); if (!el) return;
+  const s = String(t || '').trim(), kind = /^✓/.test(s) ? 'ok' : /^✗|^⚠/.test(s) ? 'bad' : 'info';
+  el.dataset.kind = kind; el.setAttribute('dir', 'auto');
+  el.innerHTML = `<i class="tst-dot" aria-hidden="true"></i><span class="tst-t"></span>`;
+  el.querySelector('.tst-t').textContent = s.replace(/^[✓✗⚠]\uFE0F?\s*/, '');
+  el.hidden = false; el.classList.remove('out'); void el.offsetWidth; el.classList.add('in');
+  const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 220); };
+  el.onclick = hide;
+  let y0 = null;
+  el.ontouchstart = e => { y0 = e.touches[0].clientY; };
+  el.ontouchend = e => { if (y0 !== null && e.changedTouches[0].clientY - y0 < -20) hide(); y0 = null; };
+  clearTimeout(toastTimer); toastTimer = setTimeout(hide, Math.max(2200, Math.min(ms, 6000)));
 }
 const notified = () => store.get('notified', {});
 function dueTime(e, d) {

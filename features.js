@@ -235,7 +235,8 @@ function morningNotice(today, late) {
   store.set('briefShown', t);
   const top = today.slice(0, 3).map(x => (x.time ? x.time + ' ' : '') + x.e.title).join(', ');
   const body = (today.length ? `Today: ${top}${today.length > 3 ? '…' : ''}` : 'Nothing planned today.') + (late.length ? ` · ${late.length} overdue` : '');
-  toast('☀ ' + body, 6000);
+  if (!today.length && !late.length) return;   // nothing to say: no message
+  toast('☀ ' + body, 5000);
   try { if (Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification('Good morning', { body, tag: 'brief-' + t, icon: 'icon-192.png' })); } catch {}
 }
 

@@ -138,7 +138,7 @@ async def main():
         check(await page.evaluate("document.querySelectorAll('.tabbar button').length === 5 && getComputedStyle(document.querySelector('.tabbar')).display !== 'none'"), "the bottom bar shows Today, Notes, ＋, Calendar and Me")
         await page.evaluate("document.querySelector('#tab-plus').click()")
         await page.wait_for_timeout(400)
-        check(await page.evaluate("!!document.querySelector('.px.in') && document.querySelectorAll('.px .mx-row').length === 8"), "＋ opens the sheet: five ways to capture, three ways to plan")
+        check(await page.evaluate("!!document.querySelector('.px.in') && document.querySelectorAll('.px .mx-row').length === 9 && !!document.querySelector('.px [data-k=studio]')"), "＋ opens the sheet: five ways to capture, Studio, three ways to plan")
         await page.evaluate("JundNav.closeSheet()")
         await page.wait_for_timeout(300)
         await page.evaluate("document.querySelector('.tabbar [data-nav=\"me\"]').click()")
@@ -150,8 +150,14 @@ async def main():
         await page.evaluate("document.querySelector('#screen-me [data-k=\"sun\"]').click()")
         await page.wait_for_timeout(400)
         check(await page.evaluate("!document.querySelector('#screen-settings').hidden && document.querySelector('.tabbar [data-nav=\"me\"]').classList.contains('on')"), "a Me row opens its part of Settings")
+        # the back button goes back through the screens, then to Today
+        await page.evaluate("history.back()"); await page.wait_for_timeout(400)
+        check(await page.evaluate("document.body.dataset.screen") == "me", "back from a part of Settings goes back to Me")
+        await page.evaluate("history.back()"); await page.wait_for_timeout(400)
+        check(await page.evaluate("document.body.dataset.screen") == "assistant", "back from a tab goes to Today")
         await page.evaluate("JN.show('settings')")
         await page.wait_for_timeout(400)
+        check(await page.evaluate("getComputedStyle(document.querySelector('#top-back')).display !== 'none'"), "Settings has a back arrow at the top")
         check(await page.evaluate("!!document.querySelector('#tools-list [data-tool=\"prayer\"]') && !document.querySelector('#tools-list [data-tool=\"prayer\"]').checked"),
               "Settings → Your tools shows the same choice")
         check(await page.evaluate("!document.querySelector('#user-key')"), "the personal AI key is gone")

@@ -52,6 +52,10 @@ function buildSheet() {
       ${row('yt', L('YouTube link', 'رابط يوتيوب'), '')}
       ${row('paste', L('Paste text', 'لصق نص'), '')}
     </div>
+    <div class="mx-h">${L('Create', 'إنشاء')}</div>
+    <div class="mx-group">
+      ${row('studio', L('Post or story', 'منشور أو ستوري'), L('Studio: text on photos and videos', 'الاستوديو: نص على الصور والفيديو'))}
+    </div>
     <div class="mx-h">${L('Plan', 'تخطيط')}</div>
     <div class="mx-group">
       ${row('task', L('Task or reminder', 'مهمة أو تذكير'), '')}
@@ -70,6 +74,7 @@ function buildSheet() {
   $('#px-scan', sheet).onchange = e => { const f = [...e.target.files]; e.target.value = ''; closeSheet(); if (f.length) { J.show('new'); J.addFiles(f); } };
   go('yt', () => { J.show('new'); setTimeout(() => $('#yt')?.focus(), 60); });
   go('paste', () => { J.show('new'); const p = $('#paste-box'); if (p) p.open = true; setTimeout(() => { const t = $('#transcript'); t?.focus(); t?.scrollIntoView({ block: 'center' }); }, 60); });
+  go('studio', () => J.show('studio'));
   go('task', () => window.JundCal?.open());
   go('habit', () => window.JundFeatures?.addHabit());
   go('focus', () => window.JundFeatures?.openFocus());
@@ -155,6 +160,16 @@ function me() {
   window.JundPending?.count().then(n => { const e = $('#me-left', sc); if (e && n) e.textContent = n; }).catch(() => {});
   window.JundPlan?.card?.($('#me-plan', sc));
 }
+
+/* ---------- a back arrow on screens that are not one of the tabs ---------- */
+(() => {
+  const bar = $('.topbar'); if (!bar || $('#top-back')) return;
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn top-back'; b.id = 'top-back';
+  b.setAttribute('aria-label', L('Back', 'رجوع'));
+  b.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="${AR ? 'M9 5l7 7-7 7' : 'M15 5l-7 7 7 7'}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  b.onclick = () => window.JundBack?.();
+  bar.prepend(b);
+})();
 
 /* ---------- wiring ---------- */
 $('#tab-plus')?.addEventListener('click', openSheet);

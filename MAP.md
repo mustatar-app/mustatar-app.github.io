@@ -47,9 +47,9 @@ reports page is stored only as a hash in `server/worker.js`.
 | `calendar.js`, `ical.js`, `inbox.js`, `reminders.js`, `pending.js` | Calendar, other calendars, reminders, daily reminder, "left to do" |
 | `assistant.js`, `voice.js`, `dictate.js`, `attach.js`, `thumbs.js` | The assistant: typing, voice, dictation, attached files |
 | `study.js` | Flashcards, quizzes, exam planner, memorisation |
-| `studio.js` | Text on photos and videos |
+| `studio.js` | Studio, a full-screen editor like Instagram's: Aa writes over the picture (fonts, colours, the A style button, size, harakat); drag to move, two fingers to resize and turn, ↔ for the box width, ⤡ for size, drop on the bin to remove; ★ Saved texts; Colour, Translate, Ideas; More holds drafts, carousel, captions and post ideas |
 | `features.js` | Prayer times, morning brief, habits, focus timer and other tools |
-| `nav.js` | The bottom bar (Today · Notes · ＋ · Calendar · Me), the ＋ sheet (capture or plan) and the Me screen |
+| `nav.js` | The bottom bar (Today · Notes · ＋ · Calendar · Me), the ＋ sheet (capture, create a post in Studio, or plan), the Me screen and the back arrow on screens that are not tabs. The phone's back button goes back through screens (app.js `remember`/`popstate`) |
 | `plan.js` | Plans and fair limits: Basic is free and runs only on the free daily AI allowance; the per-day and per-month counts, the plan card on Me and the plans page |
 | `drawer.js`, `busy.js`, `mark.js`, `welcome.js`, `i18n.js` | Side menu (chats and projects; opened from Me → Assistant chats or a swipe), "working" spinner, the logo mark, the opening screen (Google, passkey, or continue without an account) and first-open questions (name, roles, languages, hours, what is hard, tools), Arabic interface |
 | `report.js` | Problem reports and anonymous usage counts to the owner |

@@ -123,6 +123,7 @@ async def load_media(page, path, kind):
 async def write_text(page, text):
     await page.click("#st-add")
     await page.fill("#st-text", text)
+    await page.click("#st-done")
     await page.wait_for_timeout(200)
 
 async def status(page):
@@ -159,10 +160,12 @@ async def browser_run(browser, s):
     after = await page.evaluate("document.querySelectorAll('#st-drafts [data-open], #st-drafts .draft, #st-drafts img').length")
     check("Draft saved" in await status(page) and after > before, "Save draft keeps a draft in the list")
     # carousel: three slides become three pictures
+    await page.click("#st-more"); await page.wait_for_timeout(300)
     await page.fill("#st-car", "الشريحة الأولى\n\nSlide two\n\nالشريحة الثالثة")
     names = []
     page.on("download", lambda dl: names.append(dl.suggested_filename))
     await page.click("#st-car-go")
+    await page.evaluate("JundStudio.closeLayer()")
     await page.wait_for_timeout(3500)
     check(len(names) == 3, f"the carousel saves 3 slides ({len(names)})")
     # video: write on it and save it as a video
@@ -184,8 +187,10 @@ async def browser_run(browser, s):
     await page.wait_for_timeout(1500)
     shared = await page.evaluate("window.__shared")
     check(len(shared) == 1 and shared[0]["files"] and shared[0]["files"][0]["type"] == "image/jpeg" and shared[0]["files"][0]["size"] > 30000, f"Share hands the picture to the share sheet {shared[:1]}")
+    await page.click("#st-more"); await page.wait_for_timeout(300)
     await page.fill("#st-car", "One\n\nTwo")
     await page.click("#st-car-go")
+    await page.evaluate("JundStudio.closeLayer()")
     await page.wait_for_timeout(2500)
     shared = await page.evaluate("window.__shared")
     check(len(shared) == 2 and len(shared[1]["files"]) == 2, "the carousel's slides go to the share sheet together")
@@ -209,8 +214,10 @@ async def android_run(browser, s):
     shared = await page.evaluate("window.__native.shared")
     check(len(shared) == 1 and shared[0][0]["mime"] == "image/jpeg" and shared[0][0]["size"] > 30000, "Share hands the picture to the phone's share sheet")
     check(await status(page) == "✓ Shared.", "the screen says it was shared")
+    await page.click("#st-more"); await page.wait_for_timeout(300)
     await page.fill("#st-car", "١\n\n٢\n\n٣")
     await page.click("#st-car-go")
+    await page.evaluate("JundStudio.closeLayer()")
     await page.wait_for_timeout(4000)
     saved = await page.evaluate("window.__native.saved")
     shared = await page.evaluate("window.__native.shared")
@@ -233,10 +240,72 @@ async def android_run(browser, s):
     check(not errors, "no errors on the page: " + "; ".join(errors[:3]))
     await ctx.close()
 
+async def editor_run(browser):
+    """The Instagram-like editor: writing, the box handles, pinch, the bin, Saved texts, fonts, back button."""
+    ctx, page, errors = await open_app(browser)
+    J = "(()=>{%s})()"
+    await page.click("#st-add"); await page.wait_for_timeout(200)
+    check(await page.evaluate("!document.querySelector('#st-edit').hidden && document.activeElement.id === 'st-text'"), "Aa opens the writing box with the keyboard")
+    await page.fill("#st-text", "Seek knowledge from the cradle to the grave")
+    check(await page.evaluate("document.querySelectorAll('#st-fonts [data-font]').length") >= 14, "14 or more fonts to choose from (Arabic and English)")
+    await page.click('[data-font="cairo"]'); await page.click("#st-look")
+    await page.click("#st-save-text"); await page.click("#st-done"); await page.wait_for_timeout(300)
+    check(await page.evaluate("document.querySelector('#st-edit').hidden && !document.querySelector('#st-sel').hidden"), "Done shows the text with its frame and handles")
+    # the ↔ handle makes the box narrower (the text wraps onto more lines), the ⤡ handle makes it bigger
+    async def drag_handle(sel, dx, dy):
+        b = await page.locator(sel).bounding_box()
+        x, y = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
+        await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y + dy, steps=6); await page.mouse.up()
+    h0 = await page.evaluate("document.querySelector('#st-sel').getBoundingClientRect().height")
+    await drag_handle(".sx-w", -60, 0); await page.wait_for_timeout(200)
+    h1 = await page.evaluate("document.querySelector('#st-sel').getBoundingClientRect().height")
+    check(h1 > h0 * 1.2, f"dragging ↔ makes the box narrower and the text wraps ({h0:.0f}px → {h1:.0f}px tall)")
+    s0 = await page.evaluate("document.querySelector('#st-sel').getBoundingClientRect().width")
+    await drag_handle(".sx-s", 40, 40); await page.wait_for_timeout(200)
+    s1 = await page.evaluate("document.querySelector('#st-sel').getBoundingClientRect().width")
+    check(s1 > s0 * 1.1, f"dragging ⤡ makes the text bigger ({s0:.0f}px → {s1:.0f}px wide)")
+    # two fingers: bigger and turned
+    r = await page.evaluate("""(()=>{const cv=document.querySelector('#st-canvas'), f=document.querySelector('#st-sel').getBoundingClientRect(); const cx=f.left+f.width/2, cy=f.top+f.height/2;
+      const ev=(t,id,x,y)=>cv.dispatchEvent(new PointerEvent(t,{pointerId:id,clientX:x,clientY:y,bubbles:true,isPrimary:id===1,pointerType:'touch'}));
+      ev('pointerdown',1,cx-20,cy); ev('pointerdown',2,cx+20,cy); ev('pointermove',2,cx+60,cy+40); ev('pointerup',2,cx+60,cy+40); ev('pointerup',1,cx-20,cy);
+      return document.querySelector('#st-sel').style.transform})()""")
+    check("rotate(" in r and "rotate(0rad)" not in r, f"two fingers turn the text ({r})")
+    # tap the chosen text again: it opens for writing
+    b = await page.locator("#st-sel").bounding_box()
+    await page.mouse.click(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2); await page.wait_for_timeout(250)
+    check(await page.evaluate("!document.querySelector('#st-edit').hidden"), "tapping the chosen text opens it for writing")
+    await page.click("#st-done")
+    # Saved: the ★ button lists the saved text; one tap puts it back
+    await page.click("#st-saved-btn"); await page.wait_for_timeout(300)
+    check(await page.evaluate("document.querySelectorAll('#st-saved [data-use]').length >= 1 && document.querySelector('#st-saved-n').textContent !== ''"), "★ Saved opens the saved texts (with a count on the button)")
+    n0 = await page.evaluate("JSON.stringify(JundStudio && 0)")
+    await page.click("#st-saved [data-use]"); await page.wait_for_timeout(300)
+    check(await page.evaluate("document.querySelector('#st-sheet').hidden"), "one tap on a saved text puts it on the picture and closes the list")
+    # drag a text onto the bin: it is removed
+    cnt = "document.querySelectorAll('#st-sel').length && (()=>{let n=0; return n})()"
+    b = await page.locator("#st-sel").bounding_box()
+    trash_y = await page.evaluate("(()=>{const r=document.querySelector('#st-wrap').getBoundingClientRect(); return r.bottom - 36})()")
+    trash_x = await page.evaluate("(()=>{const r=document.querySelector('#st-wrap').getBoundingClientRect(); return r.left + r.width/2})()")
+    await page.mouse.move(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2); await page.mouse.down()
+    await page.mouse.move(trash_x, trash_y - 40, steps=5); await page.mouse.move(trash_x, trash_y, steps=5)
+    shown = await page.evaluate("!document.querySelector('#st-trash').hidden && document.querySelector('#st-trash').classList.contains('hot')")
+    await page.mouse.up(); await page.wait_for_timeout(200)
+    check(shown and await page.evaluate("document.querySelector('#st-sel').hidden"), "dragging a text onto the bin removes it")
+    # the phone's back button closes the writing box first, then leaves Studio
+    await page.click("#st-add"); await page.wait_for_timeout(150)
+    await page.evaluate("history.back()"); await page.wait_for_timeout(400)
+    check(await page.evaluate("document.querySelector('#st-edit').hidden && !document.querySelector('#screen-studio').hidden"), "back closes the writing box first")
+    await page.evaluate("history.back()"); await page.wait_for_timeout(400)
+    await page.evaluate("history.back()"); await page.wait_for_timeout(400)
+    check(await page.evaluate("document.querySelector('#screen-studio').hidden"), "back then leaves Studio")
+    check(not errors, "no errors in the editor: " + "; ".join(errors[:3]))
+    await ctx.close()
+
 async def main():
     s = samples()
     async with async_playwright() as p:
         browser = await p.chromium.launch()
+        await editor_run(browser)
         await browser_run(browser, s)
         await android_run(browser, s)
         await browser.close()

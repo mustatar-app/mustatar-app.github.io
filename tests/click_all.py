@@ -60,7 +60,7 @@ async def run(p, lang):
         await pg.evaluate("""(s)=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());
           document.querySelectorAll('.px.in').forEach(()=>window.JundNav?.closeSheet());
           document.querySelectorAll('.wl, .pick-sheet, .pick-back').forEach(x=>x.remove()); document.body.classList.remove('vx-open');
-          if (window.JundDrawer?.close) JundDrawer.close();
+          if (window.JundDrawer?.close) JundDrawer.close(); for (let i = 0; i < 3; i++) window.JundStudio?.closeLayer?.();
           JN.show(s); window.scrollTo(0,0);}""", screen)
         await pg.keyboard.press("Escape")
         await pg.wait_for_timeout(80)

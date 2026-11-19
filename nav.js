@@ -123,6 +123,7 @@ function me() {
       ${row('shield', L('Account and privacy', 'الحساب والخصوصية'), '')}
       ${row('save', L('Saving and backup', 'الحفظ والنسخ الاحتياطي'), '')}
       ${row('send', L('Send feedback', 'أرسل ملاحظة'), '')}
+      ${row('review', L('Welcome tour', 'جولة الترحيب'), L('See the opening screen and first questions again', 'شاشة البداية والأسئلة الأولى من جديد'), '').replace('data-k="review"', 'data-k="tour"')}
     </div>
     <button type="button" class="link me-all" id="me-all">${L('All settings', 'كل الإعدادات')}</button>`;
   const on = (k, fn) => { const b = $(`[data-k="${k}"]`, sc); if (b) b.onclick = fn; };
@@ -145,6 +146,7 @@ function me() {
   on('shield', card('#acct-card'));
   on('save', card(cardTitled('Saving and backup')));
   on('send', card('#fb-card'));
+  on('tour', () => window.JundWelcome?.start(true));
   $('#me-all', sc).onclick = () => J.show('settings');
   const si = $('#me-signin', sc); if (si) si.onclick = card('#acct-card');
   window.JundRecs?.summary().then(s => { const e = $('#me-recs', sc); if (e && s.left.length) e.textContent = s.left.length; }).catch(() => {});

@@ -53,7 +53,7 @@ async def main():
         old = await ctx.new_page()
         old.on("pageerror", lambda e: errors.append("old: " + str(e)[:200]))
         await old.goto(OLD + "/", wait_until="load")
-        await old.evaluate("localStorage.setItem('jn_habits', JSON.stringify([{id:'h1', name:'Water 2.5 L'}])); localStorage.setItem('jn_welcomed', 'true')")
+        await old.evaluate("localStorage.setItem('jn_habits', JSON.stringify([{id:'h1', name:'Water 2.5 L'}])); localStorage.setItem('jn_welcomed', 'true'); localStorage.setItem('jn_opened', 'true')")
         await old.evaluate(f"""new Promise(r=>{{const q=indexedDB.open('jund-notes');q.onsuccess=()=>{{const t=q.result.transaction('lessons','readwrite');t.objectStore('lessons').put({json.dumps(LESSON)});t.oncomplete=()=>r(1)}}}})""")
         await old.reload(wait_until="load")
         await old.wait_for_timeout(1500)

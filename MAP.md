@@ -12,6 +12,8 @@ HTML, CSS and JavaScript with no build step, and it runs in any phone browser, p
 | The server (AI, reminders, reports) | Cloudflare Worker `jund-notes-ai` | `.github/workflows/deploy-server.yml` (config: `server/wrangler.toml`) |
 | Android app | `Mustatar.apk` on the GitHub releases page; app id `app.mustatar` | `.github/workflows/build-apk.yml` (signing key only in GitHub secrets) |
 | Automatic checks | GitHub Actions on every change | `.github/workflows/tests.yml` runs `tests/engine_test.mjs` and the `tests/*_test.py` files |
+| Every button | GitHub Actions when the app changes | `.github/workflows/click-all.yml` runs `tests/click_all.py`: every button on every screen, English and Arabic |
+| Live check | Started by hand | `.github/workflows/live-check.yml` runs `tests/live_check.py` on the real server and app: Google and passkey sign-in, assistant speed, app speed |
 
 The app finds its server through `server.json`, which the server workflow writes.
 

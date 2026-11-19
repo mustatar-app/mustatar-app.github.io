@@ -186,7 +186,7 @@ function render() {
   $('#screen-assistant')?.classList.toggle('talking', log.length > 0);
   renderHome();
   const box = $('#as-log'); if (!box) return;
-  box.innerHTML = log.length ? log.map((m, i) => m.who !== 'me' && m.working && busy ? `<div class="msg ai working" data-i="${i}"><details class="ws"><summary>${window.MustatarMark?.(22, true) || ''}<span class="ws-now"></span><span class="ws-chev">›</span></summary><div class="ws-body">${m.steps ? stepsHtml(m) : ''}</div></details></div>`
+  box.innerHTML = log.length ? log.map((m, i) => m.who !== 'me' && m.working && busy ? `<div class="msg ai working" data-i="${i}"><details class="ws"><summary>${window.MustatarMark?.(22, true) || ''}<span class="ws-now"></span><span class="ws-chev">›</span></summary><div class="ws-body">${m.steps ? stepsHtml(m) : ''}</div></details><div class="ws-live" dir="auto">${esc(m.live || '')}</div></div>`
     : `<div class="msg ${m.who === 'me' ? 'me' : 'ai'}" dir="auto" data-i="${i}">${m.who !== 'me' && m.steps?.length ? `<details class="ws ws-done"><summary><span class="ws-now">${m.steps.length} ${AR_() ? 'خطوات' : m.steps.length > 1 ? 'steps' : 'step'} · ${((m.ms || 0) / 1000).toFixed(1)}s${m.steps.some(x => x.state === 'fail') ? ' · ✗' : ''}</span><span class="ws-chev">›</span></summary><div class="ws-body">${stepsHtml(m)}</div></details>` : ''}${esc(m.text)}${m.done?.length ? `<div class="as-done">${m.done.map(d => `<div dir="auto">✓ ${esc(d)}</div>`).join('')}</div>` : ''}${lessonLinks(m)}${m.retryNotes && i === log.length - 1 ? `<div><button type="button" class="link as-notes-retry">${AR_() ? 'أعد المحاولة' : 'Retry notes'}</button></div>` : ''}</div>`).join('')
     : '';
   $$('[data-open]', box).forEach(b => b.onclick = async () => { const l = (await J.allLessons()).find(x => x.id === b.dataset.open); if (l) J.openLesson(l); });
@@ -239,18 +239,35 @@ const lessonText = l => {
   return `## ${l.subject?.name || ''} — ${n.title || l.unit} (id ${l.id}, ${l.date.slice(0, 10)})\n` +
     (n.sections || []).map(s => `### ${s.heading || ''}\n` + (s.blocks || []).map(b => [b.title, b.text, ...(b.items || []).map(i => typeof i === 'string' ? i : [i.title, i.text].filter(Boolean).join(': ')), ...(b.rows || []).map(r => (r || []).join(' | '))].filter(Boolean).join(' ')).join('\n')).join('\n');
 };
+// common words that say nothing about which lesson is meant (English and Arabic)
+const STOP = new Set(('the and for are but not you your yours with this that these those what when where which who whom why how have has had was were will would can could should '
+  + 'about from into onto than then them they their there here hey hello thanks thank please okay yes today tomorrow yesterday want need make tell give show help know '
+  + 'من في على إلى الى عن مع هذا هذه ذلك تلك التي الذي الذين ما ماذا متى أين اين كيف لماذا هل نعم لا أنا انا أنت انت هو هي نحن هم كان كانت يكون '
+  + 'اليوم غدا غدًا أمس السلام عليكم مرحبا شكرا شكرًا لو سمحت أريد اريد أبغى ابغى عندي عندك لي لك').split(/\s+/));
+// each lesson's words are worked out once, not on every message (a big library made every answer start slowly)
+const wordCache = new Map();
+function lessonWords(l) {
+  const key = l.id + '|' + (l.updated || l.date || '') + '|' + (l.notes?.title || '');
+  let w = wordCache.get(key);
+  if (!w) { w = words(lessonText(l)); wordCache.set(key, w); }
+  return w;
+}
 const words = t => new Set(String(t).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length > 2));
 async function context(q) {
   const now = new Date(), t = iso(now);
   const cal = window.JundCal?.events() || [];
-  const soon = cal.filter(e => e.repeat === 'weekly' || (e.date >= iso(new Date(now - 14 * 864e5)) && e.date <= iso(new Date(+now + 60 * 864e5))))
-    .map(e => `- id ${e.id} | ${e.date}${e.time ? ' ' + e.time : ''} | ${e.type}${e.repeat === 'weekly' ? ' | every week' : ''} | ${e.title}${e.repeat === 'weekly' ? '' : e.done ? ' | DONE' : ''}${e.notes ? ' | ' + e.notes.replace(/\n/g, ' ') : ''}`).join('\n');
+  // kept small on purpose: a short message must fit the fast AI (Groq reads about 8,000 tokens a minute), so it answers in a second or two
+  const soon = cal.filter(e => e.repeat === 'weekly' || (e.date >= iso(new Date(now - 7 * 864e5)) && e.date <= iso(new Date(+now + 30 * 864e5))))
+    .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 50)
+    .map(e => `- id ${e.id} | ${e.date}${e.time ? ' ' + e.time : ''} | ${e.type}${e.repeat === 'weekly' ? ' | every week' : ''} | ${e.title}${e.repeat === 'weekly' ? '' : e.done ? ' | DONE' : ''}${e.notes ? ' | ' + e.notes.replace(/\n/g, ' ').slice(0, 80) : ''}`).join('\n');
   const all = (await J.allLessons()).filter(l => !l.draft).sort((a, b) => b.date.localeCompare(a.date));
-  const qw = words(q);
-  const scored = all.map((l, i) => { const w = words(lessonText(l)); let s = 0; for (const x of qw) if (w.has(x)) s++; return { l, s: s + (i === 0 ? 0.5 : 0) }; })
-    .sort((a, b) => b.s - a.s).slice(0, 3).filter(x => x.s > 0);
-  let notes = '', budget = 24000;
-  for (const { l } of scored) { const tx = lessonText(l).slice(0, budget); budget -= tx.length; notes += tx + '\n\n'; if (budget < 1000) break; }
+  // lesson notes go in only when the message really is about them (two or more meaningful words match, or one when the message is short)
+  const qw = [...words(q)].filter(w => !STOP.has(w));
+  const need = qw.length <= 2 ? 1 : 2;
+  const scored = qw.length ? all.map(l => { const w = lessonWords(l); let s = 0; for (const x of qw) if (w.has(x)) s++; return { l, s }; })
+    .filter(x => x.s >= need).sort((a, b) => b.s - a.s).slice(0, 2) : [];
+  let notes = '', budget = 6000;
+  for (const { l } of scored) { const tx = lessonText(l).slice(0, budget); budget -= tx.length; notes += tx + '\n\n'; if (budget < 800) break; }
   const subs = (J.me().use === 'work' ? [] : (window.SUBJECTS || [])).map(s => `${s.name}${s.book ? ' (' + s.book + ')' : ''}${s.place ? ' — ' + s.place : ''}`).join('; ');
   const pt = window.JundFeatures?.timesFor(t);
   return `${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\nToday: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
@@ -260,7 +277,7 @@ CALENDAR (past 2 weeks to next 2 months, plus weekly items):
 ${soon || '(empty)'}
 
 ALL LESSONS (newest first):
-${all.slice(0, 80).map(l => `- id ${l.id} | ${l.date.slice(0, 10)} | ${l.subject?.name || ''} | ${l.notes?.title || l.unit}`).join('\n') || '(none yet)'}
+${all.slice(0, 25).map(l => `- id ${l.id} | ${l.date.slice(0, 10)} | ${l.subject?.name || ''} | ${l.notes?.title || l.unit}`).join('\n') || '(none yet)'}
 
 MOST RELEVANT LESSON NOTES:
 ${notes || '(none matched)'}`;
@@ -313,6 +330,20 @@ function paintWork(pend) {
   const cur = [...pend.steps].reverse().find(st => st.state === 'run') || pend.steps[pend.steps.length - 1];
   el.querySelector('.ws-now').textContent = cur ? cur.label + (cur.state === 'run' && cur.detail ? ' · ' + cur.detail : '') : '';
   const list = el.querySelector('.ws-body'); if (list) list.innerHTML = stepsHtml(pend);
+  const live = el.querySelector('.ws-live'); if (live && pend.live) { live.textContent = pend.live; live.scrollIntoView({ block: 'end' }); }
+}
+// the "reply" part of the AI's JSON answer, read while it is still arriving, so the words show as they are written
+function partialReply(x) {
+  const m = /"reply"\s*:\s*"/.exec(x); if (!m) return '';
+  let out = '';
+  for (let i = m.index + m[0].length; i < x.length; i++) {
+    const c = x[i];
+    if (c === '"') break;
+    if (c !== '\\') { out += c; continue; }
+    const n = x[++i]; if (n == null) break;
+    if (n === 'n') out += '\n'; else if (n === 't') out += '\t'; else if (n === 'u') { const h = x.slice(i + 1, i + 5); if (h.length < 4) break; out += String.fromCharCode(parseInt(h, 16)); i += 4; } else out += n;
+  }
+  return out;
 }
 
 function requestsNotes(text) {
@@ -444,7 +475,8 @@ async function send({ retryNotes = false } = {}) {
     st = S.start(ar ? 'قراءة تقويمك وملاحظاتك' : 'Reading your calendar and notes');
     const history = log.slice(-12, -2).map(m => `${m.who === 'me' ? 'Student' : 'You'}: ${m.text}`).join('\n');
     const ctx = await context(t);
-    S.ok(st, ar ? `${(window.JundCal?.events() || []).length} موعدًا، ${(await J.allLessons()).length} ملاحظات` : `${(window.JundCal?.events() || []).length} calendar items, ${(await J.allLessons()).length} notes`);
+    const nNotes = (await J.allLessons()).length, nCal = (window.JundCal?.events() || []).length;
+    S.ok(st, ar ? `${nCal} موعدًا، ${nNotes} ملاحظات` : `${nCal} calendar items, ${nNotes} notes`);
     const user = `${ctx}\n\nRECENT CHAT:\n${history || '(start)'}\n\nThe student now says: ${t}`;
     let r;
     if (att) {
@@ -453,9 +485,9 @@ async function send({ retryNotes = false } = {}) {
         signal: AbortSignal.timeout(180000),
         onText: x => S.note(st, ar ? `يكتب… ${x.length} حرفًا` : `writing… ${x.length} characters`) });
     } else {
-      st = S.start(ar ? 'التفكير والكتابة' : 'Thinking and writing');
-      r = await J.callServer({ system: SYSTEM(), user, assistant: true, maxTokens: 8000, signal: AbortSignal.timeout(90000),
-        onText: x => S.note(st, ar ? `${x.length} حرفًا` : `${x.length} characters`) });
+      st = S.start(ar ? 'يكتب' : 'Writing');
+      r = await J.callServer({ system: SYSTEM(), user, assistant: true, maxTokens: 2500, signal: AbortSignal.timeout(90000),
+        onText: x => { const live = partialReply(x); if (live && live !== pend.live) { pend.live = live; paintWork(pend); } } });
     }
     if (r.stop !== 'STOP') throw Object.assign(new Error(ar ? 'لم يكتمل الرد. أعد المحاولة.' : 'The response was interrupted. Try sending it again.'), { code: 'ai_busy' });
     const out = JSON.parse(r.text);
@@ -478,6 +510,8 @@ async function send({ retryNotes = false } = {}) {
     if (!$('#as-text').value) $('#as-text').value = t;
   } finally {
     pend.working = false; pend.ms = Date.now() - pend.t0;
+    // a slow answer is noted for the owner's report, with where the time went
+    if (pend.ms > 6000) window.JundReport?.event('slow:assistant', { ms: pend.ms, steps: (pend.steps || []).map(x => `${x.label} ${x.ms || 0}ms`).join(' · ') });
     busy = false; $('#as-send').disabled = false;
     persist(); render();
   }

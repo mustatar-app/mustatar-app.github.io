@@ -231,7 +231,9 @@ async function backupData() {
     if (!SKIP_KEY.test(name)) data[name] = localStorage.getItem(k);
   }
   const keep = window.JundKeep ? (await window.JundKeep.all()).filter(n => !n.trashed) : [];
-  return { app: 'jund-notes', version: 3, saved: new Date().toISOString(), families: store.get('families', {}), lessons, keep,
+  const wanted = new Set(keep.flatMap(n => (n.images || []).map(i => i.id)));
+  const keepImages = window.JundKeep ? (await window.JundKeep.allImg().catch(() => [])).filter(x => wanted.has(x.id)) : [];
+  return { app: 'jund-notes', version: 3, saved: new Date().toISOString(), families: store.get('families', {}), lessons, keep, keepImages,
     events: store.get('events', []), studio: store.get('studioSaved', []), data };
 }
 async function backup() {
@@ -245,7 +247,8 @@ async function restore(j) {
   if (!isBackup(j)) throw new Error(t('This is not a backup file from the app.', 'هذا ليس ملف نسخة احتياطية من التطبيق.'));
   let n = 0;
   for (const l of j.lessons || []) { if (l && l.id && l.notes) { await J.saveLesson(l); n++; } }
-  if (Array.isArray(j.keep) && window.JundKeep) n += await window.JundKeep.addMany(j.keep.filter(x => x && x.id));
+  if (Array.isArray(j.keepImages) && window.JundKeep) for (const x of j.keepImages) if (x?.id && /^data:image\//.test(x.data || '')) await window.JundKeep.putImg(x);
+  if (Array.isArray(j.keep) && window.JundKeep) n += await window.JundKeep.addMany(j.keep.filter(x => x && x.id).map(x => { const { share, ...rest } = x; return rest; }));
   if (j.families) store.set('families', { ...j.families, ...store.get('families', {}) });
   if (Array.isArray(j.events)) window.JundCal?.merge?.(j.events);
   if (Array.isArray(j.studio)) { const have = store.get('studioSaved', []); store.set('studioSaved', [...have, ...j.studio.filter(x => !have.some(h => h.id === x.id))]); }

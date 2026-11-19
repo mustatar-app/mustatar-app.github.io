@@ -1309,3 +1309,12 @@ body.nav2 .topbar .bar-right { margin-inline-start: auto; }
 /* the assistant's words while they are still being written */
 .msg.ai.working .ws-live:empty { display: none; }
 .msg.ai.working .ws-live { white-space: pre-wrap; line-height: 1.6; margin-top: 6px; }
+
+/* a new version: a small dot on Me and a quiet line at the top of Me (no pop-up) */
+body.has-update .tabbar [data-nav="me"] { position: relative; }
+body.has-update .tabbar [data-nav="me"]::after { content: ''; position: absolute; top: 8px; inset-inline-end: calc(50% - 16px); width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--bg); }
+.me-upd { display: flex; align-items: center; gap: 10px; width: 100%; margin: 12px 0 0; padding: 10px 14px; min-height: 46px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: .88rem; text-align: start; }
+.me-upd span:nth-child(2) { flex: 1; }
+.me-upd b { color: var(--gold); font-weight: 600; }
+.me-upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: none; }
+.update-bar { display: none !important; }

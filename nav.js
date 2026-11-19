@@ -98,6 +98,7 @@ function me() {
     <div class="me-head"><span class="me-av">${esc(String(name).trim().charAt(0).toUpperCase() || '·')}</span>
       <span class="me-who"><b dir="auto">${esc(name)}</b><small>${inn ? esc(u.email || L('Signed in', 'مسجّل الدخول')) + ' · ' + L('synced', 'متزامن') : L('Not signed in — your notes are on this phone only', 'لم تسجّل الدخول — ملاحظاتك على هذا الهاتف فقط')}</small></span>
       ${inn ? '' : `<button type="button" class="primary small" id="me-signin">${L('Sign in', 'تسجيل الدخول')}</button>`}</div>
+    ${window.JundUpdate?.ready() ? `<button type="button" class="me-upd" id="me-upd"><span class="me-upd-dot"></span><span>${L('A new version is ready', 'نسخة جديدة جاهزة')}</span><b>${L('Restart', 'إعادة التشغيل')}</b></button>` : ''}
     <div id="me-plan"></div>
     <div class="mx-h">${L('Growth', 'النموّ')}</div>
     <div class="mx-group">
@@ -148,6 +149,7 @@ function me() {
   on('send', card('#fb-card'));
   on('tour', () => window.JundWelcome?.start(true));
   $('#me-all', sc).onclick = () => J.show('settings');
+  const up = $('#me-upd', sc); if (up) up.onclick = () => window.JundUpdate.apply();
   const si = $('#me-signin', sc); if (si) si.onclick = card('#acct-card');
   window.JundRecs?.summary().then(s => { const e = $('#me-recs', sc); if (e && s.left.length) e.textContent = s.left.length; }).catch(() => {});
   window.JundPending?.count().then(n => { const e = $('#me-left', sc); if (e && n) e.textContent = n; }).catch(() => {});

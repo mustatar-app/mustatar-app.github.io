@@ -3177,14 +3177,26 @@ if ('serviceWorker' in navigator) {
     || document.querySelector('.vx:not([hidden]), .wl, .msg.ai.working, dialog[open], .px.in'));
   const typing = () => !!(($('#as-text')?.value || '').trim() || document.activeElement?.matches?.('input:not([type=checkbox]), textarea, [contenteditable="true"]'));
   const applyUpdate = () => { if (reloaded) return; reloaded = true; try { sessionStorage.setItem('jn_updated', '1'); sessionStorage.setItem('jn_draft', $('#as-text')?.value || ''); } catch {} location.reload(); };
+  const hadVersion = !!navigator.serviceWorker.controller;   // the very first visit is not an update
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded || waiting) return;
+    if (reloaded || waiting || !hadVersion) return;
     if (!working() && !typing()) return applyUpdate();
+    // busy right now: no pop-up; a small dot on Me and a quiet line there, and it updates by itself at the next calm moment
     waiting = true;
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'update-bar'; b.textContent = window.ZadLang === 'ar' ? 'نسخة جديدة جاهزة — اضغط للتحديث' : 'A new version is ready — tap to update';
-    b.onclick = applyUpdate; document.body.appendChild(b);
+    document.body.classList.add('has-update');
+    if (!$('#screen-me')?.hidden) window.JundNav?.me();
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden && waiting && !working()) applyUpdate(); });
+  // moving to another screen from the bottom bar is a calm moment: update, then open that screen
+  document.querySelector('.tabbar')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-nav]');
+    if (!b || !waiting || working()) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    try { sessionStorage.setItem('jn_goto', b.dataset.nav); } catch {}
+    applyUpdate();
+  }, true);
+  window.JundUpdate = { ready: () => waiting, apply: applyUpdate };
+  try { const g = sessionStorage.getItem('jn_goto'); sessionStorage.removeItem('jn_goto'); if (g && SCREENS.includes(g)) setTimeout(() => show(g), 50); } catch {}
   // after updating by itself: a short note, once
   try { const d = sessionStorage.getItem('jn_draft'); sessionStorage.removeItem('jn_draft'); if (d) setTimeout(() => { const t = $('#as-text'); if (t && !t.value) t.value = d; }, 1200); if (sessionStorage.getItem('jn_updated')) { sessionStorage.removeItem('jn_updated'); setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم تحديث مستطر' : '✓ Mustatar is up to date'), 900); } } catch {}
 }

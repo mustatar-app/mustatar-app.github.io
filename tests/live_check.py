@@ -85,7 +85,7 @@ async def app_speed():
     async with async_playwright() as p:
         b = await p.chromium.launch()
         c = await b.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
-        await c.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');")
+        await c.add_init_script("localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');localStorage.setItem('jn_plan', JSON.stringify('test'));")
         pg = await c.new_page()
         errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
         t = time.time(); await pg.goto(APP, wait_until="domcontentloaded"); dcl = time.time() - t
@@ -98,6 +98,22 @@ async def app_speed():
             t = time.time(); await pg.click(f'.tabbar [data-nav="{name}"]'); await pg.wait_for_selector(f"#screen-{name}:not([hidden])"); print(f"  switch to {name}: {(time.time()-t)*1000:.0f} ms")
         say(not errs, "the live app opens without errors " + "; ".join(errs[:3]))
         say(ready < 6, f"the live app is usable quickly ({ready:.1f} s)")
+        # the real assistant in the real app: type "hey there" and time the answer, like a person would
+        for msg in ["hey there", "what do I have today?"]:
+            await pg.evaluate("JN.show('assistant')")
+            await pg.fill("#as-text", msg)
+            n0 = await pg.evaluate("document.querySelectorAll('#as-log .msg.ai').length")
+            t = time.time(); await pg.click("#as-send")
+            first = None
+            for _ in range(600):
+                live = await pg.evaluate("(()=>{const w=document.querySelector('#as-log .msg.ai.working .ws-live'); return w ? w.textContent.length : 0})()")
+                if live and first is None: first = time.time() - t
+                done = await pg.evaluate(f"(()=>{{const m=[...document.querySelectorAll('#as-log .msg.ai')]; return m.length>{n0} && !m[m.length-1].classList.contains('working') ? m[m.length-1].innerText.slice(0,120) : ''}})()")
+                if done: break
+                await pg.wait_for_timeout(100)
+            total = time.time() - t
+            print(f"  in the app, '{msg}': first words {first or total:.1f} s, whole answer {total:.1f} s → {done!r}")
+            say(bool(done) and not done.startswith('✗') and total < 8, f"the app's assistant answers '{msg}' quickly ({total:.1f} s)")
         # the opening screen a new phone sees: Google button, passkey button, continue without an account
         c2 = await b.new_context(viewport={"width": 412, "height": 915}, is_mobile=True, has_touch=True, service_workers="block")
         pg2 = await c2.new_page(); logs = []

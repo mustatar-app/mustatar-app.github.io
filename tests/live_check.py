@@ -41,6 +41,26 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     say(False, f"Google sign-in endpoint answers ({e})")
 
+# 1b. sharing a note with a friend is running (a made-up link opens nothing; sharing needs sign-in)
+try: has_share = bool(json.loads(req("/").read()).get("share"))
+except Exception: has_share = False
+if not has_share: print("NOTE the live server does not have sharing yet (it arrives when this update is deployed)")
+else:
+  try:
+    req("/share/AAAAAAAAAAAAAAAAAAAAAAAA")
+    say(False, "a made-up shared-note link opens nothing (it opened!)")
+  except urllib.error.HTTPError as e:
+    say(e.code == 404, f"sharing notes is running on the server (a made-up link: HTTP {e.code})")
+  except Exception as e:
+    say(False, f"sharing notes answers ({e})")
+  try:
+    req("/share", {"note": {"title": "x", "text": "y"}})
+    say(False, "sharing without sign-in is refused (it was accepted!)")
+  except urllib.error.HTTPError as e:
+    say(e.code == 401, f"sharing without sign-in is refused (HTTP {e.code})")
+  except Exception as e:
+    say(False, f"sharing answers ({e})")
+
 # 2. the assistant: time to the first words and to the end
 src = open(os.path.join(HERE, "..", "assistant.js"), encoding="utf-8").read()
 SYSTEM = re.sub(r"\$\{[^}]*\}", "", src.split("const SYSTEM = () => `", 1)[1].split("`;", 1)[0])

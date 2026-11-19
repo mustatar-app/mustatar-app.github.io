@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>A note from Mustatar</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  /* the page a friend opens from "Share with a friend": the note, its photos, and "Save to my notes" */
+  :root { --bg: #f3f5fa; --surface: #fff; --ink: #0e1a33; --ink-2: #55627d; --line: #d8dfec; --accent: #1f5fd6;
+    --kc-coral:#faafa8; --kc-peach:#f39f76; --kc-sand:#fff8b8; --kc-mint:#e2f6d3; --kc-sage:#b4ddd3; --kc-fog:#d4e4ed; --kc-storm:#aeccdc; --kc-dusk:#d3bfdb; --kc-blossom:#f6e2dd; --kc-clay:#e9e3d4; --kc-chalk:#efeff1; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0a1222; --surface: #101b30; --ink: #e8edf6; --ink-2: #93a3c0; --line: #22334f; --accent: #4a86ff;
+    --kc-coral:#77172e; --kc-peach:#692b17; --kc-sand:#7c4a03; --kc-mint:#264d3b; --kc-sage:#0c625d; --kc-fog:#256377; --kc-storm:#284255; --kc-dusk:#472e5b; --kc-blossom:#6c394f; --kc-clay:#4b443a; --kc-chalk:#232427; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", "IBM Plex Sans Arabic", Tahoma, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 120px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: .9rem; margin-bottom: 14px; }
+  .brand img { width: 28px; height: 28px; border-radius: 8px; }
+  .card { background: var(--kc, var(--surface)); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .card[data-c]:not([data-c=""]) { border-color: transparent; }
+  h1 { font-size: 1.35rem; margin: 0 0 10px; }
+  .imgs { display: grid; gap: 6px; margin: -6px -6px 14px; } .imgs.n2 { grid-template-columns: 1fr 1fr; } .imgs.n3 { grid-template-columns: 1fr 1fr 1fr; }
+  .imgs img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: block; max-height: 420px; }
+  .text { white-space: pre-wrap; word-wrap: break-word; }
+  ul { list-style: none; padding: 0; margin: 0; } li { display: flex; gap: 10px; padding: 4px 0; } li.done span { text-decoration: line-through; color: var(--ink-2); }
+  .box { flex: none; width: 18px; height: 18px; border: 2px solid var(--ink-2); border-radius: 4px; margin-top: 4px; display: grid; place-items: center; font-size: 12px; }
+  .labels { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; } .labels span { font-size: .78rem; padding: 2px 10px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
+  .meta { color: var(--ink-2); font-size: .82rem; margin-top: 12px; }
+  .bar { position: fixed; inset-inline: 0; bottom: 0; padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); display: flex; gap: 10px; justify-content: center; border-top: 1px solid var(--line); }
+  button, a.btn { font: inherit; border-radius: 22px; padding: 11px 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer; }
+  .primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+  .msg { text-align: center; padding: 60px 10px; color: var(--ink-2); }
+  .spin { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 12px; animation: s 0.8s linear infinite; } @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="icon-192.png" alt=""><span id="from"></span></div>
+  <div id="note"><div class="msg"><div class="spin"></div><span id="loading"></span></div></div>
+</main>
+<div class="bar" id="bar" hidden><button type="button" class="primary" id="save"></button><a class="btn" id="open" href="./"></a></div>
+<script>
+(() => {
+  // the language chosen in Mustatar on this phone, if the friend has it; otherwise the phone's language
+  let ui = ''; try { ui = JSON.parse(localStorage.getItem('jn_uiLang') || '""') || ''; } catch {}
+  const AR = ui ? ui === 'ar' : /^ar/i.test(navigator.language || '');
+  const t = (en, ar) => AR ? ar : en;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  // **bold** and plain web links, nothing else
+  const rich = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener nofollow">$1</a>');
+  const ARABIC = s => /[؀-ۿ]/.test(s || '');
+  document.documentElement.lang = AR ? 'ar' : 'en'; document.documentElement.dir = AR ? 'rtl' : 'ltr';
+  $('#loading').textContent = t('Opening the note…', 'تُفتح الملاحظة…');
+  $('#from').textContent = t('A note shared with you from Mustatar', 'ملاحظة شاركها معك أحدهم من مستطر');
+  $('#save').textContent = t('Save to my notes', 'احفظها في ملاحظاتي');
+  $('#open').textContent = t('Open Mustatar', 'افتح مستطر');
+  const id = new URLSearchParams(location.search).get('id') || '';
+  let note = null;
+  async function server() {
+    try { return (await (await fetch('server.json', { cache: 'no-cache' })).json()).url.replace(/\/$/, ''); }
+    catch { try { return JSON.parse(localStorage.getItem('jn_serverUrl')) || ''; } catch { return ''; } }
+  }
+  function show(n, updated) {
+    note = n;
+    const one = [n.title, n.text, ...(n.items || []).map(i => i.t)].join(' ');
+    const dir = ARABIC(one) ? 'rtl' : 'ltr';
+    const imgs = n.images || [];
+    $('#note').innerHTML = `<article class="card" data-c="${esc(n.color || '')}" style="${n.color ? `--kc: var(--kc-${esc(n.color)})` : ''}" dir="${dir}">
+      ${imgs.length ? `<div class="imgs n${Math.min(imgs.length, 3)}">${imgs.map(i => `<img alt="" src="${esc(i.data)}">`).join('')}</div>` : ''}
+      ${n.title ? `<h1>${esc(n.title)}</h1>` : ''}
+      ${n.items ? `<ul>${n.items.map(i => `<li class="${i.done ? 'done' : ''}"><span class="box">${i.done ? '✓' : ''}</span><span>${rich(i.t)}</span></li>`).join('')}</ul>` : ''}
+      ${n.text ? `<div class="text">${rich(n.text)}</div>` : ''}
+      ${(n.labels || []).length ? `<div class="labels">${n.labels.map(l => `<span>${esc(l)}</span>`).join('')}</div>` : ''}
+    </article>
+    <p class="meta">${n.by ? esc(t('Shared by ', 'شاركها ') + n.by) + ' · ' : ''}${esc(t('Updated ', 'آخر تحديث ') + new Date(updated).toLocaleString(AR ? 'ar-SA-u-ca-gregory' : 'en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}</p>`;
+    document.title = (n.title || t('A note', 'ملاحظة')) + ' · Mustatar';
+    $('#bar').hidden = false;
+  }
+  // "Save to my notes": straight into this phone's My notes (the same place the app keeps them)
+  function db() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('mustatar-keep', 2);
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains('notes')) d.createObjectStore('notes', { keyPath: 'id' }); if (!d.objectStoreNames.contains('images')) d.createObjectStore('images', { keyPath: 'id' }); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  }
+  $('#save').onclick = async () => {
+    if (!note) return;
+    const b = $('#save'); b.disabled = true;
+    try {
+      const d = await db(), now = Date.now(), nid = 'S' + now.toString(36) + Math.random().toString(36).slice(2, 6);
+      const images = (note.images || []).map((im, i) => ({ id: 'P' + now.toString(36) + i + Math.random().toString(36).slice(2, 5), data: im.data, w: im.w, h: im.h, note: nid, updated: now }));
+      await new Promise((res, rej) => {
+        const x = d.transaction(['notes', 'images'], 'readwrite');
+        images.forEach(im => x.objectStore('images').put(im));
+        x.objectStore('notes').put({ id: nid, title: note.title || '', text: note.text || '', items: note.items || null, color: note.color || '', labels: note.labels || [], pinned: false,
+          images: images.map(i => ({ id: i.id, w: i.w, h: i.h })), from: t('Shared by ', 'من ') + (note.by || t('a friend', 'صديق')), fromShare: id, created: now, updated: now });
+        x.oncomplete = res; x.onerror = () => rej(x.error);
+      });
+      try { localStorage.setItem('jn_libSeg', JSON.stringify('keep')); } catch {}
+      b.textContent = t('✓ Saved in My notes', '✓ حُفظت في ملاحظاتي');
+      $('#open').classList.add('primary'); $('#open').textContent = t('Open My notes', 'افتح ملاحظاتي');
+    } catch (e) { b.disabled = false; b.textContent = t('Could not save. Try again.', 'تعذّر الحفظ. حاول مرة أخرى.'); }
+  };
+  (async () => {
+    const base = await server();
+    try {
+      if (!/^[A-Za-z0-9_-]{20,40}$/.test(id) || !base) throw Object.assign(new Error(), { gone: true });
+      const r = await fetch(base + '/share/' + id, { cache: 'no-store' });
+      if (r.status === 404) throw Object.assign(new Error(), { gone: true });
+      if (!r.ok) throw new Error();
+      const j = await r.json();
+      show(j.note, j.updated);
+    } catch (e) {
+      $('#note').innerHTML = `<div class="msg"><b>${e.gone ? t('This note is no longer shared.', 'لم تعد هذه الملاحظة مشاركة.') : t('Could not open the note. Check the internet and try again.', 'تعذّر فتح الملاحظة. تأكد من الإنترنت وحاول مرة أخرى.')}</b></div>`;
+    }
+  })();
+})();
+</script>
+</body>
+</html>

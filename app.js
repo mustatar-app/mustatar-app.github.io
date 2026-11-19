@@ -192,6 +192,7 @@ const space = (() => {
           if (!p.deleted) {
             if (p.kind === 'lesson') { const l = await idb.get(id.slice(7)).catch(() => null); if (!l) { p.deleted = true; } else data = JSON.stringify(l); }
             else if (p.kind === 'keep') { const n = await window.JundKeep?.raw(id.slice(5)); if (!n) p.deleted = true; else data = JSON.stringify(n); }
+            else if (p.kind === 'kimg') { const r = await window.JundKeep?.img(id.slice(5)).catch(() => null); if (!r) p.deleted = true; else data = JSON.stringify({ data: r.data, w: r.w, h: r.h, note: r.note }); }
             else data = JSON.stringify(store.get('mstData:' + id.slice(5), null));
           }
           if (data && new TextEncoder().encode(data).length > MAX_ITEM) { delete m[id]; setStatus('⚠ One lesson is too big to save to your space; it stays on this phone.'); continue; }
@@ -230,6 +231,8 @@ const space = (() => {
             const id = it.id.slice(7);
             if (it.deleted) await idb.del(id).catch(() => {}); else await idb.put(JSON.parse(it.data));
             changed++;
+          } else if (it.kind === 'kimg') {
+            await window.JundKeep?.imgFromCloud(it.id.slice(5), it.deleted ? null : JSON.parse(it.data)); changed++;
           } else if (it.kind === 'keep') {
             const k = it.id.slice(5), v = it.deleted ? null : JSON.parse(it.data);
             if (window.JundKeep) await window.JundKeep.fromCloud(k, v); else (window.__keepIn ||= []).push({ id: k, note: v });
@@ -255,6 +258,7 @@ const space = (() => {
     const m = pending(), now = Date.now();
     for (const l of await idb.all().catch(() => [])) if (!seen.has('lesson:' + l.id)) m['lesson:' + l.id] = { kind: 'lesson', updated: now };
     for (const n of (await window.JundKeep?.raw()) || []) if (!seen.has('keep:' + n.id)) m['keep:' + n.id] = { kind: 'keep', updated: now };
+    for (const x of (await window.JundKeep?.allImg().catch(() => [])) || []) if (!seen.has('kimg:' + x.id)) m['kimg:' + x.id] = { kind: 'kimg', updated: now };
     const snap = {
       calendar: { saved: store.get('eventsSaved', now), events: store.get('events', []) },
       habits: { saved: now, habits: store.get('habits', []) }, hifz: { saved: now, hifz: store.get('hifz', []) },
@@ -274,6 +278,7 @@ const space = (() => {
     push(l) { if (tok()) mark('lesson:' + l.id, 'lesson'); },
     remove(id) { if (tok()) mark('lesson:' + id, 'lesson', true); },
     keep(id, deleted = false) { if (tok()) mark('keep:' + id, 'keep', deleted); },
+    keepImg(id, deleted = false) { if (tok()) mark('kimg:' + id, 'kimg', deleted); },
     async putData(name, obj) { if (!tok()) return; store.set('mstData:' + name, obj); mark('data:' + name, 'data'); },
     async getData(name) {
       if (!tok()) return null;
@@ -288,7 +293,8 @@ const cloud = {
   on: () => space.on() || ghCloud.on(),
   push: l => space.on() ? space.push(l) : ghCloud.push(l),
   remove: id => space.on() ? space.remove(id) : ghCloud.remove(id),
-  keep: (id, deleted) => space.on() && space.keep(id, deleted),   // My notes: one item per note in your private space
+  keep: (id, deleted) => space.on() && space.keep(id, deleted),
+  keepImg: (id, deleted) => space.on() && space.keepImg(id, deleted),   // a photo in My notes: its own item (each under 1 MB)   // My notes: one item per note in your private space
   pull: () => space.on() ? space.pull() : ghCloud.pull(),
   test: () => ghCloud.test(),
   status: () => space.on() ? space.status() : ghCloud.status(),

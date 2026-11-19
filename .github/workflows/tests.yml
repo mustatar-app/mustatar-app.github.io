@@ -60,6 +60,8 @@ jobs:
           for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8787/ && break; sleep 2; done
           python3 tests/space_test.py http://localhost:8765/ http://127.0.0.1:8787 || { tail -40 /tmp/server.log; exit 1; }
           python3 tests/sync_test.py http://localhost:8765/ http://127.0.0.1:8787 || { tail -40 /tmp/server.log; exit 1; }
+          pip install -q pillow
+          python3 tests/share_test.py http://localhost:8765/ http://127.0.0.1:8787 || { tail -40 /tmp/server.log; exit 1; }
       - name: The server's AI routes work (pretend Groq, server on this machine)
         run: |
           (cd server && npx --yes wrangler@4 dev -c wrangler.test.toml --port 8788 --ip 127.0.0.1 --persist-to /tmp/ai-state \

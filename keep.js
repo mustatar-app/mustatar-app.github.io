@@ -17,12 +17,13 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const DB = (() => {
   let p;
   const open = () => p ||= new Promise((res, rej) => {
-    const r = indexedDB.open('mustatar-keep', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('notes', { keyPath: 'id' });
+    const r = indexedDB.open('mustatar-keep', 2);
+    r.onupgradeneeded = () => { const db = r.result; if (!db.objectStoreNames.contains('notes')) db.createObjectStore('notes', { keyPath: 'id' }); if (!db.objectStoreNames.contains('images')) db.createObjectStore('images', { keyPath: 'id' }); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   });
-  const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const x = db.transaction('notes', mode), out = fn(x.objectStore('notes')); x.oncomplete = () => res(out && 'result' in out ? out.result : out); x.onerror = () => rej(x.error); }); };
-  return { all: () => tx('readonly', s => s.getAll()), put: n => tx('readwrite', s => { s.put(n); }), many: l => tx('readwrite', s => { l.forEach(n => s.put(n)); }), del: id => tx('readwrite', s => { s.delete(id); }) };
+  const tx = async (mode, fn, st = 'notes') => { const db = await open(); return new Promise((res, rej) => { const x = db.transaction(st, mode), out = fn(x.objectStore(st)); x.oncomplete = () => res(out && 'result' in out ? out.result : out); x.onerror = () => rej(x.error); }); };
+  return { all: () => tx('readonly', s => s.getAll()), put: n => tx('readwrite', s => { s.put(n); }), many: l => tx('readwrite', s => { l.forEach(n => s.put(n)); }), del: id => tx('readwrite', s => { s.delete(id); }),
+    img: id => tx('readonly', s => s.get(id), 'images'), putImg: x => tx('readwrite', s => { s.put(x); }, 'images'), delImg: id => tx('readwrite', s => { s.delete(id); }, 'images'), allImg: () => tx('readonly', s => s.getAll(), 'images') };
 })();
 let notes = null;
 async function load() {
@@ -31,6 +32,8 @@ async function load() {
   // notes that came down from your space before this file was ready
   for (const x of window.__keepIn || []) await fromCloud(x.id, x.note, true);
   window.__keepIn = [];
+  // notes saved from a friend's link (note.html) also go to your private space
+  for (const n of notes.filter(x => x.fromShare && !x.synced)) { n.synced = 1; await DB.put(n); J.cloud.keep?.(n.id); (n.images || []).forEach(im => J.cloud.keepImg?.(im.id)); }
   // the bin empties itself after 7 days
   const old = notes.filter(n => n.trashed && Date.now() - n.trashed > 7 * 864e5);
   for (const n of old) await remove(n.id, true);
@@ -51,7 +54,11 @@ async function save(n, { sync = true, quiet = false } = {}) {
 async function remove(id, forever = true) {
   await load();
   if (!forever) { const n = notes.find(x => x.id === id); if (n) { n.trashed = Date.now(); n.pinned = false; await save(n); } return; }
-  notes = notes.filter(x => x.id !== id); await DB.del(id); J.cloud.keep?.(id, true); paintSoon();
+  const gone = notes.find(x => x.id === id);
+  notes = notes.filter(x => x.id !== id); await DB.del(id); J.cloud.keep?.(id, true);
+  for (const im of gone?.images || []) { await DB.delImg(im.id).catch(() => {}); J.cloud.keepImg?.(im.id, true); }
+  if (gone?.share?.id) unshare(gone, true).catch(() => {});
+  paintSoon();
 }
 // from your private space (another phone): the newest change wins
 async function fromCloud(id, note, inLoad = false) {
@@ -96,6 +103,10 @@ const IC = {
   expand: '<path d="M4 6h10M4 12h16M4 18h12M18 3v6M15 6h6"/>',
   post: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 14h8M8 10h5"/>',
   check: '<path d="M5 12.5l4 4 10-10"/>',
+  photo: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/>',
+  people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0M16 4.5a3 3 0 0 1 0 6M18 19a6 6 0 0 0-2.5-4.9"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.5 6.8M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5"/>',
+  text: '<path d="M4 6V4h16v2M12 4v16M9 20h6"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
   rows: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/>',
@@ -174,6 +185,7 @@ async function paint() {
   const eb = $('#kp-empty-bin'); if (eb) eb.onclick = async () => { for (const n of notes.filter(x => x.trashed)) await remove(n.id, true); };
   const br = $('#kp-bring'); if (br) br.onclick = () => window.JundImport?.open();
   $$('.kp-card', grid).forEach(wire);
+  fillImgs(grid);
   selBar();
 }
 function card(n) {
@@ -181,8 +193,11 @@ function card(n) {
   const body = items
     ? `<ul class="kp-items${n.title ? '' : ' kp-first'}">${open.slice(0, 8).map(i => `<li dir="auto"><span class="kp-box"></span>${esc(i.t)}</li>`).join('')}${done.length ? `<li class="kp-more">${t(`+ ${done.length} ticked`, `+ ${num(done.length)} منجزة`)}</li>` : ''}${open.length > 8 ? `<li class="kp-more">…</li>` : ''}</ul>`
     : n.text ? `<div class="kp-body${n.title ? '' : ' kp-first'}" dir="auto">${esc(String(n.text).slice(0, 600))}</div>` : '';
-  return `<article class="kp-card${selected.has(n.id) ? ' sel' : ''}" data-id="${esc(n.id)}" data-c="${esc(n.color || '')}" tabindex="0" role="button" aria-label="${esc(n.title || plain(n).slice(0, 40) || t('Note', 'ملاحظة'))}">
+  const im = (n.images || [])[0];
+  return `<article class="kp-card${selected.has(n.id) ? ' sel' : ''}${im ? ' has-img' : ''}" data-id="${esc(n.id)}" data-c="${esc(n.color || '')}" tabindex="0" role="button" aria-label="${esc(n.title || plain(n).slice(0, 40) || t('Note', 'ملاحظة'))}">
     <span class="kp-chk" aria-hidden="true">${I(IC.check, 14)}</span>
+    ${im ? `<div class="kp-cimg" style="aspect-ratio:${Math.max(0.6, Math.min(1.8, (im.w || 4) / (im.h || 3)))}"><img alt="" data-img="${esc(im.id)}">${n.images.length > 1 ? `<span class="kp-imgn">+${num(n.images.length - 1)}</span>` : ''}</div>` : ''}
+    ${n.share?.id ? `<span class="kp-shared" title="${t('Shared', 'مشاركة')}">${I(IC.people, 14)}</span>` : ''}
     ${n.pinned ? `<span class="kp-pinned">${I(IC.pin, 14)}</span>` : ''}
     ${n.title ? `<b class="kp-t" dir="auto">${esc(n.title)}</b>` : ''}${body}
     ${(n.labels || []).length || n.ai || n.remind ? `<div class="kp-lbls">${n.remind && new Date(`${n.remind.date}T${n.remind.time || '09:00'}`) > new Date() ? `<span>${I(IC.bell, 11)} ${esc(whenText(n.remind))}</span>` : ''}${(n.labels || []).slice(0, 3).map(l => `<span dir="auto">${esc(l)}</span>`).join('')}${n.ai ? `<span class="kp-aitag">✦ ${t('AI', 'ذكاء')}</span>` : ''}</div>` : ''}
@@ -315,6 +330,7 @@ async function edit(id, opts = {}) {
       <button type="button" class="kp-ib" id="kp-ed-arch" aria-label="${cur.archived ? t('Unarchive', 'إلغاء الأرشفة') : t('Archive', 'أرشفة')}">${I(cur.archived ? IC.unarchive : IC.archive)}</button>`}
       <button type="button" class="kp-ib" id="kp-ed-more" aria-label="${t('More', 'المزيد')}">${I(IC.more)}</button></div>
     <div class="kp-ed-body">
+      <div class="kp-eimgs" id="kp-eimgs"></div>
       ${inBin ? `<p class="kp-binnote">${t('This note is in the bin.', 'هذه الملاحظة في المحذوفات.')} <button type="button" class="link" id="kp-ed-restore">${t('Restore', 'استرجاع')}</button></p>` : ''}
       <input class="kp-title" id="kp-title" dir="auto" placeholder="${t('Title', 'العنوان')}" maxlength="200" value="${esc(cur.title || '')}">
       <div id="kp-content"></div>
@@ -323,11 +339,11 @@ async function edit(id, opts = {}) {
     </div>
     <div class="kp-rec" id="kp-rec" hidden><span class="kp-dotrec"></span><span id="kp-rec-t">0:00</span><span class="kp-sp"></span><button type="button" class="ghost small" id="kp-rec-x">${t('Cancel', 'إلغاء')}</button><button type="button" class="primary small" id="kp-rec-stop">${t('Done', 'تم')}</button></div>
     <div class="kp-ed-bot">
+      <button type="button" class="kp-ib kp-addb" id="kp-ed-add" aria-label="${t('Add a photo, a checklist or voice', 'أضف صورة أو قائمة أو صوتًا')}">${I(IC.plus)}</button>
       <button type="button" class="kp-ib" id="kp-ed-color" aria-label="${t('Colour', 'اللون')}">${I(IC.palette)}</button>
-      <button type="button" class="kp-ib" id="kp-ed-list" aria-label="${cur.items ? t('Turn into text', 'حوّل إلى نص') : t('Turn into a checklist', 'حوّل إلى قائمة')}">${I(IC.list)}</button>
-      <button type="button" class="kp-ib" id="kp-ed-mic" aria-label="${t('Add by voice', 'أضف بالصوت')}">${I(IC.mic)}</button>
-      <button type="button" class="kp-ib" id="kp-ed-label" aria-label="${t('Labels', 'التصنيفات')}">${I(IC.label)}</button>
       <button type="button" class="kp-ib" id="kp-ed-bell" aria-label="${t('Remind me', 'ذكّرني')}">${I(IC.bell)}</button>
+      <button type="button" class="kp-ib" id="kp-ed-label" aria-label="${t('Labels', 'التصنيفات')}">${I(IC.label)}</button>
+      <input type="file" id="kp-ed-file" accept="image/*" multiple hidden>
       <span class="kp-sp"></span><small class="kp-edited muted" id="kp-edited"></small><span class="kp-sp"></span>
       <button type="button" class="kp-aichip" id="kp-ed-ai">${I(IC.ai, 16)} ${t('AI', 'الذكاء')}</button>
     </div>`;
@@ -338,20 +354,39 @@ async function edit(id, opts = {}) {
   const ar = $('#kp-ed-arch', d); if (ar) ar.onclick = async () => { cur.archived = !cur.archived; const id = cur.id, on = cur.archived; await flush(); d.close(); if (on) undoToast([id], 'archive'); else toast(t('✓ Back in your notes', '✓ عادت إلى ملاحظاتك')); };
   const rs = $('#kp-ed-restore', d); if (rs) rs.onclick = () => { cur.trashed = 0; dirty(true); d.close(); };
   $('#kp-ed-color', d).onclick = e => pickColor(e.currentTarget, c => { cur.color = c; d.dataset.c = c; dirty(); }, cur.color || '');
-  $('#kp-ed-list', d).onclick = () => { toList(!cur.items); };
+  // ＋ like Keep: a photo, a checklist, or speak
+  $('#kp-ed-add', d).onclick = e => pop(e.currentTarget, `<div class="kp-menu">
+      <button type="button" data-a="photo">${I(IC.photo, 18)} ${t('Add a photo', 'أضف صورة')}</button>
+      <button type="button" data-a="list">${I(IC.list, 18)} ${cur.items ? t('Turn into text', 'حوّل إلى نص') : t('Turn into a checklist', 'حوّل إلى قائمة')}</button>
+      <button type="button" data-a="voice">${I(IC.mic, 18)} ${t('Add by voice', 'أضف بالصوت')}</button></div>`,
+    p => $$('[data-a]', p).forEach(b => b.onclick = () => { p.remove(); const a = b.dataset.a; if (a === 'photo') $('#kp-ed-file', d).click(); else if (a === 'list') toList(!cur.items); else voice(); }));
   $('#kp-ed-label', d).onclick = () => { const snap = { ...cur }; pickLabels([snap], () => { cur.labels = snap.labels; paintLabels(); dirty(); }); };
-  $('#kp-ed-mic', d).onclick = () => voice();
+
   $('#kp-ed-bell', d).onclick = e => remindPick(e.currentTarget);
+
+  $('#kp-ed-file', d).onchange = async e => { const fs = [...e.target.files]; e.target.value = ''; await addPhotos(fs); };
+  paintImgs();
   $('#kp-ed-ai', d).onclick = async () => { await flush(); if (isEmpty(cur)) { toast(t('Write something first', 'اكتب شيئًا أولًا')); return; } aiSheet([cur.id]); };
   $('#kp-ed-more', d).onclick = e => pop(e.currentTarget, `<div class="kp-menu">
+      ${cur.trashed ? '' : `<button type="button" data-m="friend">${I(IC.people, 18)} ${cur.share?.id ? t('Shared with friends', 'مشاركة مع الأصدقاء') : t('Share with a friend', 'شاركها مع صديق')}</button>`}
       <button type="button" data-m="copy">${I(IC.copy, 18)} ${t('Make a copy', 'نسخة')}</button>
       <button type="button" data-m="share">${I(IC.share, 18)} ${t('Send', 'إرسال')}</button>
       <button type="button" data-m="del">${I(IC.trash, 18)} ${cur.trashed ? t('Delete forever', 'حذف نهائي') : t('Delete', 'حذف')}</button></div>`,
     p => $$('[data-m]', p).forEach(b => b.onclick = async () => {
       p.remove();
       const m = b.dataset.m;
+      if (m === 'friend') { await flush(); shareSheet(); return; }
       if (m === 'copy') { await flush(); const c = { ...JSON.parse(JSON.stringify(cur)), id: newId(), pinned: false, created: 0 }; await save(c); toast(t('✓ Copy made', '✓ صُنعت نسخة')); }
-      if (m === 'share') { const txt = plain(cur); try { if (navigator.share) await navigator.share({ title: cur.title || 'Mustatar', text: txt }); else { await navigator.clipboard.writeText(txt); toast(t('✓ Copied', '✓ نُسخت')); } } catch {} }
+      if (m === 'share') {   // a copy of the text (and photos) to any app
+        const txt = plain(cur);
+        try {
+          const files = [];
+          for (const im of cur.images || []) { const r = await DB.img(im.id); if (r) files.push(new File([await (await fetch(r.data)).blob()], `${im.id}.jpg`, { type: 'image/jpeg' })); }
+          if (navigator.share && files.length && navigator.canShare?.({ files })) await navigator.share({ title: cur.title || 'Mustatar', text: txt, files });
+          else if (navigator.share) await navigator.share({ title: cur.title || 'Mustatar', text: txt });
+          else { await navigator.clipboard.writeText(txt); toast(t('✓ Copied', '✓ نُسخت')); }
+        } catch {}
+      }
       if (m === 'del') { const id = cur.id, bin = cur.trashed; await flush(); cur = null; d.close(); if (bin) await remove(id, true); else { await remove(id, false); undoToast([id]); } }
     }));
   if (!d.open) d.showModal();
@@ -385,7 +420,6 @@ function paintContent() {
 function toList(on) {
   if (on) { cur.items = String(cur.text || '').split('\n').map(s => s.replace(/^\s*(?:[-*•]|[☐☑]|\d+[.)])\s*/, '').trim()).filter(Boolean).map(s => ({ t: s, done: false })); if (!cur.items.length) cur.items = [{ t: '', done: false }]; cur.text = ''; }
   else { cur.text = cur.items.filter(i => i.t.trim()).map(i => (i.done ? '☑ ' : '') + i.t).join('\n'); cur.items = null; }
-  const b = $('#kp-ed-list'); if (b) b.setAttribute('aria-label', cur.items ? t('Turn into text', 'حوّل إلى نص') : t('Turn into a checklist', 'حوّل إلى قائمة'));
   dirty(); paintContent();
 }
 function paintLabels() {
@@ -430,6 +464,7 @@ async function flush() {
   const n = JSON.parse(JSON.stringify(cur));
   if (n.items) n.items = n.items.filter((x, i, a) => x.t.trim() || i === a.length - 1);
   await save(n); cur.updated = n.updated; cur.created = n.created; edited();
+  if (n.share?.id) pushShare(n);
 }
 async function closeEditor() {
   stopVoice(true);
@@ -478,6 +513,149 @@ async function stopVoice(cancel) {
       cur.voice = true; dirty(true);
     } else await save({ id: newId(), title: '', text: said, items: null, color: '', labels: [], voice: true });
   } catch (e) { toast('✗ ' + J.errText(e)); edited(); }
+}
+
+/* ---------- photos in notes (like Keep), with "Grab the text" ---------- */
+const imgCache = new Map();
+async function imgData(id) {
+  if (imgCache.has(id)) return imgCache.get(id);
+  const r = await DB.img(id).catch(() => null);
+  if (r) imgCache.set(id, r.data);
+  return r?.data || '';
+}
+async function fillImgs(root) { for (const el of $$('img[data-img]', root)) { if (!el.src) { const d = await imgData(el.dataset.img); if (d) el.src = d; } } }
+// a photo is kept as a JPEG of at most 1600 px (under ~0.9 MB, so it also fits your private space)
+async function shrink(file, max = 1600, q = 0.82) {
+  const bmp = await createImageBitmap(file);
+  for (const [m, qq] of [[max, q], [1280, 0.75], [1000, 0.68], [800, 0.6]]) {
+    const k = Math.min(1, m / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const data = c.toDataURL('image/jpeg', qq);
+    if (data.length < 900_000) return { data, w: c.width, h: c.height };
+  }
+  throw new Error(t('This photo is too big.', 'هذه الصورة كبيرة جدًا.'));
+}
+async function addPhotos(files) {
+  if (!cur) return;
+  const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|gif)$/i.test(f.name));
+  if (!imgs.length) return;
+  cur.images ||= [];
+  for (const f of imgs.slice(0, 12 - cur.images.length)) {
+    try {
+      const { data, w, h } = await shrink(f);
+      const id = 'P' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      await DB.putImg({ id, data, w, h, note: cur.id, updated: Date.now() }); imgCache.set(id, data);
+      J.cloud.keepImg?.(id);
+      cur.images.push({ id, w, h });
+    } catch (e) { toast('✗ ' + (e.message || t('Could not add the photo.', 'تعذّرت إضافة الصورة.'))); }
+  }
+  if (cur.images.length >= 12) toast(t('A note can hold up to 12 photos.', 'تتسع الملاحظة لـ١٢ صورة.'));
+  paintImgs(); dirty(true);
+}
+function paintImgs() {
+  const box = $('#kp-eimgs'); if (!box || !cur) return;
+  const l = cur.images || [];
+  box.className = 'kp-eimgs n' + Math.min(l.length, 3);
+  box.innerHTML = l.map(im => `<button type="button" class="kp-eimg" data-im="${esc(im.id)}" style="aspect-ratio:${Math.max(0.6, Math.min(1.8, (im.w || 4) / (im.h || 3)))}"><img alt="" data-img="${esc(im.id)}"></button>`).join('');
+  $$('[data-im]', box).forEach(b => b.onclick = () => viewImg(b.dataset.im));
+  fillImgs(box);
+}
+function viewImg(id) {
+  let d = $('#kp-view');
+  if (!d) { d = document.createElement('dialog'); d.id = 'kp-view'; d.className = 'kp-view'; document.body.appendChild(d); }
+  d.dir = AR() ? 'rtl' : 'ltr';
+  d.innerHTML = `<div class="kp-vtop"><button type="button" class="kp-ib" id="kp-v-x" aria-label="${t('Back', 'رجوع')}">${I(IC.back)}</button><span class="kp-sp"></span>
+      <button type="button" class="kp-vbtn" id="kp-v-text">${I(IC.text, 18)} ${t('Grab the text', 'استخرج النص')}</button>
+      <button type="button" class="kp-ib" id="kp-v-del" aria-label="${t('Delete the photo', 'احذف الصورة')}">${I(IC.trash)}</button></div>
+    <div class="kp-vimg"><img alt="" id="kp-v-img"></div><div class="kp-vst" id="kp-v-st"></div>`;
+  imgData(id).then(src => { const im = $('#kp-v-img', d); if (im) im.src = src; });
+  $('#kp-v-x', d).onclick = () => d.close();
+  $('#kp-v-del', d).onclick = async () => {
+    if (!cur) return;
+    cur.images = (cur.images || []).filter(x => x.id !== id);
+    await DB.delImg(id).catch(() => {}); imgCache.delete(id); J.cloud.keepImg?.(id, true);
+    d.close(); paintImgs(); dirty(true);
+  };
+  $('#kp-v-text', d).onclick = async () => {
+    const st = $('#kp-v-st', d), b = $('#kp-v-text', d);
+    b.disabled = true; st.textContent = t('Reading the photo…', 'تُقرأ الصورة…');
+    try {
+      const blob = await (await fetch(await imgData(id))).blob();
+      const out = await window.JundAttach.readScanBatch([{ page: 1, blob }], new AbortController().signal);
+      const text = String(out?.[0]?.text || '').trim();
+      if (!text) { st.textContent = t('No text was found in this photo.', 'لا يوجد نص في هذه الصورة.'); b.disabled = false; return; }
+      if (cur) {
+        if (cur.items) cur.items.push(...text.split('\n').filter(x => x.trim()).map(x => ({ t: x.trim(), done: false })));
+        else cur.text = (cur.text ? cur.text.replace(/\s*$/, '') + '\n\n' : '') + text;
+        paintContent(); dirty(true);
+      }
+      d.close(); toast(t('✓ The text of the photo is in the note', '✓ نص الصورة أُضيف إلى الملاحظة'));
+    } catch (e) { st.textContent = '✗ ' + J.errText(e); b.disabled = false; }
+  };
+  d.showModal();
+}
+async function imgFromCloud(id, rec) {
+  if (!rec) { await DB.delImg(id).catch(() => {}); imgCache.delete(id); return; }
+  await DB.putImg({ ...rec, id }); imgCache.set(id, rec.data); paintSoon();
+}
+
+/* ---------- share a note with a friend: a private link; they always see the latest ---------- */
+const signedIn = () => !!store.get('mstToken', '');
+const shareLink = id => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}note.html?id=${encodeURIComponent(id)}`;
+async function sharePayload(n) {
+  const images = [];
+  for (const im of (n.images || []).slice(0, 8)) {
+    const src = await imgData(im.id); if (!src) continue;
+    // smaller copies for the link, so a note with photos still fits
+    try { const blob = await (await fetch(src)).blob(); const s = await shrink(blob, 1000, 0.7); images.push({ data: s.data, w: s.w, h: s.h }); } catch {}
+  }
+  return { title: n.title || '', text: n.text || '', items: n.items || null, color: n.color || '', labels: n.labels || [], images, by: J.me?.().name || store.get('mstUser', {})?.name || '' };
+}
+async function shareCall(method, path, note) {
+  const res = await J.serverFetch(path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + store.get('mstToken', '') }, body: note ? JSON.stringify({ note }) : undefined });
+  return res.json().catch(() => ({}));
+}
+let shareTimer = 0;
+function pushShare(n) {   // after an edit: the friends' copy follows a moment later
+  clearTimeout(shareTimer);
+  shareTimer = setTimeout(async () => { try { await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n)); } catch {} }, 1500);
+}
+async function unshare(n, quiet = false) {
+  const id = n.share?.id; if (!id) return;
+  try { await shareCall('DELETE', '/share/' + id); } catch (e) { if (!quiet) throw e; }
+  if (!quiet) { delete n.share; await save(n); }
+}
+async function shareSheet() {
+  if (!cur) return;
+  const n = notes.find(x => x.id === cur.id) || cur;
+  if (!signedIn()) {
+    const d = dlg('kp-share', `<div class="kp-dh"><b>${I(IC.people, 18)} ${t('Share with a friend', 'شاركها مع صديق')}</b><button type="button" class="kp-ib" id="kp-sh-x">${I(IC.x)}</button></div>
+      <p>${t('Sign in first (one tap with Google). Then you get a private link: only people you send it to can open it, and they always see your latest version.', 'سجّل الدخول أولًا (ضغطة واحدة بحساب Google). بعدها تحصل على رابط خاص: لا يفتحه إلا من ترسله إليه، ويرى دائمًا آخر نسخة منك.')}</p>
+      <div class="kp-dact"><button type="button" class="ghost" id="kp-sh-copy">${t('Send a copy instead', 'أرسل نسخة بدلًا من ذلك')}</button><button type="button" class="primary" id="kp-sh-in">${t('Sign in', 'تسجيل الدخول')}</button></div>`);
+    $('#kp-sh-x', d).onclick = () => d.close();
+    $('#kp-sh-copy', d).onclick = () => { d.close(); $('#kp-ed-more')?.click(); setTimeout(() => $('#kp-pop [data-m="share"]')?.click(), 50); };
+    $('#kp-sh-in', d).onclick = () => { d.close(); $('#kp-ed')?.close(); J.show('settings'); setTimeout(() => { const a = $('#acct-card'); a?.scrollIntoView({ block: 'center' }); a?.querySelector('button')?.focus(); }, 200); };
+    return;
+  }
+  const d = dlg('kp-share', `<div class="kp-dh"><b>${I(IC.people, 18)} ${t('Share with a friend', 'شاركها مع صديق')}</b><button type="button" class="kp-ib" id="kp-sh-x">${I(IC.x)}</button></div><div id="kp-sh-body"><div class="kp-busy"><div class="spinner"></div><span>${t('Making a private link…', 'يُصنع رابط خاص…')}</span></div></div>`);
+  $('#kp-sh-x', d).onclick = () => d.close();
+  const body = $('#kp-sh-body', d);
+  try {
+    if (!n.share?.id) {
+      const r = await shareCall('POST', '/share', await sharePayload(n));
+      if (!r.id) throw new Error(r.error || t('Could not share. Try again.', 'تعذّرت المشاركة. حاول مرة أخرى.'));
+      n.share = { id: r.id, at: Date.now() }; if (cur && cur.id === n.id) cur.share = n.share; await save(n);
+    } else await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n));
+    const link = shareLink(n.share.id);
+    body.innerHTML = `<p>${t('Anyone you send this link to can open the note, with its photos, and save a copy. When you edit it, they see the change. Only you can edit it.', 'من ترسل إليه هذا الرابط يفتح الملاحظة بصورها ويستطيع حفظ نسخة. وإذا عدّلتها رأى التعديل. التعديل لك وحدك.')}</p>
+      <div class="kp-link"><span dir="ltr">${esc(link)}</span></div>
+      <button type="button" class="primary kp-sh-send" id="kp-sh-send">${I(IC.share, 18)} ${t('Send the link', 'أرسل الرابط')}</button>
+      <div class="kp-sh-more"><button type="button" class="link" id="kp-sh-cp">${I(IC.link, 16)} ${t('Copy link', 'انسخ الرابط')}</button><button type="button" class="link kp-stop" id="kp-sh-stop">${t('Stop sharing', 'أوقف المشاركة')}</button></div>`;
+    $('#kp-sh-cp', d).onclick = async () => { try { await navigator.clipboard.writeText(link); toast(t('✓ Link copied', '✓ نُسخ الرابط')); } catch { toast(link); } };
+    $('#kp-sh-send', d).onclick = async () => { try { if (navigator.share) await navigator.share({ title: n.title || 'Mustatar', text: (n.title ? n.title + ' — ' : '') + t('a note from Mustatar', 'ملاحظة من مستطر'), url: link }); else { await navigator.clipboard.writeText(link); toast(t('✓ Link copied', '✓ نُسخ الرابط')); } } catch {} };
+    $('#kp-sh-stop', d).onclick = async () => { try { await unshare(n); if (cur && cur.id === n.id) delete cur.share; d.close(); toast(t('✓ The link no longer works', '✓ لم يعد الرابط يعمل')); } catch (e) { toast('✗ ' + J.errText(e)); } };
+  } catch (e) { body.innerHTML = `<p class="kp-binnote">✗ ${esc(J.errText(e))}</p>`; }
 }
 
 /* ---------- with AI: the part Keep does not have ---------- */
@@ -601,5 +779,5 @@ window.addEventListener('mustatar-screen', () => selBar());
 
 mount();
 load().then(() => paint());
-window.JundKeep = { load, all: async () => (await load()).slice(), raw: async id => { await load(); return id ? notes.find(x => x.id === id) || null : notes.slice(); }, fromCloud, save, remove, addMany, edit, newNote, search, plain, back, open: () => { J.show('library'); setSeg('keep'); }, setSeg, aiSheet };
+window.JundKeep = { load, all: async () => (await load()).slice(), raw: async id => { await load(); return id ? notes.find(x => x.id === id) || null : notes.slice(); }, fromCloud, imgFromCloud, img: id => DB.img(id), allImg: () => DB.allImg(), putImg: x => DB.putImg(x), shareLink, save, remove, addMany, edit, newNote, search, plain, back, open: () => { J.show('library'); setSeg('keep'); }, setSeg, aiSheet };
 })();

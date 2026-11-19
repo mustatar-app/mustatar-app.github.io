@@ -10,8 +10,10 @@
 //   POST /ask-voice   a short spoken question (+ the file being discussed) → what was heard and the answer
 
 import { UserSpace, Accounts, accountRoutes } from './space.js';
+import { SharedNote, shareRoutes } from './share.js';
 import * as AI from './engine.js';
 export { UserSpace, Accounts };   // each person's own database, and the sign-in database (see space.js)
+export { SharedNote };            // a note shared with friends: one small database per shared note (see share.js)
 
 const ALLOWED = ['https://mustatar-app.github.io', 'https://dawajund-1.github.io'];
 const CLOUDFLARE_SITE = /^https:\/\/mustatar\.[a-z0-9-]+\.workers\.dev$/;   // the app's own copy on Cloudflare
@@ -52,7 +54,7 @@ function cors(origin) {
   const ok = ALLOWED.includes(origin) || CLOUDFLARE_SITE.test(origin || '') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, GET, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -465,7 +467,7 @@ export default {
     const direct = req.headers.get('x-mst-stream') === 'openai';
     if (req.method === 'OPTIONS') return new Response(null, { headers: h });
     if (req.method === 'GET' && path === '/') return json({
-      ok: true, app: 'mustatar', version: 15, key: AI.ready(env), push: !!env.PUSH,
+      ok: true, app: 'mustatar', version: 16, key: AI.ready(env), push: !!env.PUSH, share: !!env.SHARES,
       engine: { hear: [...(AI.groqKey(env) ? AI.MODELS.groqHear.map(m => 'groq/' + m) : []), ...(env.AI ? ['cloudflare/' + AI.MODELS.cfHear] : [])],
         write: [...(env.AI ? ['cloudflare/' + AI.MODELS.cfText] : []), ...(AI.groqKey(env) ? AI.MODELS.groqText.map(m => 'groq/' + m) : [])],
         youtube: !!env.GEMINI_API_KEY },
@@ -475,6 +477,9 @@ export default {
     if (path === '/widget' || path.startsWith('/widget/')) return widgetRoutes(req, env, h, path, url);
     if (req.method === 'GET' && /^\/ics\/[a-f0-9]{16,64}\.ics$/.test(path)) return icsFeed(env, path.slice(5, -4));
     if (origin && h['Access-Control-Allow-Origin'] !== origin) return json({ error: 'forbidden' }, 403, h);
+
+    /* ----- notes shared with friends (share.js) ----- */
+    if (path === '/share' || path.startsWith('/share/')) return shareRoutes(req, env, h, path, json);
 
     /* ----- accounts and each person's own private space (space.js) ----- */
     if (path.startsWith('/auth/') || path.startsWith('/space/'))

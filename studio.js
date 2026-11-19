@@ -11,10 +11,17 @@ const screen = $('#screen-studio');
 
 const FONTS = {
   modern: { name: 'Modern', css: "'IBM Plex Sans Arabic', system-ui, sans-serif", w: 700 },
+  cairo: { name: 'Cairo', css: "'Cairo', 'Poppins', sans-serif", w: 700 },
+  tajawal: { name: 'Tajawal', css: "'Tajawal', 'Montserrat', sans-serif", w: 700 },
   naskh: { name: 'Naskh', css: "'Amiri', 'IBM Plex Sans Arabic', serif", w: 700 },
+  scheh: { name: 'Scheherazade', css: "'Scheherazade New', 'Lora', serif", w: 700 },
   kufi: { name: 'Kufi', css: "'Reem Kufi', 'IBM Plex Sans Arabic', sans-serif", w: 700 },
+  changa: { name: 'Bold Kufi', css: "'Changa', 'Oswald', sans-serif", w: 700 },
+  messiri: { name: 'Display', css: "'El Messiri', 'Playfair Display', serif", w: 700 },
   ruqaa: { name: 'Handwritten', css: "'Caveat', 'Aref Ruqaa', cursive", w: 700 },
+  marhey: { name: 'Fun', css: "'Marhey', 'Pacifico', cursive", w: 600 },
   heavy: { name: 'Heavy', css: "'Lalezar', 'Anton', 'IBM Plex Sans Arabic', sans-serif", w: 400 },
+  poster: { name: 'Poster', css: "'Rakkas', 'Bebas Neue', sans-serif", w: 400 },
   type: { name: 'Typewriter', css: "'Special Elite', 'IBM Plex Sans Arabic', monospace", w: 400 },
   elegant: { name: 'Elegant', css: "'Playfair Display', 'Amiri', serif", w: 700 },
 };
@@ -52,133 +59,165 @@ function loadFonts() {
   if (fontsLoaded) return Promise.resolve();
   fontsLoaded = true;
   const l = document.createElement('link'); l.rel = 'stylesheet';
-  l.href = 'https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@700&family=Aref+Ruqaa:wght@700&family=Lalezar&family=Caveat:wght@700&family=Special+Elite&family=Playfair+Display:wght@700&family=Anton&display=swap';
+  l.href = 'https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@700&family=Aref+Ruqaa:wght@700&family=Lalezar&family=Caveat:wght@700&family=Special+Elite&family=Playfair+Display:wght@700&family=Anton'
+    + '&family=Cairo:wght@700&family=Poppins:wght@700&family=Tajawal:wght@700&family=Montserrat:wght@700&family=Scheherazade+New:wght@700&family=Lora:wght@700'
+    + '&family=Changa:wght@700&family=Oswald:wght@700&family=El+Messiri:wght@700&family=Marhey:wght@600&family=Pacifico&family=Rakkas&family=Bebas+Neue&display=swap';
   document.head.appendChild(l);
   return new Promise(r => { l.onload = r; l.onerror = r; setTimeout(r, 4000); })
-    .then(() => Promise.all(['700 40px "Reem Kufi"', '700 40px "Aref Ruqaa"', '40px Lalezar', '700 40px Caveat', '40px "Special Elite"', '700 40px "Playfair Display"', '700 40px Amiri', '700 40px "IBM Plex Sans Arabic"']
+    .then(() => Promise.all(['700 40px "Reem Kufi"', '700 40px "Aref Ruqaa"', '40px Lalezar', '700 40px Caveat', '40px "Special Elite"', '700 40px "Playfair Display"', '700 40px Amiri', '700 40px "IBM Plex Sans Arabic"',
+      '700 40px Cairo', '700 40px Tajawal', '700 40px "Scheherazade New"', '700 40px Changa', '700 40px "El Messiri"', '600 40px Marhey', '40px Rakkas', '40px "Bebas Neue"', '40px Pacifico', '700 40px Poppins', '700 40px Montserrat', '700 40px Oswald']
       .map(f => document.fonts.load(f, 'Aa بسم').catch(() => {}))))
     .then(() => draw());
 }
 
-/* ---------- the screen ---------- */
+/* ---------- the screen: a full-screen editor like Instagram's ---------- */
+const AR = window.ZadLang === 'ar';
+const L = (en, ar) => AR ? ar : en;
+const FONT_AR = { modern: 'عصري', cairo: 'القاهرة', tajawal: 'تجوال', naskh: 'نسخ', scheh: 'شهرزاد', kufi: 'كوفي', changa: 'كوفي عريض', messiri: 'عرض', ruqaa: 'رقعة', marhey: 'مرح', heavy: 'عريض', poster: 'ملصق', type: 'آلة كاتبة', elegant: 'أنيق' };
+// the text styles that the "A" button goes through, like Instagram
+const STYLE_CYCLE = ['classic', 'box', 'soft', 'type', 'outline', 'neon'];
+const STYLE_AR = { classic: 'عادي', box: 'صندوق', soft: 'صندوق شفاف', type: 'ورقة', outline: 'محدد', neon: 'نيون', hand: 'رقعة', elegant: 'أنيق' };
+const ic = d => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const IC = {
+  close: '<path d="M6 6l12 12M18 6L6 18"/>', undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  cmp: '<circle cx="12" cy="12" r="8"/><path d="M12 4v16" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>',
+  photo: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>',
+  bg: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16"/>', star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
+  tr: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z"/>',
+  ideas: '<path d="M12 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6z"/>', more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  alS: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>', alC: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>', alE: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+};
+let editing = null, sheetOpen = null;
+
 function build() {
   built = true;
   screen.innerHTML = `
-  <h1 class="screen-title">Studio</h1>
-  <div class="card st-stage">
-    <div class="row-between" style="margin-bottom:10px">
-      <div class="seg" id="st-size">${Object.entries(SIZES).map(([k, v]) => `<button type="button" data-k="${k}">${v[2]}</button>`).join('')}</div>
-      <label class="file-btn"><input type="file" id="st-media" accept="image/*,video/*">Photo or video</label>
+  <div class="sx" dir="${AR ? 'rtl' : 'ltr'}">
+    <div class="sx-top">
+      <button type="button" class="sx-ic" id="st-back" aria-label="${L('Close Studio', 'إغلاق الاستوديو')}">${ic(IC.close)}</button>
+      <div class="sx-seg" id="st-size">${Object.entries(SIZES).map(([k, v]) => `<button type="button" data-k="${k}">${AR ? { story: 'ستوري ٩:١٦', post: 'منشور ٤:٥', square: 'مربع' }[k] : v[2]}</button>`).join('')}</div>
+      <span class="sx-gap"></span>
+      <button type="button" class="sx-ic" id="st-undo" aria-label="${L('Undo', 'تراجع')}" disabled>${ic(IC.undo)}</button>
+      <button type="button" class="sx-ic" id="st-cmp" aria-label="${L('Hold to compare', 'اضغط مطولًا للمقارنة')}">${ic(IC.cmp)}</button>
     </div>
-    <div class="st-canvas-wrap"><canvas id="st-canvas"></canvas></div>
-    <div class="st-tools">
-      <button type="button" class="ghost small" id="st-undo" disabled>↶ Undo</button>
-      <button type="button" class="ghost small" id="st-cmp">Hold to compare</button>
-      <button type="button" class="ghost small danger" id="st-rmbg" hidden>Remove photo</button>
-      <button type="button" class="ghost small" id="st-draft">Save draft</button>
-      <button type="button" class="ghost small" id="st-new">New</button>
+    <div class="sx-stage" id="st-stage">
+      <div class="st-canvas-wrap" id="st-wrap">
+        <canvas id="st-canvas"></canvas>
+        <div class="sx-sel" id="st-sel" hidden>
+          <button type="button" class="sx-h sx-del" id="st-sel-del" aria-label="${L('Remove this text', 'احذف هذا النص')}">×</button>
+          <span class="sx-h sx-w" data-h="w" title="${L('Drag to make the box wider or narrower', 'اسحب لتوسيع الصندوق أو تضييقه')}">↔</span>
+          <span class="sx-h sx-s" data-h="s" title="${L('Drag to make the text bigger or smaller', 'اسحب لتكبير النص أو تصغيره')}">⤡</span>
+        </div>
+        <div class="sx-hint" id="st-hint">${L('Tap Aa to write · drag to move · pinch to resize', 'اضغط Aa للكتابة · اسحب للتحريك · قرّب الإصبعين للتكبير')}</div>
+        <div class="sx-trash" id="st-trash" hidden>${ic(IC.trash)}</div>
+      </div>
+      <div class="sx-rail">
+        <button type="button" class="sx-r" id="st-add"><b class="sx-aa">Aa</b><small>${L('Text', 'نص')}</small></button>
+        <label class="sx-r"><input type="file" id="st-media" accept="image/*,video/*" hidden>${ic(IC.photo)}<small>${L('Photo', 'صورة')}</small></label>
+        <button type="button" class="sx-r" id="st-bg-btn">${ic(IC.bg)}<small>${L('Colour', 'خلفية')}</small></button>
+        <button type="button" class="sx-r sx-saved-btn" id="st-saved-btn">${ic(IC.star)}<small>${L('Saved', 'المحفوظة')}</small><i class="sx-n" id="st-saved-n"></i></button>
+        <button type="button" class="sx-r" id="st-tr">${ic(IC.tr)}<small>${L('Translate', 'ترجمة')}</small></button>
+        <button type="button" class="sx-r" id="st-design">${ic(IC.ideas)}<small>${L('Ideas', 'أفكار')}</small></button>
+        <button type="button" class="sx-r" id="st-more">${ic(IC.more)}<small>${L('More', 'المزيد')}</small></button>
+      </div>
     </div>
-    <div class="card-h" style="margin:12px 0 6px;font-size:.9rem">Background colour</div>
-    <div class="st-bgs" id="st-bgs">${Object.entries(BGS).map(([k, c]) => `<button type="button" class="sw" data-bg="${k}" aria-label="${k} background" style="background:linear-gradient(135deg,${c[0]},${c[1]})"></button>`).join('')}</div>
-    <div id="st-trim" hidden>
-      <div class="card-h" style="margin:10px 0 4px">Trim the video</div>
-      <div class="st-trim-row"><span>Start</span><input type="range" id="st-t0" min="0" step="0.1"><b id="st-t0v"></b></div>
-      <div class="st-trim-row"><span>End</span><input type="range" id="st-t1" min="0" step="0.1"><b id="st-t1v"></b></div>
-      <div class="row-gap"><button type="button" class="ghost small" id="st-play">▶ Play the part</button><span class="muted" id="st-len"></span></div>
+    <div id="st-trim" class="sx-trim" hidden>
+      <div class="st-trim-row"><span>${L('Start', 'البداية')}</span><input type="range" id="st-t0" min="0" step="0.1"><b id="st-t0v"></b></div>
+      <div class="st-trim-row"><span>${L('End', 'النهاية')}</span><input type="range" id="st-t1" min="0" step="0.1"><b id="st-t1v"></b></div>
+      <div class="row-gap"><button type="button" class="ghost small" id="st-play">▶ ${L('Play the part', 'شغّل الجزء')}</button><span class="muted" id="st-len"></span></div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="row-between" style="margin-bottom:8px"><div class="card-h" style="margin:0">Texts on the picture</div>
-      <button type="button" class="primary small" id="st-add">+ Add text</button></div>
-    <div class="st-layers" id="st-layers"></div>
-    <button type="button" class="ghost small danger" id="st-del" hidden style="display:none">Remove</button>
-    <textarea id="st-text" rows="3" dir="auto" placeholder="Write in Arabic or English — then drag it on the picture"></textarea>
-    <div class="row-gap st-ai"><button type="button" class="ghost small" id="st-tr">🌐 Add translation</button><button type="button" class="ghost small" id="st-design">✨ Design ideas</button></div>
-    <div id="st-design-list"></div>
-    <div class="card-h" style="margin:12px 0 6px">Look</div>
-    <div class="chips" id="st-looks">${Object.entries(LOOKS).map(([k, v]) => `<button type="button" class="chip-b" data-look="${k}">${v.name}</button>`).join('')}</div>
-    <div class="card-h" style="margin:12px 0 6px">Font</div>
-    <div class="chips" id="st-fonts">${Object.entries(FONTS).map(([k, v]) => `<button type="button" class="chip-b" data-font="${k}" style="font-family:${v.css};font-weight:${v.w}">${v.name}</button>`).join('')}</div>
-    <div class="card-h" style="margin:12px 0 6px">Arabic marks (harakat)</div>
-    <div class="seg" id="st-hk"><button type="button" data-h="1">With harakat</button><button type="button" data-h="0">Without</button></div>
-    <div class="card-h" style="margin:12px 0 6px">Colour</div>
-    <div class="st-bgs" id="st-colors">${COLORS.map(c => `<button type="button" class="sw" data-color="${c}" aria-label="colour ${c}" style="background:${c}"></button>`).join('')}</div>
-    <div class="st-trim-row" style="margin-top:10px"><span>Size</span><input type="range" id="st-size-r" min="0.03" max="0.16" step="0.002"></div>
-    <div class="row-gap" style="margin-top:8px">
-      <div class="seg" id="st-align"><button type="button" data-a="start">Start</button><button type="button" data-a="center">Centre</button><button type="button" data-a="end">End</button></div>
-      <button type="button" class="ghost small" id="st-save-text">☆ Save this text</button>
+    <div class="sx-bottom">
+      <button type="button" class="ghost small" id="st-draft">${L('Save draft', 'حفظ مسودة')}</button>
+      <span class="sx-gap"></span>
+      <button type="button" class="ghost" id="st-share">${L('Share', 'مشاركة')}</button>
+      <button type="button" class="primary" id="st-export">Save image</button>
     </div>
+    <div class="progress small" id="st-progress" hidden><div class="spinner" aria-hidden="true"></div><div id="st-progress-text">Making the video…</div></div>
+    <div class="muted sx-status" id="st-status" aria-live="polite"></div>
   </div>
 
-  <div class="card">
-    <div class="card-h">Drafts</div>
-    <div id="st-drafts"></div>
+  <div class="sx-edit" id="st-edit" hidden dir="${AR ? 'rtl' : 'ltr'}">
+    <div class="sx-edit-top">
+      <button type="button" class="sx-ic" id="st-align" aria-label="${L('Alignment', 'المحاذاة')}"></button>
+      <button type="button" class="sx-ic sx-colorbtn" id="st-color-btn" aria-label="${L('Colour', 'اللون')}"><i></i></button>
+      <button type="button" class="sx-ic sx-stylebtn" id="st-look" aria-label="${L('Text style', 'نمط النص')}">A</button>
+      <button type="button" class="sx-ic sx-hk" id="st-hk" aria-label="${L('Arabic marks (harakat)', 'التشكيل')}">${L('Harakat', 'التشكيل')}</button>
+      <span class="sx-gap"></span>
+      <button type="button" class="sx-ic" id="st-save-text" aria-label="${L('Save this text', 'احفظ هذا النص')}">${ic(IC.star)}</button>
+      <button type="button" class="sx-done" id="st-done">${L('Done', 'تم')}</button>
+    </div>
+    <div class="sx-edit-mid">
+      <input type="range" id="st-size-r" class="sx-vsize" min="0.03" max="0.16" step="0.002" aria-label="${L('Size', 'الحجم')}">
+      <textarea id="st-text" rows="3" dir="auto" placeholder="${L('Write here…', 'اكتب هنا…')}"></textarea>
+    </div>
+    <div class="sx-style-name" id="st-style-name"></div>
+    <div class="sx-colors" id="st-colors" hidden>${COLORS.map(c => `<button type="button" class="sw" data-color="${c}" aria-label="colour ${c}" style="background:${c}"></button>`).join('')}</div>
+    <div class="sx-fonts" id="st-fonts">${Object.entries(FONTS).map(([k, v]) => `<button type="button" class="sx-font" data-font="${k}" style="font-family:${v.css};font-weight:${v.w}">${AR ? FONT_AR[k] : v.name}</button>`).join('')}</div>
   </div>
 
-  <div class="card">
-    <div class="card-h">Saved texts — tap to use</div>
-    <div class="chips" id="st-saved"></div>
-  </div>
+  <div class="sx-sheet" id="st-sheet" hidden><div class="sx-sheet-panel" role="dialog" aria-modal="true"><div class="px-grip"></div><div id="st-sheet-body"></div></div></div>
 
-  <div class="row-gap">
-    <button type="button" class="primary" id="st-export">Save image</button>
-    <button type="button" class="ghost" id="st-share">Share</button>
-  </div>
-  <div class="progress small" id="st-progress" hidden><div class="spinner" aria-hidden="true"></div><div id="st-progress-text">Making the video…</div></div>
-  <div class="muted" id="st-status"></div>
-
-  <div class="card" style="margin-top:16px">
-    <div class="card-h">Carousel</div>
-    <p class="muted" style="margin:0 0 8px;font-size:.88rem">One slide per paragraph (leave an empty line between slides). Each slide uses the look, font, colour and background chosen above.</p>
-    <textarea id="st-car" rows="6" dir="auto" placeholder="Slide 1 text&#10;&#10;Slide 2 text&#10;&#10;Slide 3 text"></textarea>
-    <div class="row-gap" style="margin-top:8px"><button type="button" class="ghost small" id="st-car-ai">Write slides from my last note</button><button type="button" class="primary small" id="st-car-go">Make the carousel</button></div>
-    <small class="muted" id="st-car-st"></small>
-  </div>
-
-  <div class="card" style="margin-top:16px">
-    <div class="card-h">Saved captions — tap to copy</div>
-    <div id="st-caps"></div>
-    <div class="row-gap" style="margin-top:8px"><textarea id="st-cap-new" rows="2" dir="auto" placeholder="Write a caption or hashtags to keep"></textarea></div>
-    <button type="button" class="ghost small" id="st-cap-save">Save caption</button>
-  </div>
-
-  <div class="card" style="margin-top:16px">
-    <div class="row-between"><div class="card-h" style="margin:0">Post ideas from your notes</div><button type="button" class="ghost small" id="st-ideas">Get ideas</button></div>
-    <div id="st-ideas-list" class="muted" style="margin-top:8px">Ideas for your page from what you studied this week. Tap “Use” to put the hook on the picture.</div>
+  <div hidden id="st-holders">
+    <div id="sh-saved"><div class="row-between"><b class="sx-sh-h">${L('Saved texts', 'النصوص المحفوظة')}</b><small class="muted">${L('Tap to put on the picture', 'اضغط لوضعه على الصورة')}</small></div><div class="sx-saved" id="st-saved"></div></div>
+    <div id="sh-bg"><b class="sx-sh-h">${L('Background colour', 'لون الخلفية')}</b><div class="st-bgs" id="st-bgs">${Object.entries(BGS).map(([k, c]) => `<button type="button" class="sw" data-bg="${k}" aria-label="${k} background" style="background:linear-gradient(135deg,${c[0]},${c[1]})"></button>`).join('')}</div>
+      <button type="button" class="ghost small danger" id="st-rmbg" hidden>${L('Remove photo', 'إزالة الصورة')}</button></div>
+    <div id="sh-ideas"><b class="sx-sh-h">${L('Design ideas', 'أفكار تصميم')}</b><div id="st-design-list"></div></div>
+    <div id="sh-more">
+      <div class="row-gap"><button type="button" class="ghost small" id="st-new">${L('New design', 'تصميم جديد')}</button></div>
+      <div class="sx-sec"><b class="sx-sh-h">${L('Drafts', 'المسودات')}</b><div id="st-drafts"></div></div>
+      <div class="sx-sec"><b class="sx-sh-h">${L('Carousel', 'كاروسيل (عدة شرائح)')}</b>
+        <p class="muted fine" style="margin:0 0 8px">${L('One slide per paragraph (leave an empty line between slides). Each slide uses the look, font, colour and background chosen above.', 'شريحة لكل فقرة (اترك سطرًا فارغًا بين الشرائح). كل شريحة تأخذ الشكل والخط واللون والخلفية المختارة.')}</p>
+        <textarea id="st-car" rows="5" dir="auto" placeholder="${L('Slide 1 text', 'نص الشريحة ١')}&#10;&#10;${L('Slide 2 text', 'نص الشريحة ٢')}"></textarea>
+        <div class="row-gap" style="margin-top:8px"><button type="button" class="ghost small" id="st-car-ai">${L('Write slides from my last note', 'اكتب الشرائح من آخر ملاحظاتي')}</button><button type="button" class="primary small" id="st-car-go">${L('Make the carousel', 'اصنع الكاروسيل')}</button></div>
+        <small class="muted" id="st-car-st"></small></div>
+      <div class="sx-sec"><b class="sx-sh-h">${L('Saved captions — tap to copy', 'تعليقات محفوظة — اضغط للنسخ')}</b><div id="st-caps"></div>
+        <textarea id="st-cap-new" rows="2" dir="auto" placeholder="${L('Write a caption or hashtags to keep', 'اكتب تعليقًا أو وسومًا لحفظها')}"></textarea>
+        <button type="button" class="ghost small" id="st-cap-save">${L('Save caption', 'احفظ التعليق')}</button></div>
+      <div class="sx-sec"><div class="row-between"><b class="sx-sh-h">${L('Post ideas from your notes', 'أفكار منشورات من ملاحظاتك')}</b><button type="button" class="ghost small" id="st-ideas">${L('Get ideas', 'اقترح أفكارًا')}</button></div>
+        <div id="st-ideas-list" class="muted" style="margin-top:8px">${L('Ideas for your page from what you studied this week. Tap “Use” to put the hook on the picture.', 'أفكار لصفحتك مما درسته هذا الأسبوع. اضغط «استخدم» لوضع العبارة على الصورة.')}</div></div>
+    </div>
   </div>`;
 
   const cv = $('#st-canvas');
   cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move);
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  $$('#st-sel [data-h]').forEach(h => { h.addEventListener('pointerdown', handleDown); h.addEventListener('pointermove', handleMove); h.addEventListener('pointerup', handleUp); h.addEventListener('pointercancel', handleUp); });
+  $('#st-sel-del').onclick = e => { e.stopPropagation(); if (!sel) return; snap(); removeLayer(sel); };
+  $('#st-back').onclick = () => { if (!closeLayer()) window.JundBack?.(); };
   $$('#st-size button').forEach(b => b.onclick = () => { size = b.dataset.k; store.set('studioSize', size); sync(); draw(); });
   $$('#st-bgs [data-bg]').forEach(b => b.onclick = () => { snap(); stopVideo(); bg = { kind: 'color', key: b.dataset.bg }; sync(); draw(); });
   $('#st-media').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) { try { loadMedia(f); } catch (err) { status('✗ ' + err.message); window.JundReport?.problem('studio media: ' + err.message); } } };
-  $('#st-add').onclick = () => { addLayer({ text: 'Your text' }); $('#st-text').select(); $('#st-text').focus(); };
+  $('#st-add').onclick = () => { const l = addLayer({ text: '' }); openEditor(l); };
   $('#st-text').onfocus = snap;
-  $('#st-text').oninput = () => { if (!sel) addLayer({ text: $('#st-text').value }); else { sel.text = $('#st-text').value; draw(); renderLayers(); } };
-  const target = () => sel || layers.at(-1) || addLayer({ text: 'Your text' });
-  $$('#st-looks [data-look]').forEach(b => b.onclick = () => { snap(); const l = target(); sel = l; l.look = b.dataset.look; l.font = LOOKS[l.look].font; sync(); draw(); });
-  $$('#st-fonts [data-font]').forEach(b => b.onclick = () => { snap(); const l = target(); sel = l; l.font = b.dataset.font; sync(); draw(); });
-  $$('#st-colors [data-color]').forEach(b => b.onclick = () => { snap(); const l = target(); sel = l; l.color = b.dataset.color; sync(); draw(); });
+  $('#st-text').oninput = () => { const l = editing || sel || addLayer({ text: '' }); l.text = $('#st-text').value; draw(); };
+  $('#st-done').onclick = closeEditor;
+  $('#st-edit').addEventListener('click', e => { if (e.target.id === 'st-edit') closeEditor(); });
+  $('#st-look').onclick = () => { const l = editing || sel; if (!l) return; snap(); const i = STYLE_CYCLE.indexOf(l.look); l.look = STYLE_CYCLE[(i + 1) % STYLE_CYCLE.length]; if (l.look === 'type') l.font = 'type'; else if (l.font === 'type') l.font = 'modern'; syncEditor(); draw(); };
+  $('#st-color-btn').onclick = () => { const c = $('#st-colors'); c.hidden = !c.hidden; };
+  $$('#st-fonts [data-font]').forEach(b => b.onclick = () => { const l = editing || sel; if (!l) return; snap(); l.font = b.dataset.font; syncEditor(); draw(); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); });
+  $$('#st-colors [data-color]').forEach(b => b.onclick = () => { const l = editing || sel; if (!l) return; snap(); l.color = b.dataset.color; syncEditor(); draw(); });
   $('#st-size-r').onpointerdown = snap;
-  $('#st-size-r').oninput = () => { const l = target(); sel = l; l.size = Number($('#st-size-r').value); draw(); };
-  $$('#st-align button').forEach(b => b.onclick = () => { snap(); const l = target(); sel = l; l.align = b.dataset.a; sync(); draw(); });
-  $('#st-del').onclick = () => { snap(); layers = layers.filter(l => l !== sel); sel = layers.at(-1) || null; sync(); draw(); };
+  $('#st-size-r').oninput = () => { const l = editing || sel; if (!l) return; l.size = Number($('#st-size-r').value); syncEditor(); draw(); };
+  $('#st-align').onclick = () => { const l = editing || sel; if (!l) return; snap(); l.align = { center: 'start', start: 'end', end: 'center' }[l.align || 'center']; syncEditor(); draw(); };
+  $('#st-hk').onclick = () => { harakat = !harakat; store.set('studioHarakat', harakat); syncEditor(); draw(); };
+  $('#st-save-text').onclick = () => { const l = editing || sel; if (l?.text.trim()) { saveText(l); window.JundCal?.toast(L('★ Saved — find it under “Saved”', '★ حُفظ — تجده في «المحفوظة»')); } };
   $('#st-undo').onclick = undo;
   const cmp = on => { comparing = on; draw(); };
   $('#st-cmp').onpointerdown = () => cmp(true); $('#st-cmp').onpointerup = $('#st-cmp').onpointerleave = $('#st-cmp').onpointercancel = () => cmp(false);
   $('#st-rmbg').onclick = () => { snap(); stopVideo(); bg = { kind: 'color', key: 'navy' }; sync(); draw(); };
   $('#st-draft').onclick = saveDraft;
-  $('#st-new').onclick = () => { snap(); stopVideo(); bg = { kind: 'color', key: 'navy' }; layers = []; sel = null; draftId = null; $('#st-text').value = ''; sync(); draw(); };
+  $('#st-new').onclick = () => { snap(); stopVideo(); bg = { kind: 'color', key: 'navy' }; layers = []; sel = null; draftId = null; closeSheet(); sync(); draw(); };
+  $('#st-saved-btn').onclick = () => openSheet('saved');
+  $('#st-bg-btn').onclick = () => openSheet('bg');
+  $('#st-more').onclick = () => openSheet('more');
+  $('#st-sheet').addEventListener('click', e => { if (e.target.id === 'st-sheet') closeSheet(); });
   renderDrafts();
-  $('#st-save-text').onclick = () => { if (sel?.text.trim()) { saveText(sel); J.toast?.('Saved') ?? window.JundCal?.toast('Saved'); } };
   $('#st-export').onclick = () => exportIt(false);
   $('#st-share').onclick = () => exportIt(true);
   $('#st-ideas').onclick = ideas;
   $('#st-tr').onclick = translate;
-  $$('#st-hk button').forEach(b => b.onclick = () => { harakat = b.dataset.h === '1'; store.set('studioHarakat', harakat); sync(); draw(); });
-  $('#st-design').onclick = designIdeas;
+  $('#st-design').onclick = () => { openSheet('ideas'); designIdeas(); };
   $('#st-cap-save').onclick = () => { const t = $('#st-cap-new').value.trim(); if (t) { saveCaption(t); $('#st-cap-new').value = ''; } };
   renderCaps();
   $('#st-car-go').onclick = carousel;
@@ -193,27 +232,92 @@ function build() {
     if (!v.paused) { v.pause(); return; }
     v.currentTime = trim.start; v.muted = false; v.play(); loop();
   };
+  window.addEventListener('resize', () => { if (!screen.hidden) { fit(); placeSel(); } });
   sync(); renderSaved(); draw();
+}
+
+/* the bottom sheets: Saved texts, Background, Design ideas, More (the parts are moved in, never rebuilt, so nothing is lost) */
+function openSheet(which) {
+  closeSheet();
+  const body = $('#st-sheet-body'), part = $('#sh-' + which); if (!part) return;
+  body.appendChild(part); sheetOpen = which;
+  const sh = $('#st-sheet'); sh.hidden = false; requestAnimationFrame(() => sh.classList.add('in'));
+  if (which === 'saved') renderSaved();
+  if (which === 'more') renderDrafts();
+}
+function closeSheet() {
+  const sh = $('#st-sheet'); if (!sh || sh.hidden) return false;
+  const body = $('#st-sheet-body'); [...body.children].forEach(c => $('#st-holders').appendChild(c));
+  sh.classList.remove('in'); sh.hidden = true; sheetOpen = null; return true;
+}
+// for the phone's back button: close what is open in Studio first
+function closeLayer() { if (editing) { closeEditor(); return true; } if (closeSheet()) return true; if (sel) { sel = null; sync(); draw(); return true; } return false; }
+
+/* the text editor, over the picture */
+function openEditor(l) {
+  closeSheet();
+  editing = l; sel = l;
+  const ed = $('#st-edit'); ed.hidden = false;
+  $('#st-text').value = l.text || '';
+  $('#st-colors').hidden = true;
+  syncEditor(); draw();
+  setTimeout(() => { const t = $('#st-text'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); }, 30);
+}
+function closeEditor() {
+  if (!editing) return;
+  const l = editing; editing = null;
+  $('#st-edit').hidden = true;
+  $('#st-text').blur();
+  if (!l.text.trim()) { layers = layers.filter(x => x !== l); sel = layers.at(-1) || null; }
+  sync(); draw();
+}
+function syncEditor() {
+  const l = editing || sel; if (!l) return;
+  const f = FONTS[l.font] || FONTS.modern, t = $('#st-text');
+  // the writing box looks like the text will look on the picture (its colour, box and glow)
+  const look = LOOKS[l.look] || LOOKS.classic;
+  t.style.fontFamily = f.css; t.style.fontWeight = f.w;
+  t.style.background = look.box === 'soft' ? 'rgba(0,0,0,.55)' : look.box === 'paper' ? '#fffdf5' : look.box ? l.color : 'transparent';
+  t.style.color = look.box === 'solid' ? (lum(l.color) > 0.6 ? '#111111' : '#ffffff') : look.box === 'soft' ? '#ffffff' : look.box === 'paper' ? '#1a1a1a' : look.neon ? '#ffffff' : l.color;
+  t.style.textShadow = look.neon ? `0 0 10px ${l.color}, 0 0 22px ${l.color}` : look.box ? 'none' : '0 1px 6px rgba(0,0,0,.6)';
+  t.style.webkitTextStroke = look.outline ? `1px ${l.color}` : '';
+  if (look.outline) t.style.color = lum(l.color) > 0.6 ? '#111111' : '#ffffff';
+  t.style.textAlign = l.align === 'start' ? 'start' : l.align === 'end' ? 'end' : 'center';
+  t.style.fontSize = Math.max(18, Math.min(40, l.size * 330)) + 'px';
+  $('#st-align').innerHTML = ic({ start: IC.alS, center: IC.alC, end: IC.alE }[l.align || 'center']);
+  $('#st-color-btn i').style.background = l.color;
+  $('#st-look').classList.toggle('on', l.look !== 'classic');
+  $('#st-style-name').textContent = AR ? (STYLE_AR[l.look] || '') : (LOOKS[l.look]?.name || '');
+  $('#st-hk').classList.toggle('off', !harakat);
+  $('#st-size-r').value = l.size;
+  $$('#st-fonts [data-font]').forEach(b => b.classList.toggle('on', l.font === b.dataset.font));
+  $$('#st-colors [data-color]').forEach(b => b.classList.toggle('on', l.color === b.dataset.color));
+}
+
+// the picture fills the space between the top and bottom bars, keeping its shape
+function fit() {
+  const wrap = $('#st-wrap'), stage = $('#st-stage'); if (!wrap || !stage) return;
+  const [W, H] = SIZES[size];
+  const railW = 64, availW = Math.max(160, stage.clientWidth - railW - 8), availH = Math.max(200, stage.clientHeight);
+  const k = Math.min(availW / W, availH / H);
+  wrap.style.width = Math.floor(W * k) + 'px'; wrap.style.height = Math.floor(H * k) + 'px';
 }
 
 function sync() {
   const [W, H] = SIZES[size];
   const cv = $('#st-canvas'); if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  fit();
   $$('#st-size button').forEach(b => b.classList.toggle('on', b.dataset.k === size));
   $$('#st-bgs [data-bg]').forEach(b => b.classList.toggle('on', bg.kind === 'color' && bg.key === b.dataset.bg));
-  $('#st-del').hidden = !sel;
   $('#st-rmbg').hidden = bg.kind === 'color';
   $('#st-undo').disabled = !history.length;
-  renderLayers();
-  $$('#st-looks [data-look]').forEach(b => b.classList.toggle('on', sel?.look === b.dataset.look));
-  $$('#st-fonts [data-font]').forEach(b => b.classList.toggle('on', sel?.font === b.dataset.font));
-  $$('#st-colors [data-color]').forEach(b => b.classList.toggle('on', sel?.color === b.dataset.color));
-  $$('#st-align button').forEach(b => b.classList.toggle('on', (sel?.align || 'center') === b.dataset.a));
-  if (sel) { $('#st-size-r').value = sel.size; if (document.activeElement !== $('#st-text')) $('#st-text').value = sel.text; }
   $('#st-export').textContent = bg.kind === 'video' ? 'Save video' : 'Save image';
   $('#st-trim').hidden = bg.kind !== 'video';
-  $$('#st-hk button').forEach(b => b.classList.toggle('on', (b.dataset.h === '1') === harakat));
+  $('#st-hint').hidden = layers.length > 0;
+  const n = saved().length, nb = $('#st-saved-n'); if (nb) nb.textContent = n ? (AR ? ar(n) : n) : '';
+  if (editing) syncEditor();
 }
+const ar = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 
 /* ---------- the list of texts, undo, compare, drafts ---------- */
 let history = [], comparing = false, draftId = null;
@@ -258,7 +362,7 @@ async function renderDrafts() {
     const d = list.find(x => x.id === b.dataset.do); snap(); stopVideo();
     size = d.size; layers = d.layers; sel = layers.at(-1) || null; draftId = d.id;
     if (d.img) { const im = new Image(); im.onload = () => { bg = { kind: 'image', img: im }; sync(); draw(); }; im.src = d.img; } else bg = { kind: 'color', key: d.bgKey };
-    sync(); draw(); $('#st-canvas').scrollIntoView({ block: 'center' });
+    closeSheet(); sync(); draw();
     if (d.video) status('This draft had a video: pick it again with “Photo or video”.');
   });
   $$('[data-dx]', box).forEach(b => b.onclick = async () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Delete?'; return; } await tx('readwrite', s => s.delete(b.dataset.dx)); if (draftId === b.dataset.dx) draftId = null; renderDrafts(); });
@@ -267,9 +371,8 @@ async function renderDrafts() {
 function addLayer(o) {
   if (layers.length || o.text) snap();
   const l = { id: newId(), text: o.text ?? 'اكتب هنا', look: o.look || 'classic', font: o.font || LOOKS[o.look || 'classic'].font,
-    color: o.color || '#ffffff', size: o.size || 0.075, align: o.align || 'center', x: 0.5, y: 0.25 + (layers.length % 4) * 0.15 };
+    color: o.color || '#ffffff', size: o.size || 0.075, align: o.align || 'center', x: 0.5, y: 0.4 + (layers.length % 3) * 0.12, wrap: o.wrap || 0.84, rot: o.rot || 0 };
   layers.push(l); sel = l; sync(); draw();
-  $('#st-text').value = l.text;
   return l;
 }
 
@@ -369,10 +472,11 @@ function drawLayer(ctx, l, W, H, showSel) {
   const look = LOOKS[l.look] || LOOKS.classic, font = FONTS[l.font] || FONTS.modern;
   const px = Math.round(l.size * W), rtl = isAr(l.text), txt = shown(l);
   ctx.save();
+  if (l.rot) { ctx.translate(l.x * W, l.y * H); ctx.rotate(l.rot); ctx.translate(-l.x * W, -l.y * H); }
   ctx.font = `${font.w} ${px}px ${font.css}`;
   ctx.direction = rtl ? 'rtl' : 'ltr';
   ctx.textBaseline = 'middle';
-  const lines = wrap(ctx, txt || ' ', W * 0.84);
+  const lines = wrap(ctx, txt || ' ', W * (l.wrap || 0.84));
   const lh = px * (l.font === 'naskh' || l.font === 'ruqaa' ? 1.55 : 1.3);
   const widths = lines.map(t => ctx.measureText(t).width);
   const maxW = Math.max(...widths, 10), totalH = lh * lines.length;
@@ -404,8 +508,7 @@ function drawLayer(ctx, l, W, H, showSel) {
   });
   ctx.restore();
   const b = { x: cx - maxW / 2 - padX, y: top - padY, w: maxW + padX * 2, h: totalH + padY * 2 };
-  if (showSel) { ctx.save(); ctx.setLineDash([W * 0.012, W * 0.008]); ctx.lineWidth = W * 0.003; ctx.strokeStyle = 'rgba(79,140,255,.95)'; ctx.strokeRect(b.x, b.y, b.w, b.h); ctx.restore(); }
-  return b;
+  return b;   // the frame and handles of the chosen text are drawn over the picture (placeSel), never into it
 }
 function paint(ctx, W, H, showSel) {
   ctx.clearRect(0, 0, W, H);
@@ -413,30 +516,112 @@ function paint(ctx, W, H, showSel) {
   else if (bg.kind === 'video' && bg.video.readyState >= 2) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); cover(ctx, bg.video, bg.video.videoWidth, bg.video.videoHeight, W, H); }
   else { const c = BGS[bg.key] || BGS.navy, g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, c[0]); g.addColorStop(1, c[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
   if (comparing && showSel) return;
-  for (const l of layers) boxes.set(l.id, drawLayer(ctx, l, W, H, showSel && l === sel));
+  // the text being written is shown in the writing box instead, like Instagram
+  for (const l of layers) { if (showSel && l === editing) continue; boxes.set(l.id, drawLayer(ctx, l, W, H, showSel && l === sel)); }
 }
-function draw() { const cv = $('#st-canvas'); if (cv) paint(cv.getContext('2d'), cv.width, cv.height, true); }
+function draw(withFrame = true) {
+  const cv = $('#st-canvas'); if (!cv) return;
+  paint(cv.getContext('2d'), cv.width, cv.height, true);
+  if (withFrame) placeSel(); else { const f = $('#st-sel'); if (f) f.hidden = true; }
+}
 
-/* ---------- dragging ---------- */
-let drag = null;
+/* ---------- touching the picture: move, pinch to resize and turn, handles for the box, drop on the bin to remove ---------- */
+let drag = null, pinch = null, handle = null;
+const ptrs = new Map();
 function pt(e) { const cv = $('#st-canvas'), r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * cv.width, y: (e.clientY - r.top) / r.height * cv.height }; }
+// a point in the text's own frame (the text may be turned)
+function local(l, p) {
+  const b = boxes.get(l.id); if (!b) return p;
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, a = -(l.rot || 0), dx = p.x - cx, dy = p.y - cy;
+  return { x: cx + dx * Math.cos(a) - dy * Math.sin(a), y: cy + dx * Math.sin(a) + dy * Math.cos(a) };
+}
+function hitAt(p) {
+  return [...layers].reverse().find(l => { const b = boxes.get(l.id), q = local(l, p); const m = 12; return b && q.x >= b.x - m && q.x <= b.x + b.w + m && q.y >= b.y - m && q.y <= b.y + b.h + m; });
+}
+function overTrash(e) { const t = $('#st-trash'); if (!t || t.hidden) return false; const r = t.getBoundingClientRect(); return e.clientX > r.left - 20 && e.clientX < r.right + 20 && e.clientY > r.top - 20 && e.clientY < r.bottom + 20; }
 function down(e) {
-  const p = pt(e);
-  const hit = [...layers].reverse().find(l => { const b = boxes.get(l.id); return b && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h; });
-  if (hit) { sel = hit; snap(); $('#st-text').value = hit.text; sync(); draw(); }
-  if (hit) { drag = { l: hit, dx: p.x - hit.x * $('#st-canvas').width, dy: p.y - hit.y * $('#st-canvas').height }; e.target.setPointerCapture(e.pointerId); e.preventDefault(); }
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { e.target.setPointerCapture?.(e.pointerId); } catch {}
+  if (ptrs.size === 2 && sel) {
+    const [a, b] = [...ptrs.values()];
+    pinch = { l: sel, d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), size: sel.size, rot: sel.rot || 0 };
+    drag = null; $('#st-trash').hidden = true; e.preventDefault(); return;
+  }
+  const p = pt(e), hit = hitAt(p);
+  if (hit) {
+    const again = hit === sel;
+    sel = hit; snap();
+    drag = { l: hit, dx: p.x - hit.x * $('#st-canvas').width, dy: p.y - hit.y * $('#st-canvas').height, moved: false, again, sx: e.clientX, sy: e.clientY };
+    sync(); draw(); e.preventDefault();
+  } else if (sel) { sel = null; sync(); draw(); }
 }
 function move(e) {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(b.x - a.x, b.y - a.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
+    pinch.l.size = Math.min(0.24, Math.max(0.02, pinch.size * d / pinch.d));
+    let r = pinch.rot + ang - pinch.ang; if (Math.abs(r) < 0.06) r = 0;   // snaps back to straight
+    pinch.l.rot = r; draw(); return;
+  }
   if (!drag) return;
-  const p = pt(e), cv = $('#st-canvas');
-  const ox = drag.l.x, oy = drag.l.y;
+  if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+  drag.moved = true;
+  const p = pt(e), cv = $('#st-canvas'), ox = drag.l.x, oy = drag.l.y;
   drag.l.y = Math.min(0.98, Math.max(0.02, (p.y - drag.dy) / cv.height));
   drag.l.x = Math.min(0.98, Math.max(0.02, (p.x - drag.dx) / cv.width));
   // its translation moves with it
   for (const t of layers) if (t.of === drag.l.id) { t.x += drag.l.x - ox; t.y += drag.l.y - oy; }
+  const tr = $('#st-trash'); tr.hidden = false; tr.classList.toggle('hot', overTrash(e));
+  $('#st-sel').hidden = true;
+  draw(false);
+}
+function up(e) {
+  ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; sync(); draw(); return; }
+  if (!drag) return;
+  const d = drag; drag = null;
+  const tr = $('#st-trash'), drop = !tr.hidden && overTrash(e); tr.hidden = true; tr.classList.remove('hot');
+  if (drop) { removeLayer(d.l); return; }
+  // a tap on a text that was already chosen opens it for writing, like Instagram
+  if (!d.moved && d.again) { openEditor(d.l); return; }
+  sync(); draw();
+}
+function removeLayer(l) {
+  layers = layers.filter(x => x !== l && x.of !== l.id);
+  if (sel === l) sel = null;
+  sync(); draw();
+}
+// the handles around the chosen text: ↔ makes the box wider or narrower (the text wraps), ⤡ makes the text bigger or smaller
+function handleDown(e) {
+  if (!sel) return; e.stopPropagation(); e.preventDefault();
+  try { e.target.setPointerCapture?.(e.pointerId); } catch {} snap();
+  const b = boxes.get(sel.id), r = $('#st-canvas').getBoundingClientRect(), k = r.width / $('#st-canvas').width;
+  handle = { kind: e.target.dataset.h, l: sel, x0: e.clientX, y0: e.clientY, wrap: sel.wrap || 0.84, size: sel.size,
+    cx: r.left + (b.x + b.w / 2) * k, cy: r.top + (b.y + b.h / 2) * k };
+  handle.d0 = Math.hypot(e.clientX - handle.cx, e.clientY - handle.cy);
+}
+function handleMove(e) {
+  if (!handle) return; e.preventDefault();
+  const cv = $('#st-canvas'), r = cv.getBoundingClientRect();
+  if (handle.kind === 'w') {
+    const dx = (e.clientX - handle.x0) * (AR ? -1 : 1);   // the handle sits on the end side (left in Arabic)
+    handle.l.wrap = Math.min(0.96, Math.max(0.18, handle.wrap + 2 * dx / r.width));
+  } else {
+    const d = Math.hypot(e.clientX - handle.cx, e.clientY - handle.cy);
+    handle.l.size = Math.min(0.24, Math.max(0.02, handle.size * d / Math.max(20, handle.d0)));
+  }
   draw();
 }
-function up() { drag = null; }
+function handleUp() { if (!handle) return; handle = null; sync(); draw(); }
+// the frame with the handles sits on the chosen text
+function placeSel() {
+  const box = $('#st-sel'); if (!box) return;
+  const l = sel, b = l && boxes.get(l.id);
+  if (!l || !b || editing || comparing) { box.hidden = true; return; }
+  const cv = $('#st-canvas'), k = cv.getBoundingClientRect().width / cv.width;
+  box.hidden = false;
+  Object.assign(box.style, { left: b.x * k + 'px', top: b.y * k + 'px', width: b.w * k + 'px', height: b.h * k + 'px', transform: `rotate(${l.rot || 0}rad)` });
+}
 
 /* ---------- saved texts ---------- */
 const saved = () => store.get('studioSaved', []);
@@ -450,9 +635,10 @@ function saveText(l) {
 function renderSaved() {
   const box = $('#st-saved'); if (!box) return;
   const list = saved();
-  box.innerHTML = list.length ? list.map(x => `<span class="saved-chip"><button type="button" class="chip-b" data-use="${x.id}" dir="auto" style="font-family:${(FONTS[x.font] || FONTS.modern).css}">${esc(x.text.slice(0, 40))}${x.text.length > 40 ? '…' : ''}</button><button type="button" class="x" data-rm="${x.id}" aria-label="Remove">×</button></span>`).join('')
-    : '<span class="muted">Texts you save appear here. Next time, one tap puts the same text and look back.</span>';
-  $$('[data-use]', box).forEach(b => b.onclick = () => { const x = saved().find(s => s.id === b.dataset.use); if (x) addLayer({ ...x }); });
+  const nb = $('#st-saved-n'); if (nb) nb.textContent = list.length ? (AR ? ar(list.length) : list.length) : '';
+  box.innerHTML = list.length ? list.map(x => `<div class="sx-sv"><button type="button" class="sx-sv-t" data-use="${x.id}" dir="auto" style="font-family:${(FONTS[x.font] || FONTS.modern).css};font-weight:${(FONTS[x.font] || FONTS.modern).w};color:${x.color === '#111111' ? 'inherit' : x.color}">${esc(x.text.slice(0, 90))}${x.text.length > 90 ? '…' : ''}</button><button type="button" class="x ghost small" data-rm="${x.id}" aria-label="${L('Remove', 'إزالة')}">×</button></div>`).join('')
+    : `<p class="muted">${L('Texts you save appear here. Next time, one tap puts the same text and look back. Tap ☆ while writing to save a text.', 'النصوص التي تحفظها تظهر هنا، وبضغطة واحدة تعود بنفس الشكل. اضغط ☆ أثناء الكتابة لحفظ النص.')}</p>`;
+  $$('[data-use]', box).forEach(b => b.onclick = () => { const x = saved().find(s => s.id === b.dataset.use); if (x) { closeSheet(); addLayer({ ...x }); } });
   $$('[data-rm]', box).forEach(b => b.onclick = () => { store.set('studioSaved', saved().filter(s => s.id !== b.dataset.rm)); renderSaved(); });
 }
 
@@ -596,7 +782,7 @@ function hOf(l) {
   const [W, H] = SIZES[size], font = FONTS[l.font] || FONTS.modern, px = Math.round(l.size * W);
   const ctx = document.createElement('canvas').getContext('2d'); ctx.font = `${font.w} ${px}px ${font.css}`;
   const lh = px * (l.font === 'naskh' || l.font === 'ruqaa' ? 1.55 : 1.3);
-  return wrap(ctx, shown(l) || ' ', W * 0.84).length * lh / H;
+  return wrap(ctx, shown(l) || ' ', W * (l.wrap || 0.84)).length * lh / H;
 }
 function placeTr(base) {
   for (const t of layers.filter(x => x.of === base.id)) {
@@ -606,7 +792,7 @@ function placeTr(base) {
 }
 async function translate() {
   const cur = sel || layers.at(-1), l = cur?.of ? layers.find(x => x.id === cur.of) || cur : cur, src = (l?.text || $('#st-text').value).trim();
-  if (!src || src === 'Your text' || src === 'اكتب هنا') { $('#st-text').focus(); status('Write the text first, then tap Add translation.'); return; }
+  if (!src || src === 'Your text' || src === 'اكتب هنا') { status(L('Write a text first (tap Aa), then tap Translate.', 'اكتب نصًا أولًا (اضغط Aa)، ثم اضغط ترجمة.')); return; }
   const toEn = J.langOf(src) === 'ar', b = $('#st-tr'); b.disabled = true; status('⏳ Translating…');
   try {
     const r = await J.callServer({ json: false, maxTokens: 800, system: `Translate the user's text into ${toEn ? 'clear, natural English' : 'clear, eloquent Arabic'} for a social-media picture. If it is a Quran verse, give the meaning faithfully (like Saheeh International) and do not add anything. If it is a hadith or a scholar's words, translate faithfully. Keep it short. Return only the translation, no quotes, no notes, no source.`, user: src });
@@ -624,7 +810,7 @@ async function translate() {
 async function designIdeas() {
   const cur = sel || layers.at(-1), l = cur?.of ? layers.find(x => x.id === cur.of) || cur : cur, text = (l?.text || $('#st-text').value).trim();
   const box = $('#st-design-list');
-  if (!text) { $('#st-text').focus(); status('Write the text first, then tap Design ideas.'); return; }
+  if (!text) { box.innerHTML = `<p class="muted">${L('Write a text first (tap Aa), then tap Ideas.', 'اكتب نصًا أولًا (اضغط Aa)، ثم اضغط أفكار.')}</p>`; return; }
   box.innerHTML = '<p class="muted fine">⏳ Thinking of designs…</p>';
   const system = `You are a calm, tasteful Islamic social-media designer. For the user's text, suggest 4 different designs for a ${SIZES[size][2]} picture.
 Choose only from these options:
@@ -655,7 +841,7 @@ Return JSON only: {"designs":[{"name":"","why":"","look":"","font":"","color":""
       if (+d.y > 0.05 && +d.y < 0.95) t.y = +d.y;
       if (BGS[d.bg] && bg.kind === 'color') bg = { kind: 'color', key: d.bg };
       if (layers.some(x => x.of === t.id)) t.y = Math.min(t.y, 0.7);
-      placeTr(t); sel = t; sync(); draw(); $('#st-canvas').scrollIntoView({ block: 'center' });
+      placeTr(t); sel = t; closeSheet(); sync(); draw();
     });
   } catch (e) { box.innerHTML = `<p class="muted fine">✗ ${esc(J.errText(e))}</p>`; }
 }
@@ -694,7 +880,7 @@ function showIdeas(list) {
     ${x.caption ? `<div style="font-size:.9rem;white-space:pre-wrap">${esc(x.caption)}</div>` : ''}</div>`).join('');
   $$('[data-idea]', box).forEach(b => b.onclick = () => {
     const x = list[+b.dataset.idea];
-    addLayer({ text: x.hook, look: 'box', color: '#ffffff' });
+    closeSheet(); addLayer({ text: x.hook, look: 'box', color: '#ffffff' });
     if (x.caption) saveCaption(x.caption);
     try { navigator.clipboard.writeText(x.caption || ''); status('✓ The hook is on the picture; the caption is copied and saved.'); } catch {}
     $('#st-canvas').scrollIntoView({ block: 'center' });
@@ -702,7 +888,8 @@ function showIdeas(list) {
 }
 
 window.JundStudio = {
-  open() { if (!built) { build(); showIdeas(store.get('studioIdeas', [])); } loadFonts(); sync(); draw(); renderSaved(); },
+  open() { if (!built) { build(); showIdeas(store.get('studioIdeas', [])); } loadFonts(); sync(); draw(); renderSaved(); requestAnimationFrame(() => { fit(); placeSel(); }); },
+  closeLayer: () => built && !screen.hidden && closeLayer(),
   ideas,
   load(f) { if (!built) build(); loadFonts(); loadMedia(f); },
   addText(t) { if (!built) build(); loadFonts(); addLayer({ text: t, font: 'naskh', look: 'classic', size: 0.06 }); },

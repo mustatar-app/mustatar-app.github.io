@@ -197,12 +197,12 @@
       <span class="row-gap" style="margin:0"><button type="button" class="ghost" id="exam-plan">Plan an exam</button><button type="button" class="primary" id="ev-add">+ Add</button></span>
     </div>
 
-    <div class="card review" id="week-review"></div>
-
-    <div class="card">
+    <!-- the calendar itself comes first, then the chosen day; the week's review and study cards come after -->
+    <div class="card cal-card">
       <div class="cal-nav">
         <button type="button" class="icon-btn" id="cal-prev" aria-label="Previous month">‹</button>
         <b id="cal-month"></b>
+        <button type="button" class="ghost small cal-today" id="cal-today">Today</button>
         <button type="button" class="icon-btn" id="cal-next" aria-label="Next month">›</button>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
@@ -217,6 +217,9 @@
       <div class="card-h">Coming up</div>
       <div id="upcoming-list"></div>
     </div>
+
+    <div class="card review" id="week-review"></div>
+    <div id="study-cards"></div>
   </section>
 
   <!-- assistant: talk to the app (built by assistant.js) -->

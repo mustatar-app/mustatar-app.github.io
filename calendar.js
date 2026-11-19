@@ -190,6 +190,7 @@ function render() {
   window.JundAssistant?.home();
 }
 $('#cal-prev').onclick = () => { if (mode === 'week') selDay = addDays(selDay, -7); else { const [y, m] = viewMonth.split('-').map(Number); viewMonth = iso(new Date(y, m - 2, 1)).slice(0, 7); } render(); };
+$('#cal-today').onclick = () => { goToday(); render(); };
 $('#cal-next').onclick = () => { if (mode === 'week') selDay = addDays(selDay, 7); else { const [y, m] = viewMonth.split('-').map(Number); viewMonth = iso(new Date(y, m, 1)).slice(0, 7); } render(); };
 $('#ev-add').onclick = () => openDialog(null, selDay);
 

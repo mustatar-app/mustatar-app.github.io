@@ -351,7 +351,38 @@ function renderPaletteSettings() {
 
 /* ---------- navigation ---------- */
 const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me'];
+/* the phone's back button (and the browser's): goes back through the screens like other apps; tabs go back to Today;
+   an open sheet or window closes first; on Today, a second press leaves the app */
+const TABS = ['assistant', 'library', 'calendar', 'me'];
+let screenNow = 'assistant', backStack = [], fromBack = false;
+function remember(name) {
+  if (fromBack || name === screenNow) return;
+  if (TABS.includes(name)) backStack = name === 'assistant' ? [] : ['assistant'];
+  else { backStack.push(screenNow); if (backStack.length > 30) backStack.shift(); }
+}
+function closeTopLayer() {
+  const d = [...document.querySelectorAll('dialog[open]')].pop(); if (d) { d.close(); return true; }
+  const sh = document.querySelector('.px.in'); if (sh) { window.JundNav?.closeSheet(); return true; }
+  if (window.JundStudio?.closeLayer?.()) return true;
+  const dr = document.querySelector('.dr.in, .dr.open'); if (dr && window.JundDrawer?.close) { window.JundDrawer.close(); return true; }
+  return false;
+}
+let leaveArmed = 0;
+try { history.replaceState({ mst: 'root' }, ''); history.pushState({ mst: 'app' }, ''); } catch {}
+window.addEventListener('popstate', e => {
+  if (e.state?.mst !== 'root') return;
+  if (closeTopLayer()) { history.pushState({ mst: 'app' }, ''); return; }
+  const prev = backStack.pop() || (screenNow !== 'assistant' ? 'assistant' : null);
+  if (prev) { fromBack = true; show(prev); fromBack = false; history.pushState({ mst: 'app' }, ''); return; }
+  // on Today with nothing to go back to: a second press leaves the app
+  if (Date.now() - leaveArmed < 2500) { history.back(); return; }
+  leaveArmed = Date.now(); history.pushState({ mst: 'app' }, '');
+  window.JundCal?.toast?.(window.ZadLang === 'ar' ? 'اضغط رجوع مرة أخرى للخروج' : 'Press back again to leave');
+});
+window.JundBack = () => { const prev = backStack.pop() || 'assistant'; fromBack = true; show(prev); fromBack = false; };
+
 function show(name) {
+  remember(name); screenNow = name;
   for (const s of SCREENS) { const el = $('#screen-' + s); if (el) el.hidden = s !== name; }
   const tab = name === 'result' || name === 'new' ? 'library' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
   document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;

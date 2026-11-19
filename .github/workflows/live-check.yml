@@ -1,0 +1,23 @@
+name: Live check (sign-in, assistant speed, app speed)
+# Checks the real server and the real app: Google and passkey sign-in are set up, how fast the assistant
+# answers a short message, and how fast the app opens. Uses a few assistant answers from the free allowance.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['tests/live_check.py', '.github/workflows/live-check.yml']
+permissions:
+  contents: read
+concurrency: live-check
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Tools
+        run: pip install -q playwright==1.* && python -m playwright install --with-deps chromium > /dev/null
+      - name: Live check
+        run: python3 tests/live_check.py

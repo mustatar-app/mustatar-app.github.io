@@ -601,7 +601,7 @@ function initSettings() {
     try {
       const j = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
       if (j && typeof j.token === 'string' && j.token.length > 10) {
-        store.set('mstToken', j.token); store.set('mstUser', j.user || {}); store.set('opened', true);
+        store.set('mstToken', j.token); store.set('mstUser', j.user || {}); store.set('opened', true); store.set('signinLinkAt', Date.now());
         signedIn(j, !!j.created);
         setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم الدخول بحساب Google' : '✓ Signed in with Google'), 600);
       }

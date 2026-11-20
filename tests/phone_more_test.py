@@ -112,8 +112,11 @@ def main():
     if work:
         cid = work["id"]
         start_ms = int((time.time() + 3 * 3600) * 1000)
-        adb("shell", "content", "insert", "--uri", "content://com.android.calendar/events", "--bind", f"calendar_id:i:{cid}", "--bind", "title:s:Dentist (from phone)",
-            "--bind", f"dtstart:l:{start_ms}", "--bind", f"dtend:l:{start_ms + 3600000}", "--bind", "eventTimezone:s:UTC")
+        # one string for the phone's shell, with the title quoted (it has spaces)
+        import shlex
+        out = adb("shell", f"content insert --uri content://com.android.calendar/events --bind calendar_id:i:{cid} --bind {shlex.quote('title:s:Dentist (from phone)')}"
+            f" --bind dtstart:l:{start_ms} --bind dtend:l:{start_ms + 3600000} --bind eventTimezone:s:UTC")
+        print("     phone event added:", out.strip() or "ok", flush=True)
         # connect in the app, as a person would (permission already given), showing Work and writing into it
         page.js(f"""(() => {{ localStorage.setItem('jn_phoneCal', JSON.stringify({{ on: true, show: [{cid}], write: {cid}, list: [{{ id: {cid}, name: 'Work', account: 'test@example.com', writable: true, color: '#1f5fd6' }}] }}));
           JundCal.add({{ title: 'Write the report (from Mustatar)', date: new Date(Date.now() + 864e5).toISOString().slice(0, 10), time: '10:00', type: 'task', remind: 15 }}); return true; }})()""")
@@ -127,7 +130,8 @@ def main():
         import re as _re
         mm = _re.search(r"_id=(\d+), title=Write the report \(from Mustatar\)", rows)
         if mm:
-            adb("shell", "content", "update", "--uri", f"content://com.android.calendar/events/{mm.group(1)}", "--bind", "title:s:Write the report — changed on phone")
+            out = adb("shell", f"content update --uri content://com.android.calendar/events/{mm.group(1)} --bind {shlex.quote('title:s:Write the report — changed on phone')}")
+            print("     changed on the phone:", out.strip() or "ok", flush=True)
             page.js("(() => { const c = JSON.parse(localStorage.getItem('jn_phoneCal')); c.at = 0; localStorage.setItem('jn_phoneCal', JSON.stringify(c)); return true; })()")
             page.js("JundPhone.calRefresh(true)", timeout=40); time.sleep(4)
             t2 = page.js("JundCal.events().filter(e => !e.ext).map(e => e.title)")

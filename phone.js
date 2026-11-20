@@ -392,7 +392,7 @@ async function startUpdate() {
   const r = await ask({ action: 'appUpdate', url: updateInfo.url }, 300000).catch(() => ({ ok: false }));
   paintUpdate(r.step === 'allow' ? 'allow' : r.ok ? 'done' : 'fail');
 }
-window.JundUpdate = { check: checkUpdate, downloading: () => paintUpdate('down'), done: ok => paintUpdate(ok ? 'done' : 'fail') };
+window.JundAppUpdate = { check: checkUpdate, downloading: () => paintUpdate('down'), done: ok => paintUpdate(ok ? 'done' : 'fail') };
 
 /* ---------- when things run ---------- */
 async function tick(force) {

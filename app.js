@@ -3419,3 +3419,11 @@ window.JN = { speechLangs, applyTools, saveProfile, TOOLS, HARD, store, cloud, e
 // for testing only
 window.__jn = { openLesson, paginateNotes, idb, makeBook, makeYearBook, pending: () => pending };
 })();
+
+// every small writing box grows with what you write (up to about 6 lines), so the whole message stays readable
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t?.tagName !== 'TEXTAREA' || t.id === 'as-text' || t.rows > 2) return;
+  t.style.height = 'auto'; t.style.height = Math.min(Math.min(200, innerHeight * 0.35), t.scrollHeight + 2) + 'px';
+  t.style.overflowY = t.scrollHeight > 200 ? 'auto' : 'hidden';
+}, true);

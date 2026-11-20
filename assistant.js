@@ -120,7 +120,13 @@ function build() {
   $('#as-send').onclick = send;
   setTimeout(() => window.JundAttach?.homeSetup(), 0);
   $('#as-text').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); send(); } });
-  $('#as-text').addEventListener('input', () => { const t = $('#as-text'); t.style.height = 'auto'; t.style.height = Math.min(160, t.scrollHeight) + 'px'; });
+  // the box grows with the message, so you can read it all while you write (up to about 6 lines, then it scrolls)
+  const grow = () => { const t = $('#as-text'); if (!t) return; t.style.height = 'auto'; t.style.height = Math.min(Math.min(200, innerHeight * 0.35), t.scrollHeight + 2) + 'px'; };
+  $('#as-text').addEventListener('input', grow);
+  $('#as-text').addEventListener('focus', grow);
+  addEventListener('resize', grow);
+  // text put in by the voice typing or a shared message also makes it grow
+  setInterval(() => { const t = $('#as-text'); if (t && t.value !== t._last) { t._last = t.value; grow(); } }, 400);
   $('#as-mic').onclick = () => window.JundVoice ? window.JundVoice.general() : listen();
   $('#hm-yt').onclick = () => { J.show('new'); setTimeout(() => document.querySelector('#yt').focus(), 50); };
   $('#hm-rec').onclick = () => window.JundFeatures?.record();

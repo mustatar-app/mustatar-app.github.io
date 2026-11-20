@@ -649,8 +649,8 @@ public class MainActivity extends Activity {
         // came back from "allow installing updates": carry on with the update
         if (pendingUpdate != null && getPackageManager().canRequestPackageInstalls()) {
             String url = pendingUpdate; pendingUpdate = null;
-            if (web != null) web.evaluateJavascript("window.JundUpdate?.downloading?.()", null);
-            downloadUpdate(url, ok -> runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.JundUpdate?.done?.(" + ok + ")", null); }));
+            if (web != null) web.evaluateJavascript("window.JundAppUpdate?.downloading?.()", null);
+            downloadUpdate(url, ok -> runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.JundAppUpdate?.done?.(" + ok + ")", null); }));
         }
     }
 

@@ -2,7 +2,7 @@ name: Test on an Android phone
 # The real app on an Android emulator: Studio save and share, video, carousel, sharing words, reading aloud.
 on:
   pull_request:
-    paths: ['android/**', 'native.js', 'studio.js', 'app.js', 'voice.js', 'tests/phone_test.py', '.github/workflows/phone-test.yml']
+    paths: ['android/**', 'native.js', 'studio.js', 'app.js', 'voice.js', 'recorder.js', 'media.js', 'dictate.js', 'tests/phone_test.py', 'tests/phone_audio_test.py', '.github/workflows/phone-test.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,6 +32,11 @@ jobs:
           ffmpeg -loglevel error -f lavfi -i testsrc2=s=720x1280:r=30 -f lavfi -i sine=f=440 -t 4 \
             -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart tests/samples/clip.mp4
           ls -la tests/samples
+      - name: Real Arabic and English speech (for hearing inside the app)
+        run: |
+          pip install -q gtts
+          python3 -c "from gtts import gTTS; gTTS('بسم الله الرحمن الرحيم. درس اليوم عن الصيام. الصيام ركن من أركان الإسلام، ويبدأ من طلوع الفجر إلى غروب الشمس. ومن أكل ناسيا فليتم صومه.', lang='ar').save('tests/speech-ar.mp3'); gTTS('Good morning everyone. Today is meeting is about the product launch. We agreed to finish the design on Monday, test with five users on Wednesday, and launch on Sunday.', lang='en').save('tests/speech-en.mp3')"
+          ls -la tests/speech-*.mp3
       - name: Serve the app's pages
         run: (python3 -m http.server 8765 > /tmp/web.log 2>&1 &) && pip install -q websocket-client pillow
       - name: Enable KVM
@@ -45,11 +50,13 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # a silent microphone (no -noaudio), so recording inside the app can be tested
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb reverse tcp:8765 tcp:8765
             python3 tests/phone_test.py
+            cd tests && python3 phone_audio_test.py
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4

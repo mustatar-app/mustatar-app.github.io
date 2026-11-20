@@ -1561,16 +1561,16 @@ async function hearAll() {
   try {
     let p;
     while ((p = pending.find(x => x.media && !x.text && !x.bad && !x.busy))) {
-      const offline = !navigator.onLine || (store.get('hearOn', 'auto') === 'phone' && !p.yt && !p.images);
-      if (offline && p.images) { p.bad = true; p.status = '✗ Reading photos needs the internet. Connect, then add them again.'; renderPending(); continue; }
-      if (offline && p.yt) { p.bad = true; p.status = '✗ YouTube needs the internet. Connect, then add it again.'; renderPending(); continue; }
-      if (offline && !(await window.JundOffline?.ready())) { p.bad = true; p.status = '✗ No internet, and offline transcription is not downloaded yet (Settings → Offline transcription).'; renderPending(); continue; }
+      // no internet: nothing is lost — everything waits here and is heard by itself when the internet is back
+      if (!navigator.onLine) {
+        for (const x of pending.filter(x => x.media && !x.text && !x.bad && !x.busy)) x.status = window.ZadLang === 'ar' ? '⏳ ينتظر الإنترنت — سيُفرَّغ تلقائيًا' : '⏳ Waiting for the internet — it will be transcribed by itself';
+        renderPending(); break;
+      }
+      const offline = false;
       p.busy = true; window.JundRecs?.started(p);
       const st = s => { p.status = '⏳ ' + s; const li = $$('#pending li')[pending.indexOf(p)]; const el = li && $('.st', li); if (el) el.textContent = p.status; else renderPending(); };
       try {
-        const text = p.yt ? await hearYouTube(p, hearCtl.signal, st)
-          : offline ? await window.JundOffline.transcribe(p, hearCtl.signal, st)
-          : await hearFile(p, hearCtl.signal, st);
+        const text = p.yt ? await hearYouTube(p, hearCtl.signal, st) : await hearFile(p, hearCtl.signal, st);
         if (!text) { p.bad = true; p.status = '✗ No speech was heard in this file.'; }
         else {
           const AR = window.ZadLang === 'ar';
@@ -2323,6 +2323,8 @@ async function processQueue() {
   }
 }
 addEventListener('online', () => setTimeout(processQueue, 1500));
+// recordings and files that were waiting for the internet are heard as soon as it is back
+addEventListener('online', () => setTimeout(() => { if (pending.some(x => x.media && !x.text && !x.bad)) hearAll(); }, 1200));
 
 $('#make').onclick = async () => {
   const err = $('#new-error'); err.hidden = true;

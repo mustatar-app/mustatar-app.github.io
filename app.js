@@ -1724,12 +1724,58 @@ $('#script-close').onclick = () => { $('#script-box').hidden = true; };
 
 $('#yt').addEventListener('input', () => {
   clearTimeout($('#yt')._t);
-  $('#yt')._t = setTimeout(() => { if (/youtu\.?be/.test($('#yt').value) && !$('#yt-go').disabled) $('#yt-go').click(); }, 500);
+  $('#yt')._t = setTimeout(() => { if (/https?:\/\/\S+\.\S+/.test($('#yt').value) && !$('#yt-go').disabled) $('#yt-go').click(); }, 600);
 });
+/* any other link (Drive, Dropbox, OneDrive, a podcast page, an audio or video file, a web page, a Google Doc):
+   the server opens it, and the recording or the page's words come back to be made into notes like a file */
+const linkMsg = (code, site) => {
+  const A = window.ZadLang === 'ar';
+  return ({
+    blocked: A ? `${site} لا يسمح للتطبيقات بفتح مقاطعه. احفظ المقطع في جوالك (زر الحفظ أو التنزيل في ${site})، ثم أضفه هنا كملف.` : `${site} does not let apps open its videos. Save the video to your phone (the save or download button in ${site}), then add it here as a file.`,
+    private: A ? 'هذا الرابط خاص. اجعله «أي شخص لديه الرابط» ثم الصقه مرة أخرى، أو نزّل الملف وأضفه هنا.' : 'This link is private. Set it to “Anyone with the link”, then paste it again — or download the file and add it here.',
+    big: A ? 'الملف أكبر من ٢٠٠ ميغابايت. نزّله وأضفه هنا كملف، فيُقسَّم تلقائيًا.' : 'The file is over 200 MB. Download it and add it here as a file — it is split automatically.',
+    empty: A ? 'لم أجد في هذه الصفحة كلامًا أو تسجيلًا أصنع منه ملاحظات.' : 'I found no words or recording on this page to make notes from.',
+    notmedia: A ? 'هذا الرابط ليس تسجيلًا ولا صفحة أقرؤها. جرّب رابط الملف نفسه.' : 'This link is not a recording or a page I can read. Try the link to the file itself.',
+    badlink: A ? 'هذا الرابط غير صحيح. انسخه كاملًا مرة أخرى.' : 'That link does not look right. Copy the whole link again.',
+  })[code] || (A ? 'تعذّر فتح الرابط. تأكد أنه عام (يفتح دون تسجيل دخول) ثم حاول مرة أخرى.' : 'Could not open the link. Check that it is public (opens without signing in), then try again.');
+};
+async function fromLink(raw) {
+  const base = await getServer();
+  let res;
+  try { res = await fetch(base + '/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: raw }) }); }
+  catch { throw new Error(navigator.onLine === false ? 'No internet connection right now.' : 'Could not reach Mustatar’s server. Try again in a moment.'); }
+  const type = res.headers.get('x-link-type');
+  if (res.ok && type !== null) {
+    const name = decodeURIComponent(res.headers.get('x-link-name') || '') || 'Recording';
+    const blob = await res.blob();
+    return { file: new File([blob], name, { type: type || blob.type || '' }) };
+  }
+  const j = await res.json().catch(() => ({}));
+  if (res.ok && j.kind === 'youtube') return { yt: j.url };
+  if (res.ok && j.kind === 'text') {
+    const title = (j.title || new URL(raw).hostname).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80);
+    return { file: new File([(j.title ? '# ' + j.title + '\n\n' : '') + j.text], title + '.txt', { type: 'text/plain' }) };
+  }
+  throw new Error(linkMsg(j.kind === 'blocked' ? 'blocked' : j.code, j.site));
+}
 $('#yt-go').onclick = async () => {
   const err = $('#new-error'); err.hidden = true;
+  const all = $('#yt').value.match(/https?:\/\/[^\s<>"]+/gi) || [];
+  const others = all.filter(s => !/youtu\.?be/.test(s));
+  if (!all.length) { err.textContent = window.ZadLang === 'ar' ? 'الصق رابطًا أولًا.' : 'Paste a link first.'; err.hidden = false; return; }
+  if (others.length) {
+    $('#yt-go').disabled = true; $('#yt-go').textContent = window.ZadLang === 'ar' ? 'أفتح الرابط…' : 'Opening…';
+    try {
+      const files = [], yts = [];
+      for (const u of others.slice(0, 10)) { const r = await fromLink(u); if (r.file) files.push(r.file); if (r.yt) yts.push(r.yt); }
+      $('#yt').value = [...all.filter(s => /youtu\.?be/.test(s)), ...yts].join(' ');
+      if (files.length) await addFiles(files);
+      if (!$('#yt').value) return;
+    } catch (e) { err.textContent = e.message; err.hidden = false; return; }
+    finally { $('#yt-go').disabled = false; $('#yt-go').textContent = window.ZadLang === 'ar' ? 'أضف' : 'Add'; }
+  }
   const lines = $('#yt').value.split(/\s+/).filter(s => /youtu/.test(s));
-  if (!lines.length) { err.textContent = 'Paste a YouTube link first.'; err.hidden = false; return; }
+  if (!lines.length) return;
   $('#yt-go').disabled = true; $('#yt-go').textContent = 'Reading…';
   try {
     const items = await ytList(lines);

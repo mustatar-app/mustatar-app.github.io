@@ -1,3 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#111113"/>
-<g transform="translate(6 -38)"><path d="M380 300 H 330 C 290 300 268 276 268 246 C 268 214 292 192 322 192 C 352 192 374 214 374 246 C 374 276 352 300 322 300 H 150 C 128 300 118 318 120 344 L 126 392" fill="none" stroke="#F2F2F3" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="426" cy="300" r="18" fill="#8CCBFF"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1F1F24"/><stop offset="1" stop-color="#0B0B0D"/></linearGradient>
+<radialGradient id="g"><stop offset="0" stop-color="#8CCBFF" stop-opacity=".45"/><stop offset="1" stop-color="#8CCBFF" stop-opacity="0"/></radialGradient></defs>
+<rect width="512" height="512" rx="112" fill="url(#t)"/>
+<g transform="translate(256 262) scale(1.12) translate(-292 -254)"><g transform="translate(6 -38)">
+<path d="M380 300 H 330 C 290 300 268 276 268 246 C 268 214 292 192 322 192 C 352 192 374 214 374 246 C 374 276 352 300 322 300 H 150 C 128 300 118 318 120 344 L 126 392" fill="none" stroke="#F4F4F6" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="442" cy="300" r="44" fill="url(#g)"/><circle cx="442" cy="300" r="24" fill="#8CCBFF"/></g></g></svg>

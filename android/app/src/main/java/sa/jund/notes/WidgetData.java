@@ -318,10 +318,11 @@ public final class WidgetData {
         c.drawLine(x0, y, x1, y, line);
         Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
         boolean tomorrow = !sameDay(np[1], now);
+        boolean rtl = ar(d);   // Arabic: Fajr on the right
         for (int j = 0; j < 5; j++) {
-            float x = x0 + (x1 - x0) * j / 4f;
+            float x = rtl ? x1 - (x1 - x0) * j / 4f : x0 + (x1 - x0) * j / 4f;
             boolean past = !tomorrow && j < i, next = j == i;
-            if (past) { line.setColor((k.ink & 0x00FFFFFF) | 0x99000000); if (j > 0) c.drawLine(x0 + (x1 - x0) * (j - 1) / 4f, y, x, y, line); }
+            if (past) { line.setColor((k.ink & 0x00FFFFFF) | 0x99000000); if (j > 0) c.drawLine(rtl ? x1 - (x1 - x0) * (j - 1) / 4f : x0 + (x1 - x0) * (j - 1) / 4f, y, x, y, line); }
             dot.setStyle(past || next ? Paint.Style.FILL : Paint.Style.STROKE); dot.setStrokeWidth(4);
             dot.setColor(next ? k.accent : past ? ((k.ink & 0x00FFFFFF) | 0x99000000) : ((k.ink & 0x00FFFFFF) | 0x80000000));
             if (next) { Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG); glow.setColor((k.accent & 0x00FFFFFF) | 0x40000000); c.drawCircle(x, y, 19, glow); }

@@ -169,6 +169,7 @@ function paintSoon() { clearTimeout(paintTimer); paintTimer = setTimeout(paint, 
 async function paint() {
   if (!$('#keep') || seg() !== 'keep') return;
   await load();
+  pullAll();   // friends' changes to notes shared for editing
   const chips = $('#kp-chips'), L = labels();
   if (!['notes', 'archive', 'trash'].includes(view) && !L.includes(view)) view = 'notes';
   chips.innerHTML = [['notes', t('All', 'الكل')], ...L.map(l => [l, '# ' + l]), ['archive', t('Archive', 'الأرشيف')], ['trash', t('Bin', 'المحذوفات')]]
@@ -347,7 +348,8 @@ async function edit(id, opts = {}) {
       <span class="kp-sp"></span><small class="kp-edited muted" id="kp-edited"></small><span class="kp-sp"></span>
       <button type="button" class="kp-aichip" id="kp-ed-ai">${I(IC.ai, 16)} ${t('AI', 'الذكاء')}</button>
     </div>`;
-  paintContent(); paintLabels(); edited();
+  paintContent(); paintLabels(); edited(); sharedLine();
+  if (cur.share?.id) { const live = notes.find(x => x.id === cur.id); if (live) pullShare(live); if (cur.share.edit) watchShare(); }
   $('#kp-ed-back', d).onclick = () => d.close();
   $('#kp-title', d).addEventListener('input', e => { cur.title = e.target.value; dirty(); });
   const pin = $('#kp-ed-pin', d); if (pin) pin.onclick = () => { cur.pinned = !cur.pinned; pin.innerHTML = I(cur.pinned ? IC.pinOff : IC.pin); pin.setAttribute('aria-pressed', String(cur.pinned)); dirty(); };
@@ -456,10 +458,11 @@ function edited() {
   const el = $('#kp-edited'); if (!el || !cur.updated) { if (el) el.textContent = ''; return; }
   const d = new Date(cur.updated), today = new Date().toDateString() === d.toDateString();
   el.textContent = t('Edited ', 'عُدّلت ') + (today ? d.toLocaleTimeString(AR() ? 'ar-SA' : 'en-GB', { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString(AR() ? 'ar-SA' : 'en-GB', { day: 'numeric', month: 'short' }));
+  sharedLine();
 }
 function dirty(now = false) { clearTimeout(saveTimer); if (now) flush(); else saveTimer = setTimeout(flush, 500); }
 async function flush() {
-  clearTimeout(saveTimer);
+  clearTimeout(saveTimer); saveTimer = 0;
   if (!cur || isEmpty(cur)) return;
   const n = JSON.parse(JSON.stringify(cur));
   if (n.items) n.items = n.items.filter((x, i, a) => x.t.trim() || i === a.length - 1);
@@ -602,7 +605,7 @@ async function imgFromCloud(id, rec) {
 
 /* ---------- share a note with a friend: a private link; they always see the latest ---------- */
 const signedIn = () => !!store.get('mstToken', '');
-const shareLink = id => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}note.html?id=${encodeURIComponent(id)}`;
+const shareLink = (id, key) => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}note.html?id=${encodeURIComponent(id)}${key ? '#k=' + encodeURIComponent(key) : ''}`;
 async function sharePayload(n) {
   const images = [];
   for (const im of (n.images || []).slice(0, 8)) {
@@ -612,14 +615,72 @@ async function sharePayload(n) {
   }
   return { title: n.title || '', text: n.text || '', items: n.items || null, color: n.color || '', labels: n.labels || [], images, by: J.me?.().name || store.get('mstUser', {})?.name || '' };
 }
-async function shareCall(method, path, note) {
-  const res = await J.serverFetch(path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + store.get('mstToken', '') }, body: note ? JSON.stringify({ note }) : undefined });
+async function shareCall(method, path, note, extra = {}) {
+  const res = await J.serverFetch(path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + store.get('mstToken', '') }, body: note || Object.keys(extra).length ? JSON.stringify({ ...(note ? { note } : {}), ...extra }) : undefined });
   return res.json().catch(() => ({}));
 }
-let shareTimer = 0;
+/* editing together: friends with the edit link change the note too; the app sends its changes with the version
+   it started from (the server puts both people's changes together) and brings the friends' changes in */
+let shareTimer = 0, shareBusy = false;
+const words = n => JSON.stringify([n.title || '', n.text || '', n.items || null, n.color || '', n.labels || []]);
+async function takeRemote(n, r) {   // the shared copy changed: bring its words into this note (and the open editor)
+  if (!r?.note) return;
+  const before = words(n);
+  n.title = r.note.title || ''; n.text = r.note.text || ''; n.items = r.note.items || null; n.color = r.note.color || ''; n.labels = r.note.labels || [];
+  n.share = { ...n.share, rev: r.rev || n.share.rev, lastBy: r.lastBy ?? n.share.lastBy, edit: r.edit ?? n.share.edit, ...(r.key ? { key: r.key } : {}) };
+  if (words(n) === before) { await save(n, { quiet: true }); return; }
+  await save(n);
+  if (cur && cur.id === n.id && $('#kp-ed')?.open) {
+    const ta = $('#kp-text'), focus = document.activeElement, pos = ta && focus === ta ? [ta.selectionStart, ta.value.length] : null;
+    const it = focus?.classList?.contains('kp-it') ? [+focus.closest('.kp-row').dataset.i, focus.selectionStart] : null;
+    Object.assign(cur, { title: n.title, text: n.text, items: n.items ? JSON.parse(JSON.stringify(n.items)) : null, color: n.color, labels: n.labels, share: n.share, updated: n.updated });
+    const ti = $('#kp-title'); if (ti && document.activeElement !== ti) ti.value = cur.title;
+    $('#kp-ed').dataset.c = cur.color || ''; paintContent(); paintLabels(); edited(); sharedLine();
+    // keep the cursor where it was (counted from the end if the other person wrote above it)
+    const t2 = $('#kp-text'); if (pos && t2) { t2.focus(); const at = Math.max(0, Math.min(t2.value.length, t2.value.length - (pos[1] - pos[0]))); t2.setSelectionRange(at, at); }
+    if (it) { const el = $$('.kp-row').find(x => +x.dataset.i === it[0])?.querySelector('.kp-it'); if (el) { el.focus(); el.setSelectionRange(it[1], it[1]); } }
+  }
+}
 function pushShare(n) {   // after an edit: the friends' copy follows a moment later
   clearTimeout(shareTimer);
-  shareTimer = setTimeout(async () => { try { await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n)); } catch {} }, 1500);
+  shareTimer = setTimeout(async () => {
+    shareBusy = true;
+    try {
+      const r = await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n), { base: n.share.rev || 0 });
+      if (r?.ok) { const sent = words(n); const live = notes.find(x => x.id === n.id) || n;
+        if (r.merged && words(r.note) !== sent) await takeRemote(live, r); else { live.share = { ...live.share, rev: r.rev }; if (cur?.id === n.id) cur.share = live.share; await save(live, { quiet: true, sync: false }); } }
+    } catch {} finally { shareBusy = false; }
+  }, 1200);
+}
+async function pullShare(n) {
+  if (!n?.share?.id || shareBusy || !signedIn()) return;
+  try {
+    const res = await J.serverFetch(`/share/${n.share.id}?rev=${n.share.rev || 0}`, { headers: { authorization: 'Bearer ' + store.get('mstToken', '') } });
+    const r = await res.json();
+    if (r.same || shareBusy) return;
+    if (cur?.id === n.id && saveTimer) return;   // a save of this phone's own typing is on its way; it brings the friend's changes back
+    await takeRemote(n, r);
+  } catch (e) { if (e?.status === 404) { delete n.share; await save(n, { quiet: true }); } }
+}
+// while a note shared for editing is open, look for the other person's changes every few seconds
+let pullTimer = 0;
+function watchShare() {
+  clearInterval(pullTimer);
+  pullTimer = setInterval(() => {
+    if (!cur?.share?.id || !$('#kp-ed')?.open) { clearInterval(pullTimer); return; }
+    if (!document.hidden) pullShare(notes.find(x => x.id === cur.id) || cur);
+  }, 3500);
+}
+// "Edited by Sara · together" under a note friends can edit
+function sharedLine() {
+  const el = $('#kp-edited'); if (!el || !cur?.share?.edit) return;
+  el.textContent = (cur.share.lastBy ? t(`${cur.share.lastBy} edited · `, `عدّلها ${cur.share.lastBy} · `) : '') + t('Editing together', 'تحرير مشترك');
+}
+// when My notes opens: bring in friends' changes to shared notes (at most once a minute)
+let lastPullAll = 0;
+async function pullAll() {
+  if (Date.now() - lastPullAll < 60e3 || !signedIn()) return; lastPullAll = Date.now();
+  for (const n of notes.filter(x => x.share?.id && x.share.edit && !x.trashed).slice(0, 30)) await pullShare(n);
 }
 async function unshare(n, quiet = false) {
   const id = n.share?.id; if (!id) return;
@@ -643,15 +704,34 @@ async function shareSheet() {
   const body = $('#kp-sh-body', d);
   try {
     if (!n.share?.id) {
-      const r = await shareCall('POST', '/share', await sharePayload(n));
+      const r = await shareCall('POST', '/share', await sharePayload(n), { edit: true });
       if (!r.id) throw new Error(r.error || t('Could not share. Try again.', 'تعذّرت المشاركة. حاول مرة أخرى.'));
-      n.share = { id: r.id, at: Date.now() }; if (cur && cur.id === n.id) cur.share = n.share; await save(n);
-    } else await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n));
-    const link = shareLink(n.share.id);
-    body.innerHTML = `<p>${t('Anyone you send this link to can open the note, with its photos, and save a copy. When you edit it, they see the change. Only you can edit it.', 'من ترسل إليه هذا الرابط يفتح الملاحظة بصورها ويستطيع حفظ نسخة. وإذا عدّلتها رأى التعديل. التعديل لك وحدك.')}</p>
-      <div class="kp-link"><span dir="ltr">${esc(link)}</span></div>
+      n.share = { id: r.id, at: Date.now(), rev: r.rev || 1, edit: !!r.key, key: r.key || '' }; if (cur && cur.id === n.id) cur.share = n.share; await save(n);
+    } else {
+      const r = await shareCall('PUT', '/share/' + n.share.id, await sharePayload(n), { base: n.share.rev || 0 });
+      if (r?.ok) { if (r.merged) await takeRemote(n, r); else n.share.rev = r.rev; }
+      if (n.share.edit && !n.share.key) { const g = await (await J.serverFetch('/share/' + n.share.id, { headers: { authorization: 'Bearer ' + store.get('mstToken', '') } })).json().catch(() => ({})); if (g.key) n.share.key = g.key; }
+    }
+    if (cur && cur.id === n.id) cur.share = n.share;
+    let link = shareLink(n.share.id, n.share.edit ? n.share.key : '');
+    const say = () => n.share.edit
+      ? t('Anyone you send this link to can open the note and <b>edit it with you</b> — you both see each other’s changes within seconds. They can also save a copy.', 'من ترسل إليه هذا الرابط يفتح الملاحظة <b>ويعدّلها معك</b> — ويرى كلٌّ منكما تعديلات الآخر خلال ثوانٍ. ويستطيع أيضًا حفظ نسخة.')
+      : t('Anyone you send this link to can open the note, with its photos, and save a copy. When you edit it, they see the change. Only you can edit it.', 'من ترسل إليه هذا الرابط يفتح الملاحظة بصورها ويستطيع حفظ نسخة. وإذا عدّلتها رأى التعديل. التعديل لك وحدك.');
+    body.innerHTML = `<p id="kp-sh-say">${say()}</p>
+      <label class="kp-sh-edit"><span><b>${t('Friends can edit', 'يستطيع الأصدقاء التعديل')}</b><small>${t('Turn off for read-only. The old edit link then stops working.', 'أوقفه ليكون للقراءة فقط، فيتوقف رابط التعديل القديم.')}</small></span><input type="checkbox" id="kp-sh-ed" role="switch"${n.share.edit ? ' checked' : ''}></label>
+      <div class="kp-link"><span dir="ltr" id="kp-sh-link">${esc(link)}</span></div>
       <button type="button" class="primary kp-sh-send" id="kp-sh-send">${I(IC.share, 18)} ${t('Send the link', 'أرسل الرابط')}</button>
       <div class="kp-sh-more"><button type="button" class="link" id="kp-sh-cp">${I(IC.link, 16)} ${t('Copy link', 'انسخ الرابط')}</button><button type="button" class="link kp-stop" id="kp-sh-stop">${t('Stop sharing', 'أوقف المشاركة')}</button></div>`;
+    $('#kp-sh-ed', d).onchange = async e => {
+      const on = e.target.checked; e.target.disabled = true;
+      try {
+        const r = await shareCall('POST', `/share/${n.share.id}/edit`, null, { on });
+        if (!r.ok) throw new Error(r.error || t('Could not change it. Try again.', 'تعذّر التغيير. حاول مرة أخرى.'));
+        n.share = { ...n.share, edit: !!r.key, key: r.key || '' }; if (cur && cur.id === n.id) cur.share = n.share; await save(n, { quiet: true });
+        link = shareLink(n.share.id, n.share.edit ? n.share.key : ''); $('#kp-sh-link', d).textContent = link; $('#kp-sh-say', d).innerHTML = say();
+        if (on) watchShare();
+      } catch (er) { e.target.checked = !on; toast('✗ ' + J.errText(er)); } finally { e.target.disabled = false; }
+    };
     $('#kp-sh-cp', d).onclick = async () => { try { await navigator.clipboard.writeText(link); toast(t('✓ Link copied', '✓ نُسخ الرابط')); } catch { toast(link); } };
     $('#kp-sh-send', d).onclick = async () => { try { if (navigator.share) await navigator.share({ title: n.title || 'Mustatar', text: (n.title ? n.title + ' — ' : '') + t('a note from Mustatar', 'ملاحظة من مستطر'), url: link }); else { await navigator.clipboard.writeText(link); toast(t('✓ Link copied', '✓ نُسخ الرابط')); } } catch {} };
     $('#kp-sh-stop', d).onclick = async () => { try { await unshare(n); if (cur && cur.id === n.id) delete cur.share; d.close(); toast(t('✓ The link no longer works', '✓ لم يعد الرابط يعمل')); } catch (e) { toast('✗ ' + J.errText(e)); } };

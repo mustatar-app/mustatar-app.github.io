@@ -57,7 +57,7 @@ function cors(origin) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
     'Access-Control-Allow-Methods': 'POST, GET, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream',
+    'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream, x-edit-key',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };

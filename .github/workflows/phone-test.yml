@@ -45,6 +45,8 @@ jobs:
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
       - name: Run the app on an Android 14 phone
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          QEMU_AUDIO_DRV: none   # a working, silent sound card on the test computer
         with:
           api-level: 34
           target: google_apis

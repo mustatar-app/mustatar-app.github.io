@@ -43,17 +43,24 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: A silent sound card on the test computer (so the phone has a microphone)
+        run: |
+          sudo apt-get install -y -qq pulseaudio > /dev/null
+          pulseaudio -D --exit-idle-time=-1 --system=false || true
+          pactl load-module module-null-sink sink_name=silent || true
+          pactl set-default-source silent.monitor || true
+          pactl info | grep -i "default" || true
       - name: Run the app on an Android 14 phone
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          QEMU_AUDIO_DRV: none   # a working, silent sound card on the test computer
+          QEMU_AUDIO_DRV: pa
         with:
           api-level: 34
           target: google_apis
           arch: x86_64
           disable-animations: true
           # a silent microphone (no -noaudio), so recording inside the app can be tested
-          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -allow-host-audio
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb reverse tcp:8765 tcp:8765

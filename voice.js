@@ -142,8 +142,8 @@ async function listen() {
   const T = S, gen = T.gen;
   stopSpeaking();
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
-  catch { state('idle'); status(L('Allow the microphone for Mustatar (in the browser’s site settings), then try again.', 'اسمح لمستطر باستخدام المايك (من إعدادات الموقع في المتصفح) ثم حاول مرة أخرى.')); return; }
+  try { stream = await openMic({ echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }); }
+  catch (e) { state('idle'); status(micError(e)); return; }
   if (S !== T || T.gen !== gen) { stream.getTracks().forEach(t => t.stop()); return; }
   const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find(t => window.MediaRecorder?.isTypeSupported?.(t)) || '';
   const rec = T.rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : undefined);

@@ -28,10 +28,11 @@ def main():
     page.js("location.reload(); true"); time.sleep(6)
     page = Page(); wait(page, "document.readyState === 'complete' && !!window.JN", 30)
 
-    # 1. the microphone itself
+    # 1. the microphone itself (the same way the app opens it)
+    adb("logcat", "-c")
     mic = page.js("""(async () => {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        const s = await openMic({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
         const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'].filter(t => window.MediaRecorder?.isTypeSupported(t));
         const mr = new MediaRecorder(s, types[0] ? { mimeType: types[0] } : {}); const parts = [];
         mr.ondataavailable = e => parts.push(e.data); mr.start(500);
@@ -41,6 +42,10 @@ def main():
       } catch (e) { return { ok: false, name: e.name, message: e.message }; }
     })()""", timeout=30)
     print("     microphone:", mic, flush=True)
+    if not (isinstance(mic, dict) and mic.get("ok")):
+        for line in adb("logcat", "-d").splitlines():
+            if any(k in line for k in ("AudioRecord", "AudioFlinger", "AudioPolicy", "audio_hw", "MODIFY_AUDIO", "cr_media", "chromium")) and ("E " in line or "W " in line or "rror" in line):
+                print("     LOG", line[-220:], flush=True)
     check(isinstance(mic, dict) and mic.get("ok") and mic.get("bytes", 0) > 0, f"the microphone opens and records inside the Android app ({mic})")
 
     # 2. the in-app recorder: start, record 6 s, stop (silence on the emulator: it must stop cleanly, not fail on the microphone)

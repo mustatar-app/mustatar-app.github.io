@@ -257,7 +257,7 @@ async function selAction(a, btn) {
   if (a === 'label') { pickLabels(sel, () => paint()); return; }
   clearSel(); paint();
 }
-function toast(m) { window.JundCal?.toast?.(m); }
+function toast(m, ms) { window.JundCal?.toast?.(m, ms); }
 function undoToast(sel, what = 'bin') {
   const ids = sel.map(n => n.id || n);
   window.JundCal?.toast?.(what === 'bin' ? t(`✓ Moved ${ids.length} to the bin`, `✓ نُقلت ${num(ids.length)} إلى المحذوفات`) : t(`✓ Archived ${ids.length}`, `✓ أُرشفت ${num(ids.length)}`), 6000,
@@ -479,8 +479,8 @@ let rec = null;
 async function voice() {
   if (rec) return;
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-  catch { toast(t('✗ Allow the microphone for Mustatar, then try again.', '✗ اسمح لمستطر باستخدام المايك ثم حاول مرة أخرى.')); return; }
+  try { stream = await openMic({ echoCancellation: true, noiseSuppression: true }); }
+  catch (e) { toast('✗ ' + micError(e), 6000); return; }
   const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(x => window.MediaRecorder?.isTypeSupported?.(x)) || '';
   const mr = new MediaRecorder(stream, type ? { mimeType: type } : {}), chunks = [];
   mr.ondataavailable = e => e.data.size && chunks.push(e.data);

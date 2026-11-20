@@ -79,8 +79,8 @@ async function start() {
   consentNote(d);
   $('#rec-status').textContent = 'Starting the microphone…';
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-  catch { $('#rec-status').textContent = '✗ The microphone is not allowed. Allow it for this app in your phone settings, then try again.'; return; }
+  try { stream = await openMic({ echoCancellation: true, noiseSuppression: true, autoGainControl: true }); }
+  catch (e) { $('#rec-status').textContent = '✗ ' + micError(e); return; }
   const now = new Date();
   const sid = 'R' + now.getTime();
   const name = `Recording ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${pad(now.getHours())}:${pad(now.getMinutes())}`;

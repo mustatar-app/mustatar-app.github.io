@@ -37,7 +37,13 @@ function opening() {
     <div class="op-top"><span class="op-brand">${window.MustatarMark?.(26, false) || '<img src="icon-192.png" alt="" width="26" height="26">'}<b>${L('Mustatar', 'مستطر')}</b></span>
       <button type="button" class="op-lang" id="op-lang">${AR ? 'English' : 'عربي'}</button></div>
     <div class="op-mid"><h1 class="op-h">${L('Every lesson and meeting,<br>written your way.', 'كل درس واجتماع،<br>مكتوب بطريقتك.')}</h1>
-      <p class="muted">${L('Record or upload, and Mustatar writes the notes, the minutes and the tasks, in Arabic and English.', 'سجّل أو ارفع ملفًا، ومستطر يكتب الملاحظات والمحضر والمهام، بالعربية والإنجليزية.')}</p></div>
+      <p class="muted">${L('Record or upload, and Mustatar writes the notes, the minutes and the tasks, in Arabic and English.', 'سجّل أو ارفع ملفًا، ومستطر يكتب الملاحظات والمحضر والمهام، بالعربية والإنجليزية.')}</p>
+      <!-- the name, and why: the brand's own story on the first page -->
+      <div class="op-name">
+        <p class="op-verse" dir="rtl" lang="ar">﴿وَكُلُّ صَغِيرٍ وَكَبِيرٍ مُسْتَطَرٌ﴾ <small>القمر: ٥٣</small></p>
+        <p class="op-why">${L('<b>Mustatar</b> (مُستطَر) means <i>“written down, line by line.”</i> The name comes from this verse: every small and great thing is written down. That is our promise: nothing you hear, decide or plan gets lost.',
+          '<b>مُستطَر</b> أي <i>مكتوبٌ مسطورٌ سطرًا سطرًا</i>. والاسم من هذه الآية: كل صغير وكبير مكتوب. وهذا وعدنا: لا يضيع شيء مما تسمعه أو تقرره أو تخطط له.')}</p>
+      </div></div>
     <div class="op-btns">
       <div id="op-google" class="op-google" hidden></div>
       ${A?.canPasskey ? `<button type="button" class="ghost op-pk" id="op-pk"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> ${L('Sign in with a passkey', 'الدخول بمفتاح المرور')}</button>` : ''}
@@ -75,7 +81,7 @@ function step(n) {
   store.set('welcomeStep', n);
   if (n === 1) {
     frame(1, `<h1 class="wl-h">${L('Welcome to Mustatar', 'أهلًا بك في مستطر')}</h1>
-      <p class="wl-verse" dir="rtl">﴿وَكُلُّ صَغِيرٖ وَكَبِيرٖ مُّسۡتَطَرٌ﴾ <small>[القمر: 53]</small></p>
+      <p class="wl-verse" dir="rtl">﴿وَكُلُّ صَغِيرٍ وَكَبِيرٍ مُسْتَطَرٌ﴾ <small>[القمر: ٥٣]</small></p>
       <p class="muted">${L('Your notes, lessons, tasks, calendar and a voice assistant — everything small and big, written down.', 'ملاحظاتك ودروسك ومهامك وتقويمك ومساعد صوتي — كل صغير وكبير مكتوب.')}</p>
       <p class="wl-q">${L('Choose the app language', 'اختر لغة التطبيق')}</p>
       <div class="wl-two"><button type="button" class="wl-opt" data-l="en">English</button><button type="button" class="wl-opt" data-l="ar">العربية</button></div>`);

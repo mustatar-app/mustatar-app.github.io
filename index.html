@@ -225,7 +225,10 @@
       <span class="row-gap" style="margin:0"><button type="button" class="ghost" id="exam-plan">Plan an exam</button><button type="button" class="primary" id="ev-add">+ Add</button></span>
     </div>
 
-    <!-- the calendar itself comes first, then the chosen day; the week's review and study cards come after -->
+    <!-- four clear views (like Google Calendar and Todoist): Agenda (everything coming, day by day), Tasks (every task
+         with its deadline, so nothing gets lost), Week (the timetable as a real time grid) and Month -->
+    <div class="seg cal-views" id="cal-mode" data-noi18n></div>
+    <div id="cal-view" data-noi18n></div>
     <div class="card cal-card">
       <div class="cal-nav">
         <button type="button" class="icon-btn" id="cal-prev" aria-label="Previous month">‹</button>
@@ -236,18 +239,17 @@
       <div class="cal-grid" id="cal-grid"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="day-card">
       <div class="card-h" id="day-title">Today</div>
       <div id="day-list"></div>
     </div>
 
-    <div class="card">
-      <div class="card-h">Coming up</div>
-      <div id="upcoming-list"></div>
-    </div>
-
-    <div class="card review" id="week-review"></div>
-    <div id="study-cards"></div>
+    <!-- the week's review and study tools: folded away so the calendar stays clear -->
+    <details class="cal-more" id="cal-more">
+      <summary id="cal-more-h">This week's review and study</summary>
+      <div class="card review" id="week-review"></div>
+      <div id="study-cards"></div>
+    </details>
   </section>
 
   <!-- assistant: talk to the app (built by assistant.js) -->
@@ -493,8 +495,6 @@
     <h2 id="ev-dialog-title">New item</h2>
     <label class="field"><span>Title</span><input id="ev-title" type="text" dir="auto" required placeholder="e.g. Fiqh homework"></label>
     <div class="grid2">
-      <label class="field"><span>Date</span><input id="ev-date" type="date" required></label>
-      <label class="field"><span>Time</span><input id="ev-time" type="time"></label>
       <label class="field"><span>Type</span>
         <select id="ev-type">
           <option value="task">Task</option>
@@ -505,6 +505,10 @@
           <option value="study">Study time</option>
         </select>
       </label>
+      <label class="field"><span id="ev-date-l">Date</span><input id="ev-date" type="date" required></label>
+      <label class="field"><span id="ev-time-l">Time</span><input id="ev-time" type="time"></label>
+      <label class="field" id="ev-end-f"><span>Ends</span><input id="ev-end" type="time"></label>
+      <label class="check ev-nodate" id="ev-nodate-f"><input type="checkbox" id="ev-nodate"> <span id="ev-nodate-l">No date yet</span></label>
       <label class="field"><span>Repeat</span>
         <select id="ev-repeat">
           <option value="none">Once</option>

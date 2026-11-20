@@ -123,7 +123,7 @@ function alarms() {
   const m = lead(); if (!m) return [];
   const all = store.get('briefs', {}), now = Date.now();
   return Object.values(all).filter(b => b.start - m * 60e3 > now - 60e3 && (b.points.length || b.tasks.length || b.open.length))
-    .map(b => ({ id: 'brief-' + b.key, at: b.start - m * 60e3,
+    .map(b => ({ id: 'brief-' + b.key, kind: 'brief', at: b.start - m * 60e3,
       title: (b.kind === 'meeting' ? t('Before your meeting: ', 'قبل اجتماعك: ') : b.kind === 'exam' ? t('Before your exam: ', 'قبل اختبارك: ') : t('Before your lesson: ', 'قبل درسك: ')) + b.title + ' · ' + nice(b),
       body: [b.tasks.length ? t(`${b.tasks.length} left to do`, `${b.tasks.length} لم تُنجز`) : '', (b.points[0] || b.open[0] || '')].filter(Boolean).join(' · ').slice(0, 180) }));
 }

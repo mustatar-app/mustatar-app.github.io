@@ -56,6 +56,8 @@
     googleSignIn: clientId => ask({ action: 'googleSignIn', clientId }, 180000),
     // the same, in the phone's browser (it comes back with app.mustatar://signin)
     openBrowser: url => ask({ action: 'openBrowser', url }, 20000),
+    // any other job for the app (phone calendars, fitness, widgets): a message in, one answer back
+    ask: (msg, ms) => ask(msg, ms),
   };
   // the browser's own share, done by the app (a web view has none, or one that does nothing)
   const share = async data => {

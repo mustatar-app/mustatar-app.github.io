@@ -337,6 +337,7 @@ function nativeReminders() {
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
   items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
   items.push(...(window.JundBrief?.alarms?.() || []));   // a short brief before lessons and meetings
+  items.push(...(window.JundPhone?.prayerAlarms?.() || []));   // a gentle vibration at prayer times (Android app)
   return items;
 }
 function nativeMessage(action, details = {}) { android.postMessage(JSON.stringify({ action, ...details })); }
@@ -498,7 +499,9 @@ function upcoming(days = 7, max = 8) {
   for (let i = 0; i <= days; i++) { const d = addDays(today(), i); for (const e of on(d)) if (!isDone(e, d)) out.push({ e, d }); }
   return out.slice(0, max).map(x => ({ ...x, when: x.late ? 'Overdue' : when(x.d), time: hm(x.e.time), type: TYPES[x.e.type] || 'Task', color: colorOf(x.e.type) }));
 }
-window.JundCal = { pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+// every (item, day) between two days from today, repeats included (for the widgets and the phone's calendar)
+function between(a, b) { const out = []; for (let i = a; i <= b; i++) { const d = addDays(today(), i); for (const e of on(d)) out.push({ e, d, done: isDone(e, d), ...dueTime(e, d) }); } return out; }
+window.JundCal = { between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();

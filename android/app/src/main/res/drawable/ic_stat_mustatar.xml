@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the small notification icon: the mīm and its dot, in one colour (Android draws it white) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="512" android:viewportHeight="512">
+    <path android:pathData="M380,262 H330 C290,262 268,238 268,208 C268,176 292,154 322,154 C352,154 374,176 374,208 C374,238 352,262 322,262 H150 C128,262 118,280 120,306 L126,354"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="44" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M424,262 m-26,0 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0" android:fillColor="#FFFFFFFF" />
+</vector>

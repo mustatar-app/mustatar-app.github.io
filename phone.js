@@ -334,6 +334,66 @@ function settingsCard() {
   paintCalCard(); paintFitCard(); paintFolders();
 }
 
+/* ---------- 6. a new version of the Android app: offered inside the app ----------
+   The screens update by themselves (they come from the server). Only the app's own phone parts (widgets, mic,
+   calendar, health…) need a new install: when one is published, Today shows "New version — Update". */
+const REPO = 'mustatar-app/mustatar-app.github.io';
+async function installed() {
+  try { const r = await ask({ action: 'appInfo' }, 4000); if (r?.versionCode) return Number(r.versionCode); } catch {}
+  // older apps cannot say their version: the one that knows the health tracker is version 55, older ones know neither
+  try { const r = await ask({ action: 'healthStatus' }, 4000); if (r && 'status' in r) return 55; } catch {}
+  return 0;
+}
+async function latest() {
+  const c = store.get('apkLatest', null);
+  if (c && Date.now() - c.at < 6 * 3600e3) return c;
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { cache: 'no-store' });
+  if (!r.ok) return c;
+  const j = await r.json(), n = Number(String(j.tag_name || '').replace(/\D/g, ''));
+  const asset = (j.assets || []).find(a => /\.apk$/i.test(a.name));
+  const out = { n, url: asset?.browser_download_url || `https://github.com/${REPO}/releases/latest/download/Mustatar.apk`, at: Date.now() };
+  store.set('apkLatest', out); return out;
+}
+let updateInfo = null;
+async function checkUpdate() {
+  if (!window.MustatarAndroid) return;
+  try {
+    const [have, l] = await Promise.all([installed(), latest()]);
+    updateInfo = l && l.n > have ? { ...l, have } : null;
+    paintUpdate();
+  } catch {}
+}
+function paintUpdate(state) {
+  const home = $('#screen-assistant'); if (!home) return;
+  let card = $('#hm-update');
+  const later = store.get('apkLater', {});
+  if (!updateInfo || (later.n === updateInfo.n && Date.now() < later.until && !state)) { card?.remove(); return; }
+  if (!card) { card = document.createElement('div'); card.id = 'hm-update'; card.className = 'hm-sec'; ($('#screen-assistant .hm-sec') || $('#hm-tiles'))?.before(card); }
+  const msg = state === 'allow' ? t('Android asks once: allow Mustatar to install its updates, then come back.', 'يسألك أندرويد مرة واحدة: اسمح لمستطر بتثبيت تحديثاته، ثم ارجع.')
+    : state === 'down' ? t('Downloading the new version (about 5 MB)…', 'يُنزَّل الإصدار الجديد (نحو ٥ ميغابايت)…')
+    : state === 'fail' ? t('The download did not finish. Check the internet and try again.', 'لم يكتمل التنزيل. تأكد من الإنترنت وحاول مرة أخرى.')
+    : state === 'browser' ? t('The download opened in your browser. When it finishes, tap it and choose “Update”. Your notes and settings stay.', 'فُتح التنزيل في المتصفح. عند انتهائه اضغط عليه واختر «تحديث». ملاحظاتك وإعداداتك تبقى.')
+    : state === 'done' ? t('Tap “Update” on Android’s screen. Your notes and settings stay.', 'اضغط «تحديث» في شاشة أندرويد. ملاحظاتك وإعداداتك تبقى.')
+    : t('A new version of the Mustatar app is ready. Your notes and settings stay.', 'إصدار جديد من تطبيق مستطر جاهز. ملاحظاتك وإعداداتك تبقى.');
+  card.innerHTML = `<div class="fx-ask up-card"><span class="fx-ic">⬆️</span><span>${msg}</span>
+    ${state === 'down' ? '' : `<button type="button" class="primary small" id="up-go">${state === 'fail' ? t('Try again', 'حاول مرة أخرى') : t('Update', 'حدّث')}</button>`}
+    ${state ? '' : `<button type="button" class="icon-btn small" id="up-no" aria-label="${t('Later', 'لاحقًا')}">✕</button>`}</div>`;
+  const go = $('#up-go', card); if (go) go.onclick = startUpdate;
+  const no = $('#up-no', card); if (no) no.onclick = () => { store.set('apkLater', { n: updateInfo.n, until: Date.now() + 3 * 864e5 }); card.remove(); };
+}
+async function startUpdate() {
+  if (!updateInfo) return;
+  if (!updateInfo.have || updateInfo.have < 56) {   // apps from before this feature: the phone's browser downloads it
+    const ok = await N()?.openBrowser?.(updateInfo.url).then(r => r?.ok).catch(() => false);
+    if (!ok) location.href = updateInfo.url;
+    paintUpdate('browser'); return;
+  }
+  paintUpdate('down');
+  const r = await ask({ action: 'appUpdate', url: updateInfo.url }, 300000).catch(() => ({ ok: false }));
+  paintUpdate(r.step === 'allow' ? 'allow' : r.ok ? 'done' : 'fail');
+}
+window.JundAppUpdate = { check: checkUpdate, downloading: () => paintUpdate('down'), done: ok => paintUpdate(ok ? 'done' : 'fail') };
+
 /* ---------- when things run ---------- */
 async function tick(force) {
   if (!APP()) return;
@@ -344,6 +404,8 @@ async function tick(force) {
 }
 if (window.MustatarAndroid) {
   setTimeout(() => { settingsCard(); paintFitHome(); tick(true); }, 2500);
+  setTimeout(checkUpdate, 8000);
+  setInterval(() => { if (!document.hidden) checkUpdate(); }, 6 * 3600e3);
   setInterval(() => { if (!document.hidden) tick(false); }, 60e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(false); paintFitHome(); } });
   window.addEventListener('mustatar-screen', () => { settingsCard(); paintFitHome(); paintFolderCards(); });

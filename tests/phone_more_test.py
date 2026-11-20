@@ -137,7 +137,22 @@ def main():
             t2 = page.js("JundCal.events().filter(e => !e.ext).map(e => e.title)")
             check(isinstance(t2, list) and "Write the report — changed on phone" in t2, "a change made in the phone's calendar comes back into Mustatar")
 
-    # 4. fitness: Health Connect is there, permission can be given, and the last 7 days can be read
+    # 4. the app updates itself: it knows its version, downloads the newest one and opens Android's installer
+    info = page.js("JundNative.ask({ action: 'appInfo' }, 10000)", timeout=20)
+    print("     app info:", info, flush=True)
+    check(isinstance(info, dict) and int(info.get("versionCode") or 0) > 0, "the app can say which version it is")
+    adb("shell", "appops", "set", PKG, "REQUEST_INSTALL_PACKAGES", "allow")
+    up = page.js("JundNative.ask({ action: 'appUpdate', url: 'https://github.com/mustatar-app/mustatar-app.github.io/releases/latest/download/Mustatar.apk' }, 180000)", timeout=200)
+    time.sleep(3)
+    top = adb("shell", "dumpsys", "activity", "activities")
+    import re as _r
+    shown = _r.search(r"(topResumedActivity|mResumedActivity)=.*", top)
+    print("     update:", up, "|", shown.group(0)[:160] if shown else "", flush=True)
+    check(isinstance(up, dict) and up.get("ok") and shown and "packageinstaller" in shown.group(0).lower(), "Update downloads the newest app and opens Android's installer")
+    adb("shell", "input", "keyevent", "KEYCODE_BACK"); time.sleep(2)
+    page = start()
+
+    # 5. fitness: Health Connect is there, permission can be given, and the last 7 days can be read
     st = page.js("JundNative.ask({ action: 'healthStatus' }, 20000)", timeout=30)
     print("     health status:", st, flush=True)
     check(isinstance(st, dict) and st.get("status") in ("ok", "update", "none"), "the app can ask whether Health Connect is on the phone")

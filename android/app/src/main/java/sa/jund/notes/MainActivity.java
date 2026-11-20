@@ -207,6 +207,27 @@ public class MainActivity extends Activity {
                             case "googleSignIn": googleSignIn(command.optString("job"), command.optString("clientId"), reply); return;
                             // "Continue with Google" in the phone's browser (works without the Android sign-in set-up in Google Cloud);
                             // the browser comes back with app.mustatar://signin
+                            // which version this app is, so the page can offer a newer one
+                            case "appInfo": {
+                                android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("versionCode", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : (long) pi.versionCode)
+                                    .put("versionName", pi.versionName).put("canInstall", getPackageManager().canRequestPackageInstalls()));
+                                return;
+                            }
+                            // updating itself: download the new version, then Android's installer asks the person to confirm
+                            case "appUpdate": {
+                                String job = command.optString("job"), url = command.optString("url");
+                                if (!url.startsWith("https://github.com/mustatar-app/")) { answer(reply, job, new JSONObject().put("ok", false).put("error", "url")); return; }
+                                if (!getPackageManager().canRequestPackageInstalls()) {
+                                    // once: Android asks to allow Mustatar to install its own updates
+                                    pendingUpdate = url;
+                                    try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) {}
+                                    answer(reply, job, new JSONObject().put("ok", true).put("step", "allow"));
+                                    return;
+                                }
+                                downloadUpdate(url, ok -> answer(reply, job, jsonOk(ok)));
+                                return;
+                            }
                             case "openBrowser": {
                                 boolean ok = openInBrowser(Uri.parse(command.optString("url")));
                                 reply.postMessage("{\"file\":" + JSONObject.quote(command.optString("job")) + ",\"result\":{\"ok\":" + ok + "}}");
@@ -322,6 +343,37 @@ public class MainActivity extends Activity {
         }
         setContentView(web);
         receive(getIntent(), true);
+    }
+
+    private String pendingUpdate;
+    private interface Done { void done(boolean ok); }
+    private static JSONObject jsonOk(boolean ok) { try { return new JSONObject().put("ok", ok); } catch (Exception e) { return new JSONObject(); } }
+    private void downloadUpdate(String url, Done done) {
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                java.io.File dir = new java.io.File(getCacheDir(), "update"); dir.mkdirs();
+                java.io.File apk = new java.io.File(dir, "Mustatar.apk");
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                c.setInstanceFollowRedirects(true); c.setConnectTimeout(15000); c.setReadTimeout(30000);
+                // GitHub sends the file from another address: follow it by hand if needed
+                for (int i = 0; i < 5 && c.getResponseCode() / 100 == 3; i++) {
+                    String next = c.getHeaderField("Location"); c.disconnect();
+                    c = (java.net.HttpURLConnection) new java.net.URL(next).openConnection(); c.setConnectTimeout(15000); c.setReadTimeout(30000);
+                }
+                if (c.getResponseCode() != 200) throw new java.io.IOException("HTTP " + c.getResponseCode());
+                try (java.io.InputStream in = c.getInputStream(); java.io.OutputStream out = new java.io.FileOutputStream(apk)) {
+                    byte[] buf = new byte[65536]; int n; while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                if (apk.length() < 500_000) throw new java.io.IOException("too small");
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
+                Intent install = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                runOnUiThread(() -> { try { startActivity(install); } catch (Exception ignored) {} });
+                ok = true;
+            } catch (Exception ignored) {}
+            done.done(ok);
+        }).start();
     }
 
     private void answer(androidx.webkit.JavaScriptReplyProxy reply, String job, JSONObject result) {
@@ -592,7 +644,15 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override protected void onResume() { super.onResume(); refreshReminders(); }
+    @Override protected void onResume() {
+        super.onResume(); refreshReminders();
+        // came back from "allow installing updates": carry on with the update
+        if (pendingUpdate != null && getPackageManager().canRequestPackageInstalls()) {
+            String url = pendingUpdate; pendingUpdate = null;
+            if (web != null) web.evaluateJavascript("window.JundAppUpdate?.downloading?.()", null);
+            downloadUpdate(url, ok -> runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.JundAppUpdate?.done?.(" + ok + ")", null); }));
+        }
+    }
 
     private void refreshReminders() {
         ReminderReceiver.schedule(this);

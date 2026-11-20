@@ -55,12 +55,54 @@ function setDone(e, d, v) {
   e.updated = Date.now(); save();
 }
 // things not done whose day has passed (one-off items only; a missed class is not "overdue")
-const overdue = () => events.filter(e => e.repeat !== 'weekly' && !e.done && e.date < today() && e.type !== 'class' && e.type !== 'meeting')
+const overdue = () => events.filter(e => e.repeat !== 'weekly' && !e.done && e.date && e.date < today() && e.type !== 'class' && e.type !== 'meeting')
   .sort((a, b) => a.date.localeCompare(b.date));
 
 /* ---------- drawing ---------- */
-let viewMonth = today().slice(0, 7), selDay = today(), mode = store.get('calMode', 'month');
+let viewMonth = today().slice(0, 7), selDay = today(), mode = { board: 'tasks' }[store.get('calMode2', 'agenda')] || store.get('calMode2', 'agenda');
+const TYPE_AR = { task: 'مهمة', homework: 'واجب', exam: 'اختبار', class: 'درس', meeting: 'اجتماع', study: 'وقت مذاكرة' };
+const tname = t => ar() ? TYPE_AR[t] || TYPE_AR.task : TYPES[t] || 'Task';
+const DOW_AR = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const loc = () => ar() ? 'ar-SA' : 'en-GB';
+const dayName = (s, o = { weekday: 'short', day: 'numeric', month: 'short' }) => parse(s).toLocaleDateString(loc(), o);
+const whenL = s => { const t = today(); return s === t ? L('Today', 'اليوم') : s === addDays(t, 1) ? L('Tomorrow', 'غدًا') : s === addDays(t, -1) ? L('Yesterday', 'أمس') : dayName(s); };
+const clock = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return ar() ? `${(h % 12) || 12}:${pad(m)} ${h < 12 ? 'ص' : 'م'}` : hm(t); };
+const HJ_AR = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'];
+const hijriL = d => { const F = window.JundFeatures; if (!F) return ''; if (!ar()) return F.hijri?.(new Date(d + 'T12:00')) || '';
+  try { const h = F.hijriParts(new Date(d + 'T12:00')); return `${h.d.toLocaleString('ar-SA')} ${HJ_AR[h.m - 1]} ${h.y.toLocaleString('ar-SA', { useGrouping: false })}`; } catch { return ''; } };
+// Arabic counting: يوم، يومين، ٣ أيام، ١١ يومًا
+const arDays = n => n === 1 ? 'يوم' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يومًا`;
+const isTask = e => ['task', 'homework'].includes(e.type || 'task');
+const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+// the deadline, said plainly: "Due today", "Due in 3 days", "2 days late", "No date"
+function due(e) {
+  if (!e.date) return { t: L('No date', 'بلا تاريخ'), cls: 'nd' };
+  if (e.done) return { t: L('Done', 'منجزة'), cls: 'ok' };
+  const n = daysBetween(today(), e.date), at = e.time ? ' · ' + clock(e.time) : '';
+  if (n < 0) return { t: L(`${-n} ${-n === 1 ? 'day' : 'days'} late`, `متأخرة ${arDays(-n)}`), cls: 'late' };
+  if (n === 0) return { t: L('Due today', 'تُسلَّم اليوم') + at, cls: 'today' };
+  if (n === 1) return { t: L('Due tomorrow', 'تُسلَّم غدًا') + at, cls: 'soon' };
+  if (n <= 7) return { t: L(`Due ${dayName(e.date, { weekday: 'long' })} · in ${n} days`, `تُسلَّم ${dayName(e.date, { weekday: 'long' })} · بعد ${arDays(n)}`) + at, cls: 'soon' };
+  return { t: L(`Due ${dayName(e.date)} · in ${n} days`, `تُسلَّم ${dayName(e.date)} · بعد ${arDays(n)}`), cls: '' };
+}
 
+function row2(e, d, { time = true } = {}) {
+  const done = isDone(e, d), doable = !['class', 'meeting'].includes(e.type), dd = isTask(e) ? due(e) : null;
+  const tm = e.time ? clock(e.time) + (e.mins ? `<small>${clock(endOf(e))}</small>` : '') : isTask(e) ? L('Due', 'موعد') : L('All day', 'طوال اليوم');
+  return `<div class="ag-row ${done ? 'done' : ''}" data-ev="${esc(e.id)}" data-d="${d || ''}">
+    ${time ? `<span class="ag-time">${tm}</span>` : ''}<span class="ag-bar" style="background:${colorOf(e.type)}"></span>
+    <button type="button" class="ag-body" dir="auto"><b>${esc(e.title)}</b>
+      <span class="ag-meta"><span class="type-pill" style="background:color-mix(in srgb, ${colorOf(e.type)} 20%, transparent);color:${colorOf(e.type)}">${tname(e.type)}</span>${dd ? ` <span class="due ${dd.cls}">${dd.t}</span>` : ''}${e.repeat === 'weekly' ? ' · ' + L('every week', 'كل أسبوع') : ''}${e.ext ? ' · ' + esc(e.notes || '') : ''}${e.who ? ' · 👤 ' + esc(e.who) : ''}${e.project ? ' · ' + esc(e.project) : ''}</span></button>
+    ${doable && !e.ext ? `<input type="checkbox" class="ag-ck" ${done ? 'checked' : ''} aria-label="${L('Done', 'منجز')}">` : '<span class="ag-ck"></span>'}</div>`;
+}
+const endOf = e => { const [h, m] = (e.time || '00:00').split(':').map(Number), t = h * 60 + m + (Number(e.mins) || 60); return `${pad(Math.floor(t / 60) % 24)}:${pad(t % 60)}`; };
+function wire2(box) {
+  $$('.ag-row', box).forEach(r => {
+    const e = events.find(x => x.id === r.dataset.ev); if (!e) return;
+    const ck = $('input.ag-ck', r); if (ck) ck.onchange = () => { setDone(e, r.dataset.d || e.date, ck.checked); if (ck.checked) toast(L('✓ Done', '✓ أُنجزت'), 1800); render(); };
+    $('.ag-body', r).onclick = () => { if (!e.ext) openDialog(e, r.dataset.d || e.date); };
+  });
+}
 function evRow(e, d, showDate = false) {
   const done = isDone(e, d);
   return `<div class="ev ${done ? 'done' : ''}" data-ev="${esc(e.id)}" data-d="${d}">
@@ -130,62 +172,135 @@ function renderMonth() {
   $('#cal-grid').innerHTML = dows + cells;
   $$('[data-day]', $('#cal-grid')).forEach(b => b.onclick = () => { selDay = b.dataset.day; render(); });
 }
-function renderWeek() {
-  const ws = startOfWeek(selDay);
-  $('#cal-month').textContent = `Week of ${nice(ws, false)}`;
-  $('#cal-grid').className = 'week';
-  $('#cal-grid').innerHTML = [...Array(7)].map((_, i) => {
-    const d = addDays(ws, i), items = on(d);
-    return `<div class="week-day ${d === today() ? 'today' : ''}"><h4>${nice(d)}</h4>${items.length ? items.map(e =>
-      `<div class="week-item" data-ev="${e.id}" data-d="${d}" style="border-color:${colorOf(e.type)};${isDone(e, d) ? 'opacity:.5;text-decoration:line-through' : ''}" dir="auto">${e.time ? `<b>${hm(e.time)}</b> ` : ''}${esc(e.title)}</div>`).join('') : '<div class="muted" style="font-size:.8rem">Free</div>'}</div>`;
-  }).join('');
-  $$('.week-item', $('#cal-grid')).forEach(x => x.onclick = () => openDialog(events.find(e => e.id === x.dataset.ev), x.dataset.d));
+/* ---------- Agenda: everything coming, day by day (late tasks first) ---------- */
+let agFrom = today(), agDays = 30;
+function strip() {
+  const ws = startOfWeek(agFrom);
+  return `<div class="ag-strip">${[...Array(7)].map((_, i) => { const d = addDays(ws, i), n = on(d).filter(e => !isDone(e, d)).length;
+    return `<button type="button" class="ag-sd ${d === today() ? 'today' : ''} ${d === agFrom ? 'sel' : ''}" data-sd="${d}"><small>${dayName(d, { weekday: 'narrow' })}</small><b>${parse(d).getDate()}</b><i>${n ? '•'.repeat(Math.min(3, n)) : ''}</i></button>`; }).join('')}</div>`;
 }
-// To do / Doing / Done for one-off tasks; tap a card to move it along
-let boardProject = '';
-function renderBoard() {
-  const ws = startOfWeek(today());
-  const items = events.filter(e => e.repeat !== 'weekly' && !['class'].includes(e.type) && (!boardProject || e.project === boardProject));
-  const cols = { todo: items.filter(e => !e.done && !e.doing), doing: items.filter(e => !e.done && e.doing), done: items.filter(e => e.done && e.date >= addDays(ws, -7)) };
-  const projects = [...new Set(events.map(e => e.project).filter(Boolean))];
-  $('#cal-month').textContent = 'Board';
-  $('#cal-grid').className = 'board-wrap';
-  const card = e => `<button type="button" class="bcard" data-b="${e.id}" style="border-color:${colorOf(e.type)}" dir="auto"><b>${esc(e.title)}</b><small>${when(e.date)}${e.time ? ' ' + hm(e.time) : ''}${e.who ? ' · 👤 ' + esc(e.who) : ''}</small></button>`;
-  $('#cal-grid').innerHTML = (projects.length ? `<select id="board-proj" style="margin-bottom:10px"><option value="">All projects</option>${projects.map(p => `<option ${p === boardProject ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>` : '') +
-    `<div class="board">${[['todo', 'To do'], ['doing', 'Doing'], ['done', 'Done']].map(([k, n]) => `<div class="bcol"><h4>${n} <span>${cols[k].length}</span></h4>${cols[k].sort((a, b) => a.date.localeCompare(b.date)).map(card).join('') || '<div class="muted" style="font-size:.8rem">Empty</div>'}</div>`).join('')}</div>
-    <small class="muted">Tap a card to move it: To do → Doing → Done.</small>`;
-  const ps = $('#board-proj'); if (ps) ps.onchange = () => { boardProject = ps.value; render(); };
-  $$('[data-b]', $('#cal-grid')).forEach(b => b.onclick = () => {
+function renderAgenda() {
+  const v = $('#cal-view'), t = today(), late = agFrom === t ? overdue() : [], nodate = events.filter(e => isTask(e) && !e.date && !e.done);
+  let html = `<div class="ag-nav"><button type="button" class="icon-btn" data-ag="-7" aria-label="${L('Previous week', 'الأسبوع السابق')}">‹</button><b>${dayName(startOfWeek(agFrom), { month: 'long', year: 'numeric' })}</b>${agFrom !== t ? `<button type="button" class="ghost small" data-ag="today">${L('Today', 'اليوم')}</button>` : ''}<button type="button" class="icon-btn" data-ag="7" aria-label="${L('Next week', 'الأسبوع التالي')}">›</button></div>${strip()}`;
+  if (late.length) html += `<section class="ag-day late"><h3>${L('Late', 'متأخرة')} <small>${late.length}</small><button type="button" class="link small" id="ag-move">${L('Move all to today', 'انقلها كلها لليوم')}</button></h3>${late.map(e => row2(e, e.date)).join('')}</section>`;
+  for (let i = 0; i < agDays; i++) {
+    const d = addDays(agFrom, i), items = on(d);
+    if (!items.length && i > 0) continue;
+    const hj = hijriL(d);
+    html += `<section class="ag-day ${d === t ? 'is-today' : ''}"><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-hj">${esc(hj)}</span></h3>
+      ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</section>`;
+  }
+  html += `<button type="button" class="ghost ag-more" id="ag-more">${L('Show 30 more days', 'اعرض ٣٠ يومًا أخرى')}</button>`;
+  if (nodate.length) html += `<button type="button" class="ag-nodate" id="ag-nodate">📌 ${L(`${nodate.length} ${nodate.length === 1 ? 'task has' : 'tasks have'} no date yet — see them in Tasks`, `${nodate.length} من المهام بلا تاريخ — تجدها في «المهام»`)}</button>`;
+  v.innerHTML = html; wire2(v);
+  $$('[data-ag]', v).forEach(b => b.onclick = () => { agFrom = b.dataset.ag === 'today' ? t : addDays(agFrom, Number(b.dataset.ag)); if (agFrom < t && b.dataset.ag !== 'today') agFrom = startOfWeek(agFrom); render(); });
+  $$('[data-sd]', v).forEach(b => b.onclick = () => { agFrom = b.dataset.sd; render(); });
+  $$('[data-add]', v).forEach(b => b.onclick = () => openDialog(null, b.dataset.add));
+  $('#ag-more').onclick = () => { agDays += 30; render(); };
+  const mv = $('#ag-move'); if (mv) mv.onclick = () => { for (const e of late) { e.date = t; e.updated = Date.now(); } save(); render(); toast(L(`✓ Moved ${late.length} to today`, `✓ نُقلت ${late.length} إلى اليوم`)); };
+  const nd = $('#ag-nodate'); if (nd) nd.onclick = () => { mode = 'tasks'; store.set('calMode2', mode); render(); };
+}
+
+/* ---------- Tasks: every task in one place, with its deadline (nothing gets lost) ---------- */
+let taskQ = '', taskView = store.get('taskView', 'list');
+function renderTasks() {
+  const v = $('#cal-view'), t = today(), q = taskQ.trim().toLowerCase();
+  const all = events.filter(e => isTask(e) && e.repeat !== 'weekly' && !e.ext && (!q || [e.title, e.notes, e.project, e.who].join(' ').toLowerCase().includes(q)));
+  const open = all.filter(e => !e.done), done = all.filter(e => e.done).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  const by = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '99').localeCompare(b.time || '99');
+  const groups = [
+    [L('Late', 'متأخرة'), open.filter(e => e.date && e.date < t), 'late'],
+    [L('Today', 'اليوم'), open.filter(e => e.date === t), 'today'],
+    [L('Tomorrow', 'غدًا'), open.filter(e => e.date === addDays(t, 1)), ''],
+    [L('This week', 'هذا الأسبوع'), open.filter(e => e.date > addDays(t, 1) && e.date <= addDays(t, 7)), ''],
+    [L('Later', 'لاحقًا'), open.filter(e => e.date > addDays(t, 7)), ''],
+    [L('No date yet', 'بلا تاريخ بعد'), open.filter(e => !e.date), 'nd'],
+  ];
+  v.innerHTML = `<form class="tk-add" id="tk-add"><input id="tk-new" dir="auto" placeholder="${L('Add a task…', 'أضف مهمة…')}" autocomplete="off">
+      <select id="tk-when" aria-label="${L('Deadline', 'موعد التسليم')}"><option value="">${L('No deadline', 'بلا موعد')}</option><option value="${t}">${L('Today', 'اليوم')}</option><option value="${addDays(t, 1)}">${L('Tomorrow', 'غدًا')}</option><option value="${addDays(t, 7)}">${L('In a week', 'بعد أسبوع')}</option><option value="pick">${L('Pick a date…', 'اختر تاريخًا…')}</option></select>
+      <input type="date" id="tk-date" hidden aria-label="${L('Deadline', 'موعد التسليم')}"><button type="submit" class="primary">${L('Add', 'أضف')}</button></form>
+    <div class="tk-bar"><label class="tk-search"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4.2-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><input type="search" id="tk-q" value="${esc(taskQ)}" placeholder="${L('Find a task', 'ابحث عن مهمة')}" dir="auto"></label>
+      <div class="seg small" id="tk-view"><button type="button" data-tv="list" class="${taskView === 'list' ? 'on' : ''}">${L('List', 'قائمة')}</button><button type="button" data-tv="board" class="${taskView === 'board' ? 'on' : ''}">${L('Board', 'لوحة')}</button></div></div>
+    <div id="tk-body"></div>`;
+  const body = $('#tk-body', v);
+  if (taskView === 'board') { renderBoardInto(body, all); }
+  else {
+    body.innerHTML = groups.filter(g => g[1].length).map(([h, list, cls]) => `<section class="ag-day ${cls}"><h3>${h} <small>${list.length}</small></h3>${list.sort(by).map(e => row2(e, e.date, { time: false })).join('')}</section>`).join('')
+      + (done.length ? `<details class="tk-done"><summary>${L(`Done (${done.length})`, `منجزة (${done.length})`)}</summary>${done.slice(0, 50).map(e => row2(e, e.date, { time: false })).join('')}</details>` : '')
+      || `<div class="ag-free">${q ? L('No task matches.', 'لا مهمة مطابقة.') : L('No tasks yet. Add one above — with a deadline, or without.', 'لا مهام بعد. أضف واحدة في الأعلى — بموعد تسليم أو بدونه.')}</div>`;
+    wire2(body);
+  }
+  $('#tk-add', v).onsubmit = ev => {
+    ev.preventDefault();
+    const title = $('#tk-new', v).value.trim(); if (!title) return;
+    const w = $('#tk-when', v).value, date = w === 'pick' ? $('#tk-date', v).value || '' : w;
+    events.push({ id: newId(), created: Date.now(), updated: Date.now(), title, date, time: '', type: 'task', repeat: 'none', remind: -1, notes: '' });
+    save(); render(); toast(L('✓ Task added', '✓ أُضيفت المهمة'));
+    setTimeout(() => $('#tk-new')?.focus(), 50);
+  };
+  $('#tk-when', v).onchange = e => { const p = e.target.value === 'pick', di = $('#tk-date', v); di.hidden = !p; if (p) { di.min = t; di.value = addDays(t, 2); try { di.showPicker(); } catch {} } };
+  const qi = $('#tk-q', v); qi.oninput = () => { taskQ = qi.value; const pos = qi.selectionStart; render(); const n = $('#tk-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('[data-tv]', v).forEach(b => b.onclick = () => { taskView = b.dataset.tv; store.set('taskView', taskView); render(); });
+}
+function renderBoardInto(box, items) {
+  const cols = { todo: items.filter(e => !e.done && !e.doing), doing: items.filter(e => !e.done && e.doing), done: items.filter(e => e.done).slice(0, 20) };
+  const card = e => { const d = due(e); return `<button type="button" class="bcard" data-b="${e.id}" style="border-color:${colorOf(e.type)}" dir="auto"><b>${esc(e.title)}</b><small class="due ${d.cls}">${d.t}</small></button>`; };
+  box.innerHTML = `<div class="board">${[['todo', L('To do', 'للعمل')], ['doing', L('Doing', 'جارٍ')], ['done', L('Done', 'منجز')]].map(([k, n]) => `<div class="bcol"><h4>${n} <span>${cols[k].length}</span></h4>${cols[k].map(card).join('') || `<div class="muted" style="font-size:.8rem">${L('Empty', 'فارغ')}</div>`}</div>`).join('')}</div>
+    <small class="muted">${L('Tap a card to move it: To do → Doing → Done.', 'اضغط البطاقة لنقلها: للعمل ← جارٍ ← منجز.')}</small>`;
+  $$('[data-b]', box).forEach(b => b.onclick = () => {
     const e = events.find(x => x.id === b.dataset.b);
     if (!e.done && !e.doing) e.doing = true; else if (e.doing && !e.done) { e.doing = false; e.done = true; } else { e.done = false; e.doing = false; }
     e.updated = Date.now(); save(); render();
   });
 }
+
+/* ---------- Week: the timetable as a real time grid ---------- */
+function renderTimetable() {
+  const ws = startOfWeek(selDay), days = [...Array(7)].map((_, i) => addDays(ws, i)), t = today();
+  $('#cal-month').textContent = `${dayName(ws, { day: 'numeric', month: 'short' })} – ${dayName(addDays(ws, 6), { day: 'numeric', month: 'short' })}`;
+  const timed = days.map(d => on(d).filter(e => e.time)), allDay = days.map(d => on(d).filter(e => !e.time));
+  const mins = e => { const [h, m] = e.time.split(':').map(Number); return h * 60 + m; };
+  let from = 7 * 60, to = 22 * 60;
+  for (const l of timed) for (const e of l) { from = Math.min(from, Math.floor(mins(e) / 60) * 60); to = Math.max(to, Math.ceil((mins(e) + (Number(e.mins) || 60)) / 60) * 60); }
+  to = Math.min(to, 24 * 60);
+  const H = 46, px = m => (m - from) / 60 * H;
+  const hours = []; for (let m = from; m < to; m += 60) hours.push(m);
+  const now = new Date(), nowM = now.getHours() * 60 + now.getMinutes();
+  $('#cal-grid').className = 'tt';
+  $('#cal-grid').innerHTML = `<div class="tt-head"><span></span>${days.map(d => `<button type="button" class="tt-dn ${d === t ? 'today' : ''}" data-tday="${d}"><small>${dayName(d, { weekday: 'short' })}</small><b>${parse(d).getDate()}</b></button>`).join('')}</div>
+    <div class="tt-all"><span class="tt-g">${L('Due', 'تسليم')}</span>${allDay.map((l, i) => `<div class="tt-ac">${l.map(e => `<button type="button" class="tt-chip ${isDone(e, days[i]) ? 'done' : ''}" data-ev="${e.id}" data-d="${days[i]}" style="--c:${colorOf(e.type)}" dir="auto">${esc(e.title)}</button>`).join('')}</div>`).join('')}</div>
+    <div class="tt-body" style="height:${px(to)}px"><div class="tt-hours">${hours.map(m => `<span style="top:${px(m)}px">${clock(pad(m / 60) + ':00').replace(':00', '')}</span>`).join('')}</div>
+      ${days.map((d, i) => `<div class="tt-col ${d === t ? 'today' : ''}">${hours.map(m => `<i class="tt-line" style="top:${px(m)}px"></i>`).join('')}
+        ${timed[i].map(e => { const s = mins(e), len = Number(e.mins) || 60; return `<button type="button" class="tt-ev ${isDone(e, d) ? 'done' : ''}" data-ev="${e.id}" data-d="${d}" style="top:${px(s)}px;height:${Math.max(22, len / 60 * H - 2)}px;--c:${colorOf(e.type)}" dir="auto"><b>${esc(e.title)}</b><small>${clock(e.time)}</small></button>`; }).join('')}
+        ${d === t && nowM >= from && nowM <= to ? `<i class="tt-now" style="top:${px(nowM)}px"></i>` : ''}</div>`).join('')}</div>`;
+  $$('[data-ev]', $('#cal-grid')).forEach(x => x.onclick = () => { const e = events.find(y => y.id === x.dataset.ev); if (e && !e.ext) openDialog(e, x.dataset.d); });
+  $$('[data-tday]', $('#cal-grid')).forEach(x => x.onclick = () => { agFrom = x.dataset.tday; mode = 'agenda'; store.set('calMode2', mode); render(); });
+}
+
 function render() {
   if (!$('#screen-calendar')) return;
   renderReview();
-  // the month / week switch sits beside the arrows
-  if (!$('#cal-mode')) {
-    const s = document.createElement('div'); s.className = 'seg'; s.id = 'cal-mode';
-    s.innerHTML = '<button type="button" data-m="month">Month</button><button type="button" data-m="week">Timetable</button><button type="button" data-m="board">Board</button>';
-    $('.cal-nav').after(s); s.style.marginBottom = '10px';
-    $$('button', s).forEach(b => b.onclick = () => { mode = b.dataset.m; store.set('calMode', mode); render(); });
+  const m = $('#cal-mode');
+  if (!m.dataset.built || m.dataset.lang !== String(ar())) {
+    m.dataset.built = '1'; m.dataset.lang = String(ar());
+    m.innerHTML = [['agenda', L('Agenda', 'الأجندة')], ['tasks', L('Tasks', 'المهام')], ['week', L('Week', 'الأسبوع')], ['month', L('Month', 'الشهر')]].map(([k, n]) => `<button type="button" data-m="${k}">${n}</button>`).join('');
+    $$('button', m).forEach(b => b.onclick = () => { mode = b.dataset.m; store.set('calMode2', mode); if (mode === 'agenda') agFrom = today(); render(); });
+    $('#cal-more-h').textContent = L('This week’s review and study', 'مراجعة الأسبوع والمذاكرة');
   }
-  $$('#cal-mode button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
-  if (mode === 'week') renderWeek(); else if (mode === 'board') renderBoard(); else renderMonth();
+  $$('button', m).forEach(b => b.classList.toggle('on', b.dataset.m === mode));
+  const grid = mode === 'week' || mode === 'month';
+  $('.cal-card').hidden = !grid; $('#cal-view').hidden = grid; $('#day-card').hidden = mode !== 'month';
+  if (mode === 'agenda') renderAgenda(); else if (mode === 'tasks') renderTasks(); else if (mode === 'week') renderTimetable(); else renderMonth();
   window.JundStudy?.calendar();
-  $('#day-title').textContent = when(selDay) === 'Today' ? 'Today · ' + nice(selDay) : when(selDay);
-  const items = on(selDay);
-  $('#day-list').innerHTML = items.length ? items.map(e => evRow(e, selDay)).join('')
-    : `<div class="muted">Nothing on this day. <button type="button" class="link" id="day-add">Add something</button></div>`;
-  wire($('#day-list'));
-  const da = $('#day-add'); if (da) da.onclick = () => openDialog(null, selDay);
-  // coming up: the next 14 days
-  const rows = [];
-  for (let i = 1; i <= 14; i++) { const d = addDays(today(), i); for (const e of on(d)) if (!isDone(e, d) && e.type !== 'class') rows.push(evRow(e, d, true)); }
-  $('#upcoming-list').innerHTML = rows.length ? rows.slice(0, 20).join('') : '<div class="muted">Nothing in the next two weeks.</div>';
-  wire($('#upcoming-list'));
-  window.JundFeatures?.cleanCalendarExtras(); window.JundFeatures?.decorateCalendar();
+  if (mode === 'month') {
+    $('#day-title').textContent = selDay === today() ? L('Today', 'اليوم') + ' · ' + dayName(selDay) : whenL(selDay) + (selDay === addDays(today(), 1) ? ' · ' + dayName(selDay) : '');
+    const items = on(selDay);
+    $('#day-list').innerHTML = items.length ? items.map(e => row2(e, selDay)).join('')
+      : `<div class="ag-free">${L('Nothing on this day.', 'لا شيء في هذا اليوم.')} <button type="button" class="link" id="day-add">${L('Add something', 'أضف شيئًا')}</button></div>`;
+    wire2($('#day-list'));
+    const da = $('#day-add'); if (da) da.onclick = () => openDialog(null, selDay);
+    window.JundFeatures?.cleanCalendarExtras(); window.JundFeatures?.decorateCalendar();
+  }
   banner();
   window.JundAssistant?.home();
 }
@@ -200,29 +315,49 @@ function openDialog(e, day, preset = {}) {
   editing = e; editDay = day;
   const v = e || { title: '', date: day || today(), time: '', type: 'task', repeat: 'none', remind: Number(store.get('remindDefault', 30)), notes: '', ...preset };
   $('#ev-dialog-title').textContent = e ? 'Edit item' : 'New item';
-  $('#ev-title').value = v.title; $('#ev-date').value = v.date; $('#ev-time').value = v.time || '';
+  $('#ev-title').value = v.title; $('#ev-date').value = v.date || ''; $('#ev-time').value = v.time || '';
+  $('#ev-nodate').checked = !v.date && !!e; $('#ev-end').value = v.time && v.mins ? endOf(v) : '';
   $('#ev-type').value = v.type || 'task'; $('#ev-repeat').value = v.repeat || 'none';
   $('#ev-remind').value = String(v.remind ?? -1); $('#ev-notes').value = v.notes || '';
   $('#ev-who').value = v.who || ''; $('#ev-project').value = v.project || '';
   $('#ev-projects').innerHTML = [...new Set(events.map(x => x.project).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('');
   $('#ev-delete').hidden = !e; delete $('#ev-delete').dataset.sure; $('#ev-delete').textContent = e?.repeat === 'weekly' ? 'Delete every week' : 'Delete';
-  $('#ev-dialog').showModal();
+  $('#ev-dialog-title').textContent = e ? L('Edit', 'تعديل') : L('New item', 'عنصر جديد');
+  formFor(); $('#ev-dialog').showModal();
   setTimeout(() => { if (!e) $('#ev-title').focus(); }, 50);
 }
-$('#ev-type').onchange = () => { if ($('#ev-type').value === 'class' && !editing) $('#ev-repeat').value = 'weekly'; };
+// the form says what each date means: a deadline for tasks and homework, a start and end for classes and meetings
+function formFor() {
+  const ty = $('#ev-type').value, task = ['task', 'homework'].includes(ty), nd = task && $('#ev-nodate').checked;
+  $('#ev-date-l').textContent = task ? L('Deadline', 'موعد التسليم') : ty === 'exam' ? L('Exam day', 'يوم الاختبار') : L('Date', 'التاريخ');
+  $('#ev-time-l').textContent = task ? L('By (optional)', 'قبل الساعة (اختياري)') : L('Starts', 'يبدأ');
+  $('#ev-nodate-f').hidden = !task; $('#ev-end-f').hidden = task;
+  $('#ev-date').disabled = nd; $('#ev-date').required = !nd; $('#ev-time').disabled = nd;
+  $('#ev-nodate-l').textContent = L('No deadline yet', 'لا موعد تسليم بعد');
+}
+$('#ev-nodate').onchange = formFor;
+$('#ev-type').onchange = () => { if ($('#ev-type').value === 'class' && !editing) $('#ev-repeat').value = 'weekly'; formFor(); };
 $('#ev-cancel').onclick = () => $('#ev-dialog').close();
 $('#ev-form').onsubmit = ev => {
   ev.preventDefault();
-  const title = $('#ev-title').value.trim(), date = $('#ev-date').value;
-  if (!title || !date) return;
-  const v = { title, date, time: $('#ev-time').value, type: $('#ev-type').value, repeat: $('#ev-repeat').value,
+  const ty = $('#ev-type').value, nodate = ['task', 'homework'].includes(ty) && $('#ev-nodate').checked;
+  const title = $('#ev-title').value.trim(), date = nodate ? '' : $('#ev-date').value;
+  if (!title || (!date && !nodate)) return;
+  const time = nodate ? '' : $('#ev-time').value, end = $('#ev-end').value;
+  const mins = !['task', 'homework'].includes(ty) && time && end ? (() => { const a = time.split(':').map(Number), b = end.split(':').map(Number); const n = (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]); return n > 0 ? n : 0; })() : 0;
+  const v = { title, date, time, mins: mins || undefined, type: ty, repeat: nodate ? 'none' : $('#ev-repeat').value,
     remind: Number($('#ev-remind').value), notes: $('#ev-notes').value.trim(), updated: Date.now(),
     who: $('#ev-who').value.trim(), project: $('#ev-project').value.trim() };
   if (editing) Object.assign(editing, v); else events.push({ id: newId(), created: Date.now(), ...v });
   save(); $('#ev-dialog').close();
-  selDay = date; viewMonth = date.slice(0, 7); render();
+  if (date) { selDay = date; viewMonth = date.slice(0, 7); }
+  // show where it went: tasks in Tasks, everything else in the Agenda on its day
+  if (!editing) { if (nodate || ['task', 'homework'].includes(ty)) mode = 'tasks'; else { mode = 'agenda'; agFrom = date < today() ? date : today(); } store.set('calMode2', mode); }
+  render();
   if ($('#screen-assistant').hidden) J.show('calendar');
-  toast(editing ? 'Saved' : 'Added to your calendar');
+  // added from Today or the chat: one tap shows where it is
+  const see = !$('#screen-calendar').hidden ? null : { label: L('See it', 'اعرضها'), fn: () => J.show('calendar') };
+  toast(editing ? L('✓ Saved', '✓ حُفظ') : nodate ? L('✓ Added to Tasks (no deadline yet)', '✓ أُضيفت إلى المهام (بلا موعد بعد)') : L(`✓ Added · ${whenL(date)}`, `✓ أُضيفت · ${whenL(date)}`), 4000, see);
 };
 $('#ev-delete').onclick = () => {
   const b = $('#ev-delete');

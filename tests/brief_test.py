@@ -29,9 +29,9 @@ async def srv(route):
 LESSON = {"id": "L1", "date": yday + "T10:00:00", "lang": "ar", "subject": {"name": "الفقه"}, "unit": "كتاب الطهارة",
           "notes": {"title": "كتاب الطهارة", "sections": [{"heading": "الوضوء", "blocks": [{"items": ["فروض الوضوء أربعة", "النية شرط"]}]}]}}
 EVENTS = [
-  {"id": "c1", "title": "درس الفقه", "date": today, "time": soon.strftime("%H:%M"), "type": "class", "repeat": "none", "remind": -1},
-  {"id": "m1", "title": "Team meeting", "date": today, "time": later.strftime("%H:%M"), "type": "meeting", "repeat": "none", "remind": -1},
-  {"id": "c2", "title": "Fiqh lesson (الفقه)", "date": today, "time": (now + dt.timedelta(hours=3)).strftime("%H:%M"), "type": "class", "repeat": "none", "remind": -1},
+  {"id": "c1", "title": "درس الفقه", "date": soon.date().isoformat(), "time": soon.strftime("%H:%M"), "type": "class", "repeat": "none", "remind": -1},
+  {"id": "m1", "title": "Team meeting", "date": later.date().isoformat(), "time": later.strftime("%H:%M"), "type": "meeting", "repeat": "none", "remind": -1},
+  {"id": "c2", "title": "Fiqh lesson (الفقه)", "date": (now + dt.timedelta(hours=3)).date().isoformat(), "time": (now + dt.timedelta(hours=3)).strftime("%H:%M"), "type": "class", "repeat": "none", "remind": -1},
   {"id": "t1", "title": "احفظ فروض الوضوء", "date": today, "type": "homework", "repeat": "none", "remind": -1, "src": "L1"},
 ]
 

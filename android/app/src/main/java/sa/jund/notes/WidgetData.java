@@ -67,7 +67,7 @@ public final class WidgetData {
         int[] mon = m.getAppWidgetIds(new ComponentName(ctx, MonthWidget.class));
         new Thread(() -> {
             JSONObject data = load(ctx);
-            for (int id : big) safe(m, id, () -> drawToday(ctx, data));
+            for (int id : big) safe(m, id, () -> drawToday(ctx, data, rowsFor(m, id)));
             for (int id : small) safe(m, id, () -> drawPrayer(ctx, data));
             for (int id : day) safe(m, id, () -> drawDay(ctx, data));
             for (int id : wis) safe(m, id, () -> drawWisdom(ctx, data));
@@ -76,6 +76,17 @@ public final class WidgetData {
         }).start();
     }
     private interface Draw { RemoteViews run() throws Exception; }
+    /** How many rows fit in the Today widget at the size the person made it (no half-cut last row). */
+    static int rowsFor(AppWidgetManager m, int id) {
+        try {
+            android.os.Bundle o = m.getAppWidgetOptions(id);
+            int h = Math.max(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0));
+            if (h <= 0) return 3;
+            return Math.max(1, Math.min(5, (h - 96) / 27));
+        } catch (Exception e) { return 3; }
+    }
+    /** Arabic: the whole widget runs right to left. */
+    private static void direction(RemoteViews v, JSONObject d) { if (ar(d)) v.setInt(R.id.w_root, "setLayoutDirection", View.LAYOUT_DIRECTION_RTL); }
     private static void safe(AppWidgetManager m, int id, Draw d) { try { m.updateAppWidget(id, d.run()); } catch (Exception ignored) {} }
 
     /* ---------- data ---------- */
@@ -222,9 +233,10 @@ public final class WidgetData {
     private static Locale loc(JSONObject d) { return ar(d) ? new Locale("ar") : Locale.UK; }
 
     /* ---------- Today ---------- */
-    static RemoteViews drawToday(Context ctx, JSONObject d) {
+    static RemoteViews drawToday(Context ctx, JSONObject d, int maxRows) {
         Look k = new Look(d);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_today);
+        direction(v, d);
         v.setInt(R.id.w_root, "setBackgroundResource", k.bg);
         openOnTap(ctx, v, "assistant", 10);
         long now = System.currentTimeMillis();
@@ -255,7 +267,7 @@ public final class WidgetData {
             bars = {R.id.w_b1, R.id.w_b2, R.id.w_b3, R.id.w_b4, R.id.w_b5}, names = {R.id.w_n1, R.id.w_n2, R.id.w_n3, R.id.w_n4, R.id.w_n5};
         int shown = 0;
         for (Entry e : list) {
-            if (shown >= 5) break;
+            if (shown >= maxRows) break;
             if (!sameDay(e.at, now) && !(e.prayer && shown < 2 && e.at - now < 12 * 3600_000L) && !(!e.prayer && e.at - now < 18 * 3600_000L)) continue;
             Calendar c = Calendar.getInstance(); c.setTimeInMillis(e.at);
             boolean doing = e.at <= now && e.end > now;
@@ -277,6 +289,7 @@ public final class WidgetData {
     static RemoteViews drawPrayer(Context ctx, JSONObject d) {
         Look k = new Look(d);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_prayer2);
+        direction(v, d);
         v.setInt(R.id.w_root, "setBackgroundResource", k.bg);
         openOnTap(ctx, v, "assistant", 11);
         long now = System.currentTimeMillis();
@@ -323,6 +336,7 @@ public final class WidgetData {
     static RemoteViews drawMonth(Context ctx, JSONObject d) {
         Look k = new Look(d);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_month);
+        direction(v, d);
         v.setInt(R.id.w_root, "setBackgroundResource", k.bg);
         openOnTap(ctx, v, "calendar", 12);
         long now = System.currentTimeMillis();
@@ -407,6 +421,7 @@ public final class WidgetData {
     static RemoteViews drawDay(Context ctx, JSONObject data) {
         Look k = new Look(data);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_day);
+        direction(v, data);
         v.setInt(R.id.w_root, "setBackgroundResource", k.bg);
         int ink = k.ink, sub = k.sub, accent = k.accent;
         v.setTextColor(R.id.w_prayer, ink); v.setTextColor(R.id.w_prayer_time, sub);
@@ -487,7 +502,7 @@ public final class WidgetData {
         int[][] size = {{360, 190}, {180, 180}, {360, 120}, {360, 300}, {360, 120}};
         for (int n = 0; n < names.length; n++) {
             try {
-                RemoteViews rv = n == 0 ? drawToday(ctx, d) : n == 1 ? drawPrayer(ctx, d) : n == 2 ? drawDay(ctx, d) : n == 3 ? drawMonth(ctx, d) : drawWisdom(ctx, d);
+                RemoteViews rv = n == 0 ? drawToday(ctx, d, 3) : n == 1 ? drawPrayer(ctx, d) : n == 2 ? drawDay(ctx, d) : n == 3 ? drawMonth(ctx, d) : drawWisdom(ctx, d);
                 android.widget.FrameLayout host = new android.widget.FrameLayout(ctx);
                 View view = rv.apply(ctx, host);
                 float dp = ctx.getResources().getDisplayMetrics().density;

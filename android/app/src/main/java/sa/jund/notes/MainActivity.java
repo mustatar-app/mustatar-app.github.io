@@ -35,7 +35,12 @@ public class MainActivity extends Activity {
     private static final String ORIGIN = "https://mustatar.dawajund.workers.dev";
     private static final String OLD_ORIGIN = "https://mustatar-app.github.io";
     private static final String SHARE_PATH = "/__mustatar_share/";
-    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4;
+    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4, CALENDAR = 5, HEALTH = 6, FOLDER = 7;
+    private static final String FILE_PATH = "/__mustatar_file/";
+    // files from a folder the person chose (their recordings, their screenshots), handed to the page one by one
+    private final java.util.Map<String, String[]> served = new java.util.concurrent.ConcurrentHashMap<>();
+    // a request waiting for the person's answer (calendar or health permission)
+    private String waitingJob; private androidx.webkit.JavaScriptReplyProxy waitingReply;
     private WebView web;
     private ValueCallback<Uri[]> picker;
     private PermissionRequest microphone;
@@ -207,6 +212,99 @@ public class MainActivity extends Activity {
                                 reply.postMessage("{\"file\":" + JSONObject.quote(command.optString("job")) + ",\"result\":{\"ok\":" + ok + "}}");
                                 return;
                             }
+                            // the widgets: the app hands them their data (prayer times, items, Hijri date, style, language)
+                            case "widget": WidgetData.saveLocal(this, command.getJSONObject("data").toString()); break;
+                            case "widgetPreview": {   // test builds only: draw each widget into a picture
+                                boolean dbg = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+                                if (dbg) WidgetData.preview(this);
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", dbg));
+                                return;
+                            }
+                            // the phone's own calendars, both ways
+                            case "calendarAsk": {
+                                if (hasCalendar()) { answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return; }
+                                waitingJob = command.optString("job"); waitingReply = reply;
+                                requestPermissions(new String[]{Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR}, CALENDAR);
+                                return;
+                            }
+                            case "calendarList": calendarJob(reply, command, () -> new JSONObject().put("ok", true).put("calendars", PhoneCalendar.calendars(this))); return;
+                            case "calendarRead": calendarJob(reply, command, () -> new JSONObject().put("ok", true).put("events",
+                                PhoneCalendar.events(this, command.getLong("from"), command.getLong("to"), command.optJSONArray("ids")))); return;
+                            case "calendarWrite": calendarJob(reply, command, () -> PhoneCalendar.write(this, command.getLong("cal"), command.getJSONArray("items"))); return;
+                            case "calendarClear": calendarJob(reply, command, () -> new JSONObject().put("ok", true).put("removed", PhoneCalendar.clear(this))); return;
+                            case "calendarForget": calendarJob(reply, command, () -> { PhoneCalendar.forget(this, command.getJSONArray("ids"), command.optBoolean("resign")); return new JSONObject().put("ok", true); }); return;
+                            // the fitness tracker (Health Connect)
+                            case "healthStatus": {
+                                String st = HealthBridge.status(this);
+                                if (!"ok".equals(st)) { answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("status", st)); return; }
+                                String job = command.optString("job");
+                                HealthBridge.granted(this, json -> runOnUiThread(() -> {
+                                    try { answer(reply, job, new JSONObject(json).put("status", "ok")); } catch (Exception ignored) {}
+                                }));
+                                return;
+                            }
+                            case "healthAsk": {
+                                String st = HealthBridge.status(this), job = command.optString("job");
+                                if ("update".equals(st)) {
+                                    try { startActivity(HealthBridge.installIntent()); } catch (ActivityNotFoundException ignored) {}
+                                    answer(reply, job, new JSONObject().put("ok", false).put("status", st)); return;
+                                }
+                                if (!"ok".equals(st)) { answer(reply, job, new JSONObject().put("ok", false).put("status", st)); return; }
+                                waitingJob = job; waitingReply = reply;
+                                try { startActivityForResult(HealthBridge.permissionIntent(this), HEALTH); }
+                                catch (Exception e) { waitingJob = null; answer(reply, job, new JSONObject().put("ok", false).put("error", String.valueOf(e))); }
+                                return;
+                            }
+                            case "healthRead": {
+                                String job = command.optString("job");
+                                if (!"ok".equals(HealthBridge.status(this))) { answer(reply, job, new JSONObject().put("ok", false).put("status", HealthBridge.status(this))); return; }
+                                HealthBridge.read(this, Math.max(1, Math.min(31, command.optInt("days", 7))), json -> runOnUiThread(() -> {
+                                    try { answer(reply, job, new JSONObject(json)); } catch (Exception ignored) {}
+                                }));
+                                return;
+                            }
+                            // a folder on the phone the person chooses once (Samsung Voice Recorder's recordings, screenshots…)
+                            case "folderPick": {
+                                waitingJob = command.optString("job"); waitingReply = reply;
+                                Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                                String start = command.optString("start");
+                                if (!start.isEmpty()) pick.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,
+                                    android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + start));
+                                try { startActivityForResult(pick, FOLDER); }
+                                catch (ActivityNotFoundException e) { waitingJob = null; answer(reply, command.optString("job"), new JSONObject().put("ok", false)); }
+                                return;
+                            }
+                            case "folderList": {
+                                String job = command.optString("job"), tree = command.optString("uri"); long since = command.optLong("since");
+                                new Thread(() -> {
+                                    JSONObject out = new JSONObject();
+                                    try {
+                                        Uri t = Uri.parse(tree);
+                                        Uri kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(t, android.provider.DocumentsContract.getTreeDocumentId(t));
+                                        org.json.JSONArray list = new org.json.JSONArray();
+                                        try (Cursor c = getContentResolver().query(kids, new String[]{"document_id", "_display_name", "mime_type", "last_modified", "_size"}, null, null, null)) {
+                                            while (c != null && c.moveToNext()) {
+                                                String mime = c.getString(2);
+                                                if (mime == null || android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
+                                                long mod = c.getLong(3);
+                                                if (mod <= since) continue;
+                                                list.put(new JSONObject().put("doc", c.getString(0)).put("name", c.getString(1)).put("mime", mime).put("modified", mod).put("size", c.getLong(4)));
+                                            }
+                                        }
+                                        out.put("ok", true).put("files", list);
+                                    } catch (Exception e) { try { out.put("ok", false).put("error", String.valueOf(e)); } catch (Exception ignored) {} }
+                                    answer(reply, job, out);
+                                }).start();
+                                return;
+                            }
+                            case "folderFile": {
+                                Uri t = Uri.parse(command.optString("uri"));
+                                Uri doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(t, command.optString("doc"));
+                                String token = UUID.randomUUID().toString();
+                                served.put(token, new String[]{doc.toString(), command.optString("mime", "application/octet-stream")});
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("path", FILE_PATH + token));
+                                return;
+                            }
                             case "print":
                                 getSystemService(PrintManager.class).print("Mustatar",
                                     web.createPrintDocumentAdapter("Mustatar"), null);
@@ -224,6 +322,26 @@ public class MainActivity extends Activity {
         }
         setContentView(web);
         receive(getIntent(), true);
+    }
+
+    private void answer(androidx.webkit.JavaScriptReplyProxy reply, String job, JSONObject result) {
+        Runnable send = () -> reply.postMessage("{\"file\":" + JSONObject.quote(job) + ",\"result\":" + result + "}");
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) send.run(); else runOnUiThread(send);
+    }
+    private boolean hasCalendar() {
+        return checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+            && checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED;
+    }
+    private interface Job { JSONObject run() throws Exception; }
+    // calendar work runs away from the screen's thread, then answers the page
+    private void calendarJob(androidx.webkit.JavaScriptReplyProxy reply, JSONObject command, Job job) {
+        String id = command.optString("job");
+        if (!hasCalendar()) { try { answer(reply, id, new JSONObject().put("ok", false).put("error", "permission")); } catch (Exception ignored) {} return; }
+        new Thread(() -> {
+            JSONObject out;
+            try { out = job.run(); } catch (Exception e) { try { out = new JSONObject().put("ok", false).put("error", String.valueOf(e)); } catch (Exception x) { return; } }
+            answer(reply, id, out);
+        }).start();
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -374,6 +492,16 @@ public class MainActivity extends Activity {
     }
 
     private WebResourceResponse sharedResponse(Uri url) {
+        String p = url.getPath();
+        if (p != null && p.startsWith(FILE_PATH) && local(url)) {
+            String[] f = served.remove(p.substring(FILE_PATH.length()));
+            if (f == null) return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.emptyMap(), null);
+            try {
+                java.io.InputStream input = getContentResolver().openInputStream(Uri.parse(f[0]));
+                if (input != null) return new WebResourceResponse(f[1], null, 200, "OK", Collections.singletonMap("Cache-Control", "no-store"), input);
+            } catch (Exception ignored) {}
+            return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.emptyMap(), null);
+        }
         SharedFile file = shared;
         if (file == null || !local(url) || !(SHARE_PATH + file.token).equals(url.getPath())) return null;
         try {
@@ -427,6 +555,10 @@ public class MainActivity extends Activity {
             microphone = null;
         }
         if (code == NOTIFY) refreshReminders();
+        if (code == CALENDAR && waitingJob != null) {
+            try { answer(waitingReply, waitingJob, new JSONObject().put("ok", hasCalendar())); } catch (Exception ignored) {}
+            waitingJob = null; waitingReply = null;
+        }
         if (code == LOCATION && locationCallback != null) {
             locationCallback.invoke(locationOrigin, grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED, false);
             locationCallback = null;
@@ -436,6 +568,24 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int code, int result, Intent data) {
         super.onActivityResult(code, result, data);
         if (code == FileOut.CREATE) files.placed(result, data);
+        if (code == FOLDER && waitingJob != null) {
+            String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;
+            waitingJob = null; waitingReply = null;
+            try {
+                Uri tree = result == RESULT_OK && data != null ? data.getData() : null;
+                if (tree == null) { answer(reply, job, new JSONObject().put("ok", false)); }
+                else {
+                    getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    String id = android.provider.DocumentsContract.getTreeDocumentId(tree);
+                    answer(reply, job, new JSONObject().put("ok", true).put("uri", tree.toString()).put("name", id.substring(id.indexOf(':') + 1)));
+                }
+            } catch (Exception e) { try { answer(reply, job, new JSONObject().put("ok", false).put("error", String.valueOf(e))); } catch (Exception ignored) {} }
+        }
+        if (code == HEALTH && waitingJob != null) {
+            String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;
+            waitingJob = null; waitingReply = null;
+            HealthBridge.granted(this, json -> runOnUiThread(() -> { try { answer(reply, job, new JSONObject(json)); } catch (Exception ignored) {} }));
+        }
         if (code == PICK && picker != null) {
             picker.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
             picker = null;

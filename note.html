@@ -31,6 +31,15 @@
   button, a.btn { font: inherit; border-radius: 22px; padding: 11px 18px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer; }
   .primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
   .msg { text-align: center; padding: 60px 10px; color: var(--ink-2); }
+  /* editing together */
+  .ed-title { width: 100%; font: inherit; font-size: 1.35rem; font-weight: 700; border: 0; background: transparent; color: inherit; padding: 0; margin: 0 0 8px; outline: none; }
+  .ed-text { width: 100%; min-height: 180px; font: inherit; border: 0; background: transparent; color: inherit; resize: none; outline: none; padding: 0; line-height: 1.6; }
+  .ed-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; } .ed-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+  .ed-row .it { flex: 1; font: inherit; border: 0; background: transparent; color: inherit; outline: none; padding: 4px 0; } .ed-row.done .it { text-decoration: line-through; color: var(--ink-2); }
+  .ed-row .rm { border: 0; background: none; padding: 4px 8px; color: var(--ink-2); font-size: 1rem; }
+  .ed-add { border: 0; background: none; color: var(--ink-2); padding: 6px 0; }
+  .together { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .82rem; color: var(--ink-2); margin: 0 0 10px; }
+  .together .dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; } .together input { font: inherit; font-size: .82rem; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 150px; }
   .spin { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 12px; animation: s 0.8s linear infinite; } @keyframes s { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -57,7 +66,8 @@
   $('#save').textContent = t('Save to my notes', 'احفظها في ملاحظاتي');
   $('#open').textContent = t('Open Mustatar', 'افتح مستطر');
   const id = new URLSearchParams(location.search).get('id') || '';
-  let note = null;
+  const key = (new URLSearchParams(location.hash.slice(1)).get('k') || '').replace(/[^A-Za-z0-9_-]/g, '');
+  let note = null, rev = 0, base = '', canEdit = false, saveT = 0, saving = false, lastBy = '';
   async function server() {
     try { return (await (await fetch('server.json', { cache: 'no-cache' })).json()).url.replace(/\/$/, ''); }
     catch { try { return JSON.parse(localStorage.getItem('jn_serverUrl')) || ''; } catch { return ''; } }
@@ -78,6 +88,97 @@
     document.title = (n.title || t('A note', 'ملاحظة')) + ' · Mustatar';
     $('#bar').hidden = false;
   }
+  /* ---------- editing together (the link has the edit key and the owner allows editing) ---------- */
+  let myName = ''; try { myName = JSON.parse(localStorage.getItem('jn_shareName') || '""') || JSON.parse(localStorage.getItem('jn_mstUser') || '{}')?.name || ''; } catch {}
+  const when = ms => new Date(ms).toLocaleTimeString(AR ? 'ar-SA' : 'en-GB', { hour: 'numeric', minute: '2-digit' });
+  function status(txt) { const el = $('#ed-st'); if (el) el.textContent = txt; }
+  function current() {
+    const n = { ...note, title: $('#ed-title').value, labels: note.labels || [], color: note.color || '' };
+    if (note.items) n.items = [...document.querySelectorAll('.ed-row')].map(r => ({ t: r.querySelector('.it').value, done: r.querySelector('input[type=checkbox]').checked }));
+    else n.text = $('#ed-text').value;
+    return n;
+  }
+  function paintList(focusAt) {
+    const box = $('#ed-list'); if (!box) return;
+    box.innerHTML = note.items.map((x, i) => `<div class="ed-row${x.done ? ' done' : ''}" data-i="${i}"><input type="checkbox"${x.done ? ' checked' : ''} aria-label="${t('Done', 'منجز')}"><input class="it" dir="auto" value="${esc(x.t)}" placeholder="${t('List item', 'عنصر')}"><button type="button" class="rm" aria-label="${t('Remove', 'حذف')}">✕</button></div>`).join('');
+    box.querySelectorAll('.ed-row').forEach(r => {
+      const i = +r.dataset.i;
+      r.querySelector('input[type=checkbox]').onchange = e => { note.items[i].done = e.target.checked; r.classList.toggle('done', e.target.checked); changed(); };
+      const it = r.querySelector('.it');
+      it.oninput = () => { note.items[i].t = it.value; changed(); };
+      it.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); note.items.splice(i + 1, 0, { t: '', done: false }); paintList([i + 1, 0]); changed(); } };
+      r.querySelector('.rm').onclick = () => { note.items.splice(i, 1); paintList(); changed(); };
+    });
+    if (focusAt) { const el = box.querySelector(`.ed-row[data-i="${focusAt[0]}"] .it`); if (el) { el.focus(); el.setSelectionRange(focusAt[1], focusAt[1]); } }
+  }
+  function showEdit(n, updated) {
+    note = n; canEdit = true;
+    const one = [n.title, n.text, ...(n.items || []).map(i => i.t)].join(' ');
+    const imgs = n.images || [];
+    $('#note').innerHTML = `<p class="together"><span class="dot"></span><span>${t('You can edit this note together', 'تستطيع تعديل هذه الملاحظة معًا')}</span>
+        <input id="ed-name" dir="auto" maxlength="40" placeholder="${t('Your name', 'اسمك')}" value="${esc(myName)}"></p>
+      <article class="card" data-c="${esc(n.color || '')}" style="${n.color ? `--kc: var(--kc-${esc(n.color)})` : ''}" dir="${ARABIC(one) ? 'rtl' : 'auto'}">
+      ${imgs.length ? `<div class="imgs n${Math.min(imgs.length, 3)}">${imgs.map(i => `<img alt="" src="${esc(i.data)}">`).join('')}</div>` : ''}
+      <input class="ed-title" id="ed-title" dir="auto" maxlength="200" placeholder="${t('Title', 'العنوان')}" value="${esc(n.title || '')}">
+      ${n.items ? `<div id="ed-list"></div><button type="button" class="ed-add" id="ed-add">＋ ${t('List item', 'عنصر')}</button>` : `<textarea class="ed-text" id="ed-text" dir="auto" placeholder="${t('Note', 'ملاحظة')}">${esc(n.text || '')}</textarea>`}
+      ${(n.labels || []).length ? `<div class="labels">${n.labels.map(l => `<span>${esc(l)}</span>`).join('')}</div>` : ''}
+    </article>
+    <p class="meta"><span id="ed-st"></span></p>`;
+    if (n.items) { paintList(); $('#ed-add').onclick = () => { note.items.push({ t: '', done: false }); paintList([note.items.length - 1, 0]); changed(); }; }
+    const ta = $('#ed-text'); const fit = () => { if (ta) { ta.style.height = 'auto'; ta.style.height = Math.max(180, ta.scrollHeight) + 'px'; } };
+    if (ta) { ta.oninput = () => { fit(); changed(); }; setTimeout(fit, 0); }
+    $('#ed-title').oninput = changed;
+    $('#ed-name').onchange = () => { myName = $('#ed-name').value.trim(); try { localStorage.setItem('jn_shareName', JSON.stringify(myName)); } catch {} };
+    status(stamp(updated));
+    document.title = (n.title || t('A note', 'ملاحظة')) + ' · Mustatar';
+    $('#bar').hidden = false;
+  }
+  const stamp = updated => (lastBy ? t(`${lastBy} edited at `, `عدّلها ${lastBy} الساعة `) : (note?.by ? t(`${note.by} edited at `, `عدّلها ${note.by} الساعة `) : t('Edited at ', 'عُدّلت الساعة '))) + when(updated);
+  // the other person's changes arrive: put them on the page without losing your place
+  function takeIn(n, updated) {
+    const ta = $('#ed-text'), f = document.activeElement;
+    const caret = ta && f === ta ? ta.value.length - ta.selectionStart : null;
+    const item = f?.classList?.contains('it') ? [+f.closest('.ed-row').dataset.i, f.selectionStart] : null;
+    note = { ...note, ...n, images: note.images };
+    if (document.activeElement !== $('#ed-title')) $('#ed-title').value = note.title || '';
+    if (note.items && $('#ed-list')) paintList(item);
+    else if (ta) { ta.value = note.text || ''; ta.style.height = 'auto'; ta.style.height = Math.max(180, ta.scrollHeight) + 'px'; if (caret !== null) { const at = Math.max(0, ta.value.length - caret); ta.setSelectionRange(at, at); } }
+    else showEdit(note, updated);   // turned from text into a list or back
+    status(stamp(updated));
+  }
+  function changed() { clearTimeout(saveT); status(t('Saving…', 'يُحفظ…')); saveT = setTimeout(push, 900); }
+  async function push() {
+    saveT = 0;
+    if (saving) { saveT = setTimeout(push, 400); return; }
+    saving = true; const sent = current();
+    try {
+      const r = await fetch(apiBase + '/share/' + id, { method: 'PUT', headers: { 'content-type': 'application/json', 'x-edit-key': key }, body: JSON.stringify({ note: sent, base: rev, by: myName || t('A friend', 'صديق') }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 403) { status(t('Editing was turned off by the owner. Your last change was not saved.', 'أوقف صاحب الملاحظة التعديل. لم يُحفظ آخر تغيير لك.')); canEdit = false; return; }
+      if (r.status === 404) { status(t('This note is no longer shared.', 'لم تعد هذه الملاحظة مشاركة.')); return; }
+      if (!j.ok) throw new Error();
+      rev = j.rev; lastBy = myName;
+      const mine = JSON.stringify([sent.title, sent.text || '', sent.items || null]), back = JSON.stringify([j.note.title, j.note.text || '', j.note.items || null]);
+      if (j.merged && mine !== back && !saveT) takeIn(j.note, Date.now());
+      status(t('✓ Saved — they see it in a few seconds', '✓ حُفظ — يراه خلال ثوانٍ'));
+    } catch { status(t('Not saved — check the internet. Trying again…', 'لم يُحفظ — تأكد من الإنترنت. أحاول مرة أخرى…')); saveT = setTimeout(push, 4000); }
+    finally { saving = false; }
+  }
+  // every few seconds: has the other person changed it?
+  async function poll() {
+    if (document.hidden || saving || saveT) return;   // your own change is on its way; it brings theirs back
+    try {
+      const r = await fetch(apiBase + '/share/' + id + '?rev=' + rev, { cache: 'no-store' });
+      if (r.status === 404) { status(t('This note is no longer shared.', 'لم تعد هذه الملاحظة مشاركة.')); return; }
+      const j = await r.json();
+      if (j.same || saving || saveT) return;
+      rev = j.rev; lastBy = j.lastBy || '';
+      if (!j.edit) { canEdit = false; show(j.note, j.updated); return; }
+      takeIn(j.note, j.updated);
+    } catch {}
+  }
+  let apiBase = '';
+
   // "Save to my notes": straight into this phone's My notes (the same place the app keeps them)
   function db() {
     return new Promise((res, rej) => {
@@ -88,6 +189,7 @@
   }
   $('#save').onclick = async () => {
     if (!note) return;
+    if (canEdit) note = current();
     const b = $('#save'); b.disabled = true;
     try {
       const d = await db(), now = Date.now(), nid = 'S' + now.toString(36) + Math.random().toString(36).slice(2, 6);
@@ -105,14 +207,20 @@
     } catch (e) { b.disabled = false; b.textContent = t('Could not save. Try again.', 'تعذّر الحفظ. حاول مرة أخرى.'); }
   };
   (async () => {
-    const base = await server();
+    const base = apiBase = await server();
     try {
       if (!/^[A-Za-z0-9_-]{20,40}$/.test(id) || !base) throw Object.assign(new Error(), { gone: true });
       const r = await fetch(base + '/share/' + id, { cache: 'no-store' });
       if (r.status === 404) throw Object.assign(new Error(), { gone: true });
       if (!r.ok) throw new Error();
       const j = await r.json();
-      show(j.note, j.updated);
+      rev = j.rev || 0; lastBy = j.lastBy || '';
+      if (key && j.edit) showEdit(j.note, j.updated); else show(j.note, j.updated);
+      if (key && !j.edit) $('#from').textContent = t('The owner turned off editing — you can read it and save a copy.', 'أوقف صاحب الملاحظة التعديل — تستطيع قراءتها وحفظ نسخة.');
+      // friends see each other's changes: look every few seconds (only while this page is on screen)
+      setInterval(() => { if (canEdit) poll(); else if (!document.hidden) fetch(base + '/share/' + id + '?rev=' + rev, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => { if (j && !j.same) { rev = j.rev; lastBy = j.lastBy || ''; if (key && j.edit) showEdit(j.note, j.updated); else show(j.note, j.updated); } }).catch(() => {}); }, 3500);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden && canEdit) poll(); });
+      window.addEventListener('pagehide', () => { if (saveT && canEdit) { clearTimeout(saveT); navigator.sendBeacon && fetch(base + '/share/' + id, { method: 'PUT', keepalive: true, headers: { 'content-type': 'application/json', 'x-edit-key': key }, body: JSON.stringify({ note: current(), base: rev, by: myName }) }); } });
     } catch (e) {
       $('#note').innerHTML = `<div class="msg"><b>${e.gone ? t('This note is no longer shared.', 'لم تعد هذه الملاحظة مشاركة.') : t('Could not open the note. Check the internet and try again.', 'تعذّر فتح الملاحظة. تأكد من الإنترنت وحاول مرة أخرى.')}</b></div>`;
     }

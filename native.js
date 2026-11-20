@@ -56,6 +56,8 @@
     googleSignIn: clientId => ask({ action: 'googleSignIn', clientId }, 180000),
     // the same, in the phone's browser (it comes back with app.mustatar://signin)
     openBrowser: url => ask({ action: 'openBrowser', url }, 20000),
+    // any other job for the app (phone calendars, fitness, widgets): a message in, one answer back
+    ask: (msg, ms) => ask(msg, ms),
   };
   // the browser's own share, done by the app (a web view has none, or one that does nothing)
   const share = async data => {
@@ -69,3 +71,31 @@
     Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true });
   } catch {}
 })();
+
+/* Opening the microphone, the same way everywhere (recorder, voice chat, dictation, voice notes).
+   If the phone refuses the clean-up options (echo and noise), it tries again with the plain microphone,
+   and a failure comes with a message that says what actually went wrong. */
+window.openMic = async function openMic(audio) {
+  if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no getUserMedia'), { name: 'NotSupportedError' });
+  try { return await navigator.mediaDevices.getUserMedia({ audio: audio || true }); }
+  catch (e) {
+    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e;
+    try { return await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e2) {
+      if (e2?.name !== 'NotReadableError' && e2?.name !== 'AbortError') throw e2;
+      await new Promise(r => setTimeout(r, 700));          // the microphone may be just closing from another use
+      return await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+  }
+};
+window.micError = function micError(e) {
+  const ar = (window.ZadLang || document.documentElement.lang) === 'ar', app = !!window.JundNative;
+  const n = e?.name || '';
+  if (n === 'NotAllowedError' || n === 'SecurityError' || (n === 'NotSupportedError' && e.message !== 'no getUserMedia')) return app
+    ? (ar ? 'اسمح لمستطر باستخدام المايك: الإعدادات ← التطبيقات ← مستطر ← الأذونات ← الميكروفون، ثم حاول مرة أخرى.' : 'Allow the microphone for Mustatar: Settings › Apps › Mustatar › Permissions › Microphone, then try again.')
+    : (ar ? 'اسمح لمستطر باستخدام المايك (من إعدادات الموقع في المتصفح، رمز القفل بجانب العنوان) ثم حاول مرة أخرى.' : 'Allow the microphone for Mustatar (in the browser’s site settings — the lock next to the address), then try again.');
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return ar ? 'لم يُعثر على مايك في هذا الجهاز. صِل سماعة بمايك أو جرّب جهازًا آخر.' : 'No microphone was found on this device. Plug in a headset with a mic, or try another device.';
+  if (n === 'NotReadableError' || n === 'AbortError') return ar ? 'المايك مشغول؛ قد يكون تطبيق آخر يستخدمه (مكالمة أو مسجّل). أغلقه ثم حاول مرة أخرى.' : 'The microphone is busy — another app (a call or a recorder) may be using it. Close it, then try again.';
+  if (n === 'NotSupportedError') return ar ? 'هذا المتصفح لا يسمح بالتسجيل. افتح مستطر في Chrome أو من التطبيق.' : 'This browser cannot record. Open Mustatar in Chrome, or in the app.';
+  return ar ? 'تعذّر فتح المايك. حاول مرة أخرى.' : 'The microphone could not start. Please try again.';
+};

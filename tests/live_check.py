@@ -61,6 +61,24 @@ else:
   except Exception as e:
     say(False, f"sharing answers ({e})")
 
+# 1c. paste any link → notes (on the server from version 17)
+try: has_link = bool(json.loads(req("/").read()).get("link"))
+except Exception: has_link = False
+if not has_link: print("NOTE the live server does not have 'paste any link' yet (it arrives when this update is deployed)")
+else:
+  for url, want, label in (("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "youtube", "a YouTube link goes to the YouTube path"),
+                           ("https://www.tiktok.com/@x/video/1", "blocked", "a TikTok link gets the honest answer"),
+                           ("https://en.wikipedia.org/wiki/Ramadan", "text", "a web page gives its words to make notes from")):
+    try:
+      j = json.loads(req("/link", {"url": url}, timeout=40).read())
+      say(j.get("kind") == want and (want != "text" or len(j.get("text", "")) > 1000), f"{label} ({j.get('kind')}, {len(j.get('text', ''))} characters)")
+    except Exception as e:
+      say(False, f"{label} ({e})")
+  try:
+    req("/link", {"url": "http://127.0.0.1/admin"}); say(False, "a private-network link is refused (it was opened!)")
+  except urllib.error.HTTPError as e:
+    say(e.code == 400, f"a private-network link is refused (HTTP {e.code})")
+
 # 2. the assistant: time to the first words and to the end
 src = open(os.path.join(HERE, "..", "assistant.js"), encoding="utf-8").read()
 SYSTEM = re.sub(r"\$\{[^}]*\}", "", src.split("const SYSTEM = () => `", 1)[1].split("`;", 1)[0])

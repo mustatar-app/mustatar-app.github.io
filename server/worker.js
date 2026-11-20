@@ -2,6 +2,7 @@
 //   POST /write       text → notes (streams the answer back)
 //   POST /transcribe  an audio piece → its transcript (streams)
 //   POST /youtube     a YouTube link + time range → transcript of that range (streams)
+//   POST /link        any public link (Drive, Dropbox, podcast page, audio/video file, web page) → the recording or the page's words
 //   GET  /playlist    a YouTube playlist → its videos (from YouTube's public feed)
 //   GET  /ytmeta      a YouTube link → its title
 //   POST /report      a problem, a piece of feedback or a daily usage count from the app (no note contents)
@@ -11,6 +12,7 @@
 
 import { UserSpace, Accounts, accountRoutes } from './space.js';
 import { SharedNote, shareRoutes } from './share.js';
+import { linkRoute } from './link.js';
 import * as AI from './engine.js';
 export { UserSpace, Accounts };   // each person's own database, and the sign-in database (see space.js)
 export { SharedNote };            // a note shared with friends: one small database per shared note (see share.js)
@@ -55,7 +57,7 @@ function cors(origin) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : ALLOWED[0],
     'Access-Control-Allow-Methods': 'POST, GET, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream',
+    'Access-Control-Allow-Headers': 'content-type, authorization, x-mst-stream, x-edit-key',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -467,7 +469,7 @@ export default {
     const direct = req.headers.get('x-mst-stream') === 'openai';
     if (req.method === 'OPTIONS') return new Response(null, { headers: h });
     if (req.method === 'GET' && path === '/') return json({
-      ok: true, app: 'mustatar', version: 16, key: AI.ready(env), push: !!env.PUSH, share: !!env.SHARES,
+      ok: true, app: 'mustatar', version: 17, link: true, key: AI.ready(env), push: !!env.PUSH, share: !!env.SHARES,
       engine: { hear: [...(AI.groqKey(env) ? AI.MODELS.groqHear.map(m => 'groq/' + m) : []), ...(env.AI ? ['cloudflare/' + AI.MODELS.cfHear] : [])],
         write: [...(env.AI ? ['cloudflare/' + AI.MODELS.cfText] : []), ...(AI.groqKey(env) ? AI.MODELS.groqText.map(m => 'groq/' + m) : [])],
         youtube: !!env.GEMINI_API_KEY },
@@ -477,6 +479,9 @@ export default {
     if (path === '/widget' || path.startsWith('/widget/')) return widgetRoutes(req, env, h, path, url);
     if (req.method === 'GET' && /^\/ics\/[a-f0-9]{16,64}\.ics$/.test(path)) return icsFeed(env, path.slice(5, -4));
     if (origin && h['Access-Control-Allow-Origin'] !== origin) return json({ error: 'forbidden' }, 403, h);
+
+    /* ----- paste any link → the recording or the page's words, for notes (link.js) ----- */
+    if (path === '/link') return linkRoute(req, env, h, !!origin && h['Access-Control-Allow-Origin'] === origin);
 
     /* ----- notes shared with friends (share.js) ----- */
     if (path === '/share' || path.startsWith('/share/')) return shareRoutes(req, env, h, path, json);

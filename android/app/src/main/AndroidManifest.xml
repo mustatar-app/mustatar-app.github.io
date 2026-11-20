@@ -4,11 +4,23 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- the in-app browser needs this to start the microphone (echo and noise clean-up); without it: "Could not start audio source" -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- your phone's calendars, both ways (only after you allow it in the app) -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- the fitness tracker: reading steps, distance, active calories, sleep and workouts from Health Connect (only after you allow it) -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
 
     <!-- reading answers aloud: lets the app find the phone's text-to-speech engine (Android 11 and newer) -->
     <queries>
+        <package android:name="com.google.android.apps.healthdata" />
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <!-- "Continue with Google" in the browser: lets the app find the phone's browser (Android 11 and newer) -->
         <intent><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="https" /></intent>
@@ -52,6 +64,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Health Connect asks every app that reads health data to show why: this opens Mustatar's privacy page -->
+        <activity android:name=".HealthPrivacyActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter><action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" /></intent-filter>
+        </activity>
+        <activity-alias android:name="ViewPermissionUsageActivity" android:exported="true" android:targetActivity=".HealthPrivacyActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- home-screen widgets and the one-time link that connects them -->
         <activity android:name=".WidgetLinkActivity" android:exported="true" android:noHistory="true" android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
@@ -68,7 +92,7 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths" />
         </provider>
 
-        <receiver android:name=".DaftarWidget" android:exported="false" android:label="Mustatar: prayer and tasks">
+        <receiver android:name=".DaftarWidget" android:exported="false" android:label="Mustatar: today">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_main_info" />
         </receiver>
@@ -83,6 +107,11 @@
         <receiver android:name=".PrayerWidget" android:exported="false" android:label="Mustatar: next prayer">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_prayer_info" />
+        </receiver>
+
+        <receiver android:name=".MonthWidget" android:exported="false" android:label="Mustatar: month">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_month_info" />
         </receiver>
 
         <receiver android:name=".ReminderReceiver" android:exported="false">

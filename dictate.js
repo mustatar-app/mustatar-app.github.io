@@ -75,8 +75,8 @@ const TYPE = () => ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/
 async function start() {
   const box = $('.as-input'), ta = $('#as-text');
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-  catch { hint(L('Allow the microphone for Mustatar (in the browser’s site settings), then try again.', 'اسمح لمستطر باستخدام المايك (من إعدادات الموقع في المتصفح) ثم حاول مرة أخرى.')); return; }
+  try { stream = await openMic({ echoCancellation: true, noiseSuppression: true, autoGainControl: true }); }
+  catch (e) { hint(micError(e)); return; }
   const ctx = new (window.AudioContext || window.webkitAudioContext)(), an = ctx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.6;
   ctx.createMediaStreamSource(stream).connect(an);
   const before = ta.value ? ta.value.replace(/\s*$/, ' ') : '';

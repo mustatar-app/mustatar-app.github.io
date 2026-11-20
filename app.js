@@ -1561,16 +1561,16 @@ async function hearAll() {
   try {
     let p;
     while ((p = pending.find(x => x.media && !x.text && !x.bad && !x.busy))) {
-      const offline = !navigator.onLine || (store.get('hearOn', 'auto') === 'phone' && !p.yt && !p.images);
-      if (offline && p.images) { p.bad = true; p.status = '✗ Reading photos needs the internet. Connect, then add them again.'; renderPending(); continue; }
-      if (offline && p.yt) { p.bad = true; p.status = '✗ YouTube needs the internet. Connect, then add it again.'; renderPending(); continue; }
-      if (offline && !(await window.JundOffline?.ready())) { p.bad = true; p.status = '✗ No internet, and offline transcription is not downloaded yet (Settings → Offline transcription).'; renderPending(); continue; }
+      // no internet: nothing is lost — everything waits here and is heard by itself when the internet is back
+      if (!navigator.onLine) {
+        for (const x of pending.filter(x => x.media && !x.text && !x.bad && !x.busy)) x.status = window.ZadLang === 'ar' ? '⏳ ينتظر الإنترنت — سيُفرَّغ تلقائيًا' : '⏳ Waiting for the internet — it will be transcribed by itself';
+        renderPending(); break;
+      }
+      const offline = false;
       p.busy = true; window.JundRecs?.started(p);
       const st = s => { p.status = '⏳ ' + s; const li = $$('#pending li')[pending.indexOf(p)]; const el = li && $('.st', li); if (el) el.textContent = p.status; else renderPending(); };
       try {
-        const text = p.yt ? await hearYouTube(p, hearCtl.signal, st)
-          : offline ? await window.JundOffline.transcribe(p, hearCtl.signal, st)
-          : await hearFile(p, hearCtl.signal, st);
+        const text = p.yt ? await hearYouTube(p, hearCtl.signal, st) : await hearFile(p, hearCtl.signal, st);
         if (!text) { p.bad = true; p.status = '✗ No speech was heard in this file.'; }
         else {
           const AR = window.ZadLang === 'ar';
@@ -1724,12 +1724,58 @@ $('#script-close').onclick = () => { $('#script-box').hidden = true; };
 
 $('#yt').addEventListener('input', () => {
   clearTimeout($('#yt')._t);
-  $('#yt')._t = setTimeout(() => { if (/youtu\.?be/.test($('#yt').value) && !$('#yt-go').disabled) $('#yt-go').click(); }, 500);
+  $('#yt')._t = setTimeout(() => { if (/https?:\/\/\S+\.\S+/.test($('#yt').value) && !$('#yt-go').disabled) $('#yt-go').click(); }, 600);
 });
+/* any other link (Drive, Dropbox, OneDrive, a podcast page, an audio or video file, a web page, a Google Doc):
+   the server opens it, and the recording or the page's words come back to be made into notes like a file */
+const linkMsg = (code, site) => {
+  const A = window.ZadLang === 'ar';
+  return ({
+    blocked: A ? `${site} لا يسمح للتطبيقات بفتح مقاطعه. احفظ المقطع في جوالك (زر الحفظ أو التنزيل في ${site})، ثم أضفه هنا كملف.` : `${site} does not let apps open its videos. Save the video to your phone (the save or download button in ${site}), then add it here as a file.`,
+    private: A ? 'هذا الرابط خاص. اجعله «أي شخص لديه الرابط» ثم الصقه مرة أخرى، أو نزّل الملف وأضفه هنا.' : 'This link is private. Set it to “Anyone with the link”, then paste it again — or download the file and add it here.',
+    big: A ? 'الملف أكبر من ٢٠٠ ميغابايت. نزّله وأضفه هنا كملف، فيُقسَّم تلقائيًا.' : 'The file is over 200 MB. Download it and add it here as a file — it is split automatically.',
+    empty: A ? 'لم أجد في هذه الصفحة كلامًا أو تسجيلًا أصنع منه ملاحظات.' : 'I found no words or recording on this page to make notes from.',
+    notmedia: A ? 'هذا الرابط ليس تسجيلًا ولا صفحة أقرؤها. جرّب رابط الملف نفسه.' : 'This link is not a recording or a page I can read. Try the link to the file itself.',
+    badlink: A ? 'هذا الرابط غير صحيح. انسخه كاملًا مرة أخرى.' : 'That link does not look right. Copy the whole link again.',
+  })[code] || (A ? 'تعذّر فتح الرابط. تأكد أنه عام (يفتح دون تسجيل دخول) ثم حاول مرة أخرى.' : 'Could not open the link. Check that it is public (opens without signing in), then try again.');
+};
+async function fromLink(raw) {
+  const base = await getServer();
+  let res;
+  try { res = await fetch(base + '/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: raw }) }); }
+  catch { throw new Error(navigator.onLine === false ? 'No internet connection right now.' : 'Could not reach Mustatar’s server. Try again in a moment.'); }
+  const type = res.headers.get('x-link-type');
+  if (res.ok && type !== null) {
+    const name = decodeURIComponent(res.headers.get('x-link-name') || '') || 'Recording';
+    const blob = await res.blob();
+    return { file: new File([blob], name, { type: type || blob.type || '' }) };
+  }
+  const j = await res.json().catch(() => ({}));
+  if (res.ok && j.kind === 'youtube') return { yt: j.url };
+  if (res.ok && j.kind === 'text') {
+    const title = (j.title || new URL(raw).hostname).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80);
+    return { file: new File([(j.title ? '# ' + j.title + '\n\n' : '') + j.text], title + '.txt', { type: 'text/plain' }) };
+  }
+  throw new Error(linkMsg(j.kind === 'blocked' ? 'blocked' : j.code, j.site));
+}
 $('#yt-go').onclick = async () => {
   const err = $('#new-error'); err.hidden = true;
+  const all = $('#yt').value.match(/https?:\/\/[^\s<>"]+/gi) || [];
+  const others = all.filter(s => !/youtu\.?be/.test(s));
+  if (!all.length) { err.textContent = window.ZadLang === 'ar' ? 'الصق رابطًا أولًا.' : 'Paste a link first.'; err.hidden = false; return; }
+  if (others.length) {
+    $('#yt-go').disabled = true; $('#yt-go').textContent = window.ZadLang === 'ar' ? 'أفتح الرابط…' : 'Opening…';
+    try {
+      const files = [], yts = [];
+      for (const u of others.slice(0, 10)) { const r = await fromLink(u); if (r.file) files.push(r.file); if (r.yt) yts.push(r.yt); }
+      $('#yt').value = [...all.filter(s => /youtu\.?be/.test(s)), ...yts].join(' ');
+      if (files.length) await addFiles(files);
+      if (!$('#yt').value) return;
+    } catch (e) { err.textContent = e.message; err.hidden = false; return; }
+    finally { $('#yt-go').disabled = false; $('#yt-go').textContent = window.ZadLang === 'ar' ? 'أضف' : 'Add'; }
+  }
   const lines = $('#yt').value.split(/\s+/).filter(s => /youtu/.test(s));
-  if (!lines.length) { err.textContent = 'Paste a YouTube link first.'; err.hidden = false; return; }
+  if (!lines.length) return;
   $('#yt-go').disabled = true; $('#yt-go').textContent = 'Reading…';
   try {
     const items = await ytList(lines);
@@ -2277,6 +2323,8 @@ async function processQueue() {
   }
 }
 addEventListener('online', () => setTimeout(processQueue, 1500));
+// recordings and files that were waiting for the internet are heard as soon as it is back
+addEventListener('online', () => setTimeout(() => { if (pending.some(x => x.media && !x.text && !x.bad)) hearAll(); }, 1200));
 
 $('#make').onclick = async () => {
   const err = $('#new-error'); err.hidden = true;
@@ -3207,21 +3255,53 @@ applyFont();
 if (window.MustatarAndroid) {
   window.JundNativeShare = async (text, path, name) => {
     show('assistant'); window.JundAttach?.homeSetup();
+    let file = null;
     if (path && /^\/__mustatar_share\/[0-9a-f-]{36}$/.test(path)) {
       try {
         const response = await fetch(path, { cache: 'no-store' });
         if (!response.ok) throw new Error('Shared file is unavailable');
         const blob = await response.blob();
-        window.JundAttach?.addHome([new File([blob], name, { type: blob.type })]);
+        file = new File([blob], name, { type: blob.type });
       } catch { window.JundCal?.toast('Could not open the shared file. Please add it using +.'); }
       finally { window.MustatarAndroid.postMessage(JSON.stringify({ action: 'shareDone', path })); }
     }
-    if (text) {
-      const input = $('#as-text'); if (!input) return;
-      input.value = text; input.dispatchEvent(new Event('input'));
-    }
+    sharedChoice(text || '', file);
   };
   document.addEventListener('DOMContentLoaded', () => window.MustatarAndroid.postMessage(JSON.stringify({ action: 'ready' })), { once: true });
+}
+/* Something shared into Mustatar from another app (Samsung Voice Recorder's transcript or recording, Samsung Notes,
+   a screenshot of handwritten notes, a PDF…): ask once what to do with it, with the likely choice first. */
+function sharedChoice(text, file) {
+  const A = window.ZadLang === 'ar', L = (en, ar) => A ? ar : en;
+  const isImg = file && /^image\//.test(file.type), isMedia = file && window.JundMedia?.isMedia?.(file), long = text.trim().length > 160;
+  const toChat = () => { if (file) window.JundAttach?.addHome([file]); if (text) { const input = $('#as-text'); if (input) { input.value = text; input.dispatchEvent(new Event('input')); } } };
+  if (!file && !long) { toChat(); return; }
+  const opts = [];
+  if (isMedia || long || (file && !isImg)) opts.push(['notes', '📝', L('Make notes from it', 'اصنع منه ملاحظات'), isMedia ? L('Transcribe it, then write the notes and tasks', 'يُفرَّغ ثم تُكتب الملاحظات والمهام') : L('Write it up as clear notes with tasks', 'يُكتب ملاحظات واضحة مع المهام')]);
+  if (isImg || long) opts.push(['keep', '📌', L('Save to My notes', 'احفظه في ملاحظاتي'), isImg ? L('The photo, with the words in it read out', 'الصورة، مع قراءة الكلام الذي فيها') : L('As it is, to find later', 'كما هو، لتجده لاحقًا')]);
+  if (isImg) opts.push(['notes', '📖', L('Make study notes from it', 'اصنع منه ملاحظات دراسية'), L('For a page of a book, a board or handwriting', 'لصفحة كتاب أو سبورة أو خط يد')]);
+  opts.push(['chat', '💬', L('Ask Mustatar about it', 'اسأل مستطر عنه'), L('Keep it in this chat', 'يبقى في هذه المحادثة')]);
+  const d = document.createElement('dialog'); d.className = 'mx-dlg sh-choice'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<b class="mx-dlg-h">${L('What should Mustatar do with it?', 'ماذا يفعل مستطر به؟')}</b>
+    <p class="muted fine" dir="auto">${esc(file ? file.name : text.trim().slice(0, 90) + (text.length > 90 ? '…' : ''))}</p>
+    <div class="mx-group">${opts.map(([k, ic, a, b], i) => `<button type="button" class="mx-row" data-k="${k}" data-i="${i}"><span class="sh-ic">${ic}</span><span class="mx-t"><b>${a}</b><small>${b}</small></span></button>`).join('')}</div>`;
+  document.body.appendChild(d); d.showModal();
+  d.addEventListener('close', () => d.remove());
+  d.addEventListener('cancel', toChat, { once: true });
+  d.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.k; d.close();
+    if (k === 'chat') return toChat();
+    if (k === 'keep') {
+      window.JundCal?.toast(L('Saving to My notes…', 'يُحفظ في ملاحظاتي…'));
+      const n = await window.JundKeep?.capture({ text, files: file ? [file] : [] });
+      window.JundCal?.toast(L('✓ Saved in My notes', '✓ حُفظ في ملاحظاتي'));
+      if (n) { window.JundKeep.open(); setTimeout(() => window.JundKeep.edit(n.id), 400); }
+      return;
+    }
+    show('new');
+    if (file) await addFiles([file]);
+    else { const box = $('#paste-box'); if (box) box.open = true; const ta = $('#transcript'); ta.value = text; ta.dispatchEvent(new Event('input')); setTimeout(() => $('#make')?.click(), 300); }
+  });
 }
 async function receiveShared() {
   const u = new URL(location.href);
@@ -3246,13 +3326,16 @@ async function receiveShared() {
         files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('x-name') || 'file'), {type:r.headers.get('content-type') || ''}));
       }
       if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
-      show('assistant'); window.JundAttach.homeSetup(); window.JundAttach.addHome(files);
+      show('assistant'); window.JundAttach.homeSetup();
+      if (files.length === 1) { sharedChoice(text, files[0]); text = ''; } else window.JundAttach.addHome(files);
       for (const key of [...keys, ...(prefix ? [prefix + '-meta'] : ['shared-text','shared-title'])]) await c.delete(key);
     } catch { window.JundCal?.toast('Could not open the shared files. Please add them using +.'); }
   }
   if (text) {
     if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
-    show('assistant'); $('#as-text').value = text; $('#as-text').dispatchEvent(new Event('input')); $('#as-text').focus();
+    show('assistant');
+    if (text.trim().length > 160) sharedChoice(text, null);
+    else { $('#as-text').value = text; $('#as-text').dispatchEvent(new Event('input')); $('#as-text').focus(); }
   }
   const view = u.searchParams.get('view');
   if (view === 'calendar' || view === 'studio' || view === 'assistant') setTimeout(() => show(view), 0);

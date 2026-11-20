@@ -107,11 +107,11 @@ async def main():
         # the app offers the tasks it found in the note; accept them
         offered = False
         for _ in range(10):
-            offered = await page.evaluate("(()=>{const b=document.querySelector('#found-tasks:not([hidden]) #ft-add'); if(!b) return false; b.click(); return true})()")
+            offered = await page.evaluate("(()=>{const d=document.querySelector('#ft-sheet[open]'); if(!d) return false; if(d.querySelector('#ft-add').disabled === false) return 'pre-ticked'; d.querySelector('#ft-all').click(); d.querySelector('#ft-add').click(); return true})()")
             if offered:
                 break
             await page.wait_for_timeout(500)
-        check(offered, "the app offers the note's tasks for the calendar")
+        check(offered is True, f"the app asks which of the note's tasks to add (none ticked until chosen) ({offered})")
         await page.wait_for_timeout(600)
         await page.evaluate("document.querySelector('[data-nav=\"calendar\"]').click()")
         await page.wait_for_timeout(800)

@@ -170,6 +170,22 @@ async def browser_run(browser, s):
     check(len(names) == 3, f"the carousel saves 3 slides ({len(names)})")
     # video: write on it and save it as a video
     check(await load_media(page, s["video"], "video"), "a video opens, with the trim bar")
+    # the trimmer, like WhatsApp: drag the handles, frames in the strip, play the part with a moving line
+    await page.wait_for_timeout(1500)
+    box = await page.evaluate("(() => { const r = document.querySelector('#tr-strip').getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()")
+    async def drag(hid, frac):
+        c = await page.evaluate(f"(() => {{ const r = document.querySelector('#{hid}').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }})()")
+        await page.mouse.move(*c); await page.mouse.down(); await page.mouse.move(box[0] + box[2] * frac, c[1], steps=6); await page.mouse.up()
+    dur = await page.evaluate("Number(document.querySelector('#st-t1').max)")
+    await drag("tr-h1", 0.6); await drag("tr-h0", 0.25)
+    t0, t1 = await page.evaluate("[Number(document.querySelector('#st-t0').value), Number(document.querySelector('#st-t1').value)]")
+    check(abs(t0 - dur * 0.25) < dur * 0.06 and abs(t1 - dur * 0.6) < dur * 0.06, f"dragging the two handles chooses the part to keep ({t0:.1f}–{t1:.1f} of {dur:.1f} s)")
+    painted = await page.evaluate("(() => { const c = document.querySelector('#tr-thumbs'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 400) if (d[i] + d[i+1] + d[i+2] > 120) n++; return n; })()")
+    check(painted > 20, f"the strip shows frames from the video ({painted})")
+    await page.click("#st-play"); await page.wait_for_timeout(1200)
+    ph = await page.evaluate("[document.querySelector('#st-play').textContent, parseFloat(document.querySelector('#tr-head').style.left)]")
+    check(ph[0] == "❚❚" and 22 <= ph[1] <= 63, f"play shows the part, with the line moving along it ({ph})")
+    await page.click("#st-play")
     await write_text(page, "Reel text")
     async with page.expect_download(timeout=60000) as d:
         await page.click("#st-export")

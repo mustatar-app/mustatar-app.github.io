@@ -20,6 +20,9 @@ import java.util.Locale;
 
 public class ReminderReceiver extends BroadcastReceiver {
     private static final String CHANNEL = "mustatar-reminders";
+    // prayer times: a gentle vibration and no sound (Junaid: "vibrate gently, no sound")
+    private static final String PRAYER = "mustatar-prayer-v1";
+    private static final long[] GENTLE = {0, 90, 140, 90};
     private static final String ALARM = "sa.jund.notes.DELIVER_REMINDERS";
     private static final long GRACE = 3 * 60 * 60_000L;
 
@@ -58,7 +61,7 @@ public class ReminderReceiver extends BroadcastReceiver {
 
     @Override public void onReceive(Context context, Intent intent) {
         if (ALARM.equals(intent.getAction()) && intent.getBooleanExtra("test", false)) {
-            notify(context, "test", "Mustatar", "Test reminder · إشعار تجريبي");
+            notify(context, "test", "Mustatar", "Test reminder · إشعار تجريبي", "", "");
         } else check(context, ALARM.equals(intent.getAction()));
     }
 
@@ -94,7 +97,9 @@ public class ReminderReceiver extends BroadcastReceiver {
                 long previous = prefs.getLong(key, 0);
                 long due = nextDue(item, now - GRACE, previous);
                 if (deliver && due <= now) {
-                    notify(context, id, title, item.optString("body"));
+                    // a prayer time that came while the phone was off long ago is not worth a buzz
+                    if (!"prayer".equals(item.optString("kind")) || now - due < 20 * 60_000L)
+                        notify(context, id, title, item.optString("body"), item.optString("kind"), item.optString("view"));
                     prefs.edit().putLong(key, due).apply();
                     due = nextDue(item, now - GRACE, due);
                 }
@@ -143,17 +148,37 @@ public class ReminderReceiver extends BroadcastReceiver {
         return Long.MAX_VALUE;
     }
 
-    private static void notify(Context context, String tag, String title, String body) {
+    static void channels(Context context) {
+        if (Build.VERSION.SDK_INT < 26) return;
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Mustatar reminders", NotificationManager.IMPORTANCE_HIGH));
+        NotificationChannel p = new NotificationChannel(PRAYER, "Prayer times (gentle vibration)", NotificationManager.IMPORTANCE_DEFAULT);
+        p.setDescription("A soft vibration at each prayer time. No sound.");
+        p.setSound(null, null);
+        p.enableVibration(true);
+        p.setVibrationPattern(GENTLE);
+        manager.createNotificationChannel(p);
+    }
+
+    private static void notify(Context context, String tag, String title, String body, String kind, String view) {
         if (!notifications(context)) return;
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= 26)
-            manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Mustatar reminders", NotificationManager.IMPORTANCE_HIGH));
-        Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, CHANNEL) : new Notification.Builder(context);
+        boolean prayer = "prayer".equals(kind);
+        channels(context);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, prayer ? PRAYER : CHANNEL) : new Notification.Builder(context);
+        // tapping opens the right place: the calendar for reminders, Today for a brief or a prayer
+        String where = view != null && view.matches("[a-z]{3,20}") ? view : prayer || "brief".equals(kind) ? "assistant" : "calendar";
         Intent open = new Intent(context, MainActivity.class).setAction(Intent.ACTION_VIEW)
-            .setData(Uri.parse("https://mustatar.dawajund.workers.dev/?view=calendar"));
-        PendingIntent tap = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        builder.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(body).setAutoCancel(true).setContentIntent(tap);
-        if (Build.VERSION.SDK_INT < 26) builder.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
+            .setData(Uri.parse("https://mustatar.dawajund.workers.dev/?view=" + where));
+        PendingIntent tap = PendingIntent.getActivity(context, Math.abs(tag.hashCode() % 100000), open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        builder.setSmallIcon(R.drawable.ic_stat_mustatar).setContentTitle(title).setContentText(body).setAutoCancel(true).setContentIntent(tap)
+            .setStyle(new Notification.BigTextStyle().bigText(body));
+        builder.setColor(0xFF1A6FD8).setCategory(prayer ? Notification.CATEGORY_REMINDER : Notification.CATEGORY_EVENT);
+        if (prayer && Build.VERSION.SDK_INT >= 26) builder.setTimeoutAfter(30 * 60_000L);
+        if (Build.VERSION.SDK_INT < 26) {
+            if (prayer) builder.setPriority(Notification.PRIORITY_DEFAULT).setSound(null).setVibrate(GENTLE);
+            else builder.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
+        }
         try { manager.notify(tag, 0, builder.build()); } catch (SecurityException ignored) {}
     }
 }

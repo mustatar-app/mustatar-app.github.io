@@ -3,8 +3,9 @@
     <string name="app_name">Mustatar</string>
     <string name="asset_statements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\", \"delegate_permission/common.get_login_creds\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://mustatar.dawajund.workers.dev\"}}, {\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://mustatar-app.github.io\"}}]</string>
     <string name="share_target" translatable="false">{\"action\": \"https://mustatar.dawajund.workers.dev/share\", \"method\": \"POST\", \"enctype\": \"multipart/form-data\", \"params\": {\"title\": \"title\", \"text\": \"text\", \"files\": [{\"name\": \"file\", \"accept\": [\"text/plain\", \"application/pdf\", \"audio/*\", \"video/*\", \"image/*\"]}]}}</string>
-    <string name="widget_main_desc">Next prayer and your upcoming tasks</string>
+    <string name="widget_main_desc">Today: the next prayer and what comes next, in time order</string>
     <string name="widget_prayer_desc">Next prayer</string>
     <string name="widget_wisdom_desc">A short reminder that changes through the day: Quran, hadith and wise words</string>
+    <string name="widget_month_desc">This month at a glance, with your next items</string>
     <string name="widget_day_desc">Your whole day on one line: prayers and tasks</string>
 </resources>

@@ -23,7 +23,7 @@ jobs:
           for f in *.js server/*.js; do node --check "$f" || exit 1; done
           for f in *.json .well-known/*.json manifest.webmanifest; do python3 -m json.tool "$f" > /dev/null || { echo "Broken: $f"; exit 1; }; done
       - name: The free AI engine picks the right source and waits in line when all are full
-        run: node tests/engine_test.mjs
+        run: node tests/engine_test.mjs && node tests/link_test.mjs && node tests/merge_test.mjs
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Get the test browser
@@ -50,6 +50,9 @@ jobs:
           pip install -q python-docx
           python3 tests/proof_import_test.py http://localhost:8765/
           python3 tests/countdown_test.py http://localhost:8765/
+          python3 tests/brief_test.py http://localhost:8765/
+          python3 tests/link_app_test.py http://localhost:8765/
+          python3 tests/offline_wait_test.py http://localhost:8765/
           python3 tests/mp4fix_test.py http://localhost:8765/
           python3 tests/keep_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)

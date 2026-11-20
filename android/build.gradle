@@ -1,4 +1,8 @@
-plugins { id 'com.android.application' version '8.7.3' apply false }
+plugins {
+    id 'com.android.application' version '8.7.3' apply false
+    // Kotlin only for the fitness tracker (Health Connect's library speaks Kotlin)
+    id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
+}
 
 // Keep Android runtime dependencies separate from the existing APK signing configuration.
 project(':app') {
@@ -14,5 +18,9 @@ project(':app') {
         dependencies.add('implementation', 'androidx.credentials:credentials-play-services-auth:1.6.0-beta02')
         // "Continue with Google" inside the app (Android's own Google sign-in sheet)
         dependencies.add('implementation', 'com.google.android.libraries.identity.googleid:googleid:1.1.1')
+        // the fitness tracker: the phone's steps, sleep and workouts (Health Connect), read only, with permission
+        dependencies.add('implementation', 'androidx.health.connect:connect-client:1.1.0-alpha11')
+        dependencies.add('implementation', 'androidx.activity:activity:1.9.3')
+        dependencies.add('implementation', 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1')
     }
 }

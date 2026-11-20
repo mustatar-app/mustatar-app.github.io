@@ -634,7 +634,9 @@ function initSettings() {
         try { const j = await acctPost('/auth/google', { credential: res.credential }); await signedIn(j, j.created); }
         catch (e) { acctSay('✗ ' + e.message); }
       } }); }
-      google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: window.ZadLang === 'ar' ? 'ar' : 'en' });
+      // Google's button in the app's own dark style, as wide as the other buttons (Google allows up to 400 px)
+      const w = Math.round(Math.min(400, Math.max(240, (box.parentElement || box).getBoundingClientRect().width || 320)));
+      google.accounts.id.renderButton(box, { theme: 'filled_black', size: 'large', text: 'continue_with', shape: 'pill', width: w, logo_alignment: 'center', locale: window.ZadLang === 'ar' ? 'ar' : 'en' });
       box.hidden = false; ok = true;
     } catch {}
     return ok;

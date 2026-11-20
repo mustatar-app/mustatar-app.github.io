@@ -1878,3 +1878,17 @@ html[dir="rtl"] .kp-card .kp-t, html[dir="rtl"] .kp-card .kp-first { padding-lef
 .tt-now { position: absolute; left: -2px; right: 0; border-top: 2px solid var(--danger, #dc2626); z-index: 2; }
 .tt-now::before { content: ''; position: absolute; left: -3px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger, #dc2626); }
 .ev-nodate { align-self: end; padding-bottom: 10px; }
+/* opening screen: one column of buttons, all the same width, height, shape and dark colour (Google's included) */
+.op-btns { width: 100%; max-width: 400px; align-self: center; }
+.op-google { min-height: 44px; }
+.op-google > div, .op-google iframe { margin: 0 auto !important; }
+.op-google .g-native, .op-pk { min-height: 44px; border-radius: 99px; background: #131314; color: #e3e3e3; border: 1px solid #8e918f; font-weight: 500; font-size: .95rem; }
+.op-google .g-native:hover, .op-pk:hover { background: #1f1f22; }
+:root:not([data-theme="dark"]) .wl .op-google .g-native, :root:not([data-theme="dark"]) .wl .op-pk { background: #131314; color: #e3e3e3; }
+/* the name and why it was chosen */
+.op-name { margin-top: 18px; padding: 14px 16px; border-inline-start: 3px solid color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 4px 14px 14px 4px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+[dir="rtl"] .op-name { border-radius: 14px 4px 4px 14px; }
+.op-verse { font-family: "Amiri Quran", "Amiri", "Scheherazade New", "Noto Naskh Arabic", serif; font-size: 1.45rem; line-height: 1.8; margin: 0 0 4px !important; text-align: start; }
+.op-verse small { font-family: inherit; font-size: .8rem; color: var(--ink-2); margin-inline-start: 6px; }
+.op-why { font-size: .9rem !important; line-height: 1.65 !important; color: var(--ink-2); margin: 0 !important; }
+.op-why b { color: var(--ink); font-weight: 600; } .op-why i { color: var(--ink); font-style: normal; }

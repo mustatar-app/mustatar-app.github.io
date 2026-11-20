@@ -1809,3 +1809,5 @@ html[dir="rtl"] .kp-card .kp-t, html[dir="rtl"] .kp-card .kp-first { padding-lef
 .fx-sheet { border: 0; border-radius: 20px; padding: 16px; width: min(440px, 94vw); background: var(--surface); color: var(--ink); }
 .fx-sheet::backdrop { background: rgba(0, 0, 0, .45); }
 .fx-sh-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; } .fx-h { margin-top: 12px; font-weight: 500; }
+.sh-choice .mx-row { align-items: center; gap: 12px; }
+.sh-ic { font-size: 1.3rem; width: 30px; text-align: center; flex: none; }

@@ -35,7 +35,10 @@ public class MainActivity extends Activity {
     private static final String ORIGIN = "https://mustatar.dawajund.workers.dev";
     private static final String OLD_ORIGIN = "https://mustatar-app.github.io";
     private static final String SHARE_PATH = "/__mustatar_share/";
-    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4, CALENDAR = 5, HEALTH = 6;
+    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4, CALENDAR = 5, HEALTH = 6, FOLDER = 7;
+    private static final String FILE_PATH = "/__mustatar_file/";
+    // files from a folder the person chose (their recordings, their screenshots), handed to the page one by one
+    private final java.util.Map<String, String[]> served = new java.util.concurrent.ConcurrentHashMap<>();
     // a request waiting for the person's answer (calendar or health permission)
     private String waitingJob; private androidx.webkit.JavaScriptReplyProxy waitingReply;
     private WebView web;
@@ -260,6 +263,48 @@ public class MainActivity extends Activity {
                                 }));
                                 return;
                             }
+                            // a folder on the phone the person chooses once (Samsung Voice Recorder's recordings, screenshots…)
+                            case "folderPick": {
+                                waitingJob = command.optString("job"); waitingReply = reply;
+                                Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                                String start = command.optString("start");
+                                if (!start.isEmpty()) pick.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,
+                                    android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + start));
+                                try { startActivityForResult(pick, FOLDER); }
+                                catch (ActivityNotFoundException e) { waitingJob = null; answer(reply, command.optString("job"), new JSONObject().put("ok", false)); }
+                                return;
+                            }
+                            case "folderList": {
+                                String job = command.optString("job"), tree = command.optString("uri"); long since = command.optLong("since");
+                                new Thread(() -> {
+                                    JSONObject out = new JSONObject();
+                                    try {
+                                        Uri t = Uri.parse(tree);
+                                        Uri kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(t, android.provider.DocumentsContract.getTreeDocumentId(t));
+                                        org.json.JSONArray list = new org.json.JSONArray();
+                                        try (Cursor c = getContentResolver().query(kids, new String[]{"document_id", "_display_name", "mime_type", "last_modified", "_size"}, null, null, null)) {
+                                            while (c != null && c.moveToNext()) {
+                                                String mime = c.getString(2);
+                                                if (mime == null || android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) continue;
+                                                long mod = c.getLong(3);
+                                                if (mod <= since) continue;
+                                                list.put(new JSONObject().put("doc", c.getString(0)).put("name", c.getString(1)).put("mime", mime).put("modified", mod).put("size", c.getLong(4)));
+                                            }
+                                        }
+                                        out.put("ok", true).put("files", list);
+                                    } catch (Exception e) { try { out.put("ok", false).put("error", String.valueOf(e)); } catch (Exception ignored) {} }
+                                    answer(reply, job, out);
+                                }).start();
+                                return;
+                            }
+                            case "folderFile": {
+                                Uri t = Uri.parse(command.optString("uri"));
+                                Uri doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(t, command.optString("doc"));
+                                String token = UUID.randomUUID().toString();
+                                served.put(token, new String[]{doc.toString(), command.optString("mime", "application/octet-stream")});
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("path", FILE_PATH + token));
+                                return;
+                            }
                             case "print":
                                 getSystemService(PrintManager.class).print("Mustatar",
                                     web.createPrintDocumentAdapter("Mustatar"), null);
@@ -447,6 +492,16 @@ public class MainActivity extends Activity {
     }
 
     private WebResourceResponse sharedResponse(Uri url) {
+        String p = url.getPath();
+        if (p != null && p.startsWith(FILE_PATH) && local(url)) {
+            String[] f = served.remove(p.substring(FILE_PATH.length()));
+            if (f == null) return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.emptyMap(), null);
+            try {
+                java.io.InputStream input = getContentResolver().openInputStream(Uri.parse(f[0]));
+                if (input != null) return new WebResourceResponse(f[1], null, 200, "OK", Collections.singletonMap("Cache-Control", "no-store"), input);
+            } catch (Exception ignored) {}
+            return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.emptyMap(), null);
+        }
         SharedFile file = shared;
         if (file == null || !local(url) || !(SHARE_PATH + file.token).equals(url.getPath())) return null;
         try {
@@ -513,6 +568,19 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int code, int result, Intent data) {
         super.onActivityResult(code, result, data);
         if (code == FileOut.CREATE) files.placed(result, data);
+        if (code == FOLDER && waitingJob != null) {
+            String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;
+            waitingJob = null; waitingReply = null;
+            try {
+                Uri tree = result == RESULT_OK && data != null ? data.getData() : null;
+                if (tree == null) { answer(reply, job, new JSONObject().put("ok", false)); }
+                else {
+                    getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    String id = android.provider.DocumentsContract.getTreeDocumentId(tree);
+                    answer(reply, job, new JSONObject().put("ok", true).put("uri", tree.toString()).put("name", id.substring(id.indexOf(':') + 1)));
+                }
+            } catch (Exception e) { try { answer(reply, job, new JSONObject().put("ok", false).put("error", String.valueOf(e))); } catch (Exception ignored) {} }
+        }
         if (code == HEALTH && waitingJob != null) {
             String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;
             waitingJob = null; waitingReply = null;

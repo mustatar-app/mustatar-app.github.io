@@ -539,6 +539,31 @@ async function shrink(file, max = 1600, q = 0.82) {
   }
   throw new Error(t('This photo is too big.', 'هذه الصورة كبيرة جدًا.'));
 }
+/* something from the phone straight into My notes: shared text, photos or screenshots of handwritten notes
+   (the words in the photos are read and put under them) */
+async function capture({ text = '', files = [], title = '', grab = true } = {}) {
+  await load();
+  const n = { id: newId(), title: title || '', text: String(text || '').trim(), items: null, color: '', pinned: false, labels: [], images: [], from: t('Shared from your phone', 'من جوالك') };
+  const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|gif)$/i.test(f.name)).slice(0, 12);
+  const blobs = [];
+  for (const f of imgs) {
+    try {
+      const { data, w, h } = await shrink(f);
+      const id = 'P' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      await DB.putImg({ id, data, w, h, note: n.id, updated: Date.now() }); imgCache.set(id, data); J.cloud.keepImg?.(id);
+      n.images.push({ id, w, h }); blobs.push(f);
+    } catch {}
+  }
+  await save(n);
+  if (grab && blobs.length && window.JundAttach?.readScanBatch) {
+    try {
+      const out = await window.JundAttach.readScanBatch(blobs.map((blob, i) => ({ page: i + 1, blob })), new AbortController().signal);
+      const words = (out || []).map(x => String(x?.text || '').trim()).filter(Boolean).join('\n\n');
+      if (words) { n.text = (n.text ? n.text + '\n\n' : '') + words; if (!n.title) n.title = words.split('\n')[0].replace(/^#+\s*/, '').slice(0, 60); await save(n); }
+    } catch {}
+  }
+  return n;
+}
 async function addPhotos(files) {
   if (!cur) return;
   const imgs = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|gif)$/i.test(f.name));
@@ -859,5 +884,5 @@ window.addEventListener('mustatar-screen', () => selBar());
 
 mount();
 load().then(() => paint());
-window.JundKeep = { load, all: async () => (await load()).slice(), raw: async id => { await load(); return id ? notes.find(x => x.id === id) || null : notes.slice(); }, fromCloud, imgFromCloud, img: id => DB.img(id), allImg: () => DB.allImg(), putImg: x => DB.putImg(x), shareLink, save, remove, addMany, edit, newNote, search, plain, back, open: () => { J.show('library'); setSeg('keep'); }, setSeg, aiSheet };
+window.JundKeep = { capture, load, all: async () => (await load()).slice(), raw: async id => { await load(); return id ? notes.find(x => x.id === id) || null : notes.slice(); }, fromCloud, imgFromCloud, img: id => DB.img(id), allImg: () => DB.allImg(), putImg: x => DB.putImg(x), shareLink, save, remove, addMany, edit, newNote, search, plain, back, open: () => { J.show('library'); setSeg('keep'); }, setSeg, aiSheet };
 })();

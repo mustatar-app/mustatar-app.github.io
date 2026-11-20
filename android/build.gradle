@@ -19,7 +19,7 @@ project(':app') {
         // "Continue with Google" inside the app (Android's own Google sign-in sheet)
         dependencies.add('implementation', 'com.google.android.libraries.identity.googleid:googleid:1.1.1')
         // the fitness tracker: the phone's steps, sleep and workouts (Health Connect), read only, with permission
-        dependencies.add('implementation', 'androidx.health.connect:connect-client:1.1.0')
+        dependencies.add('implementation', 'androidx.health.connect:connect-client:1.1.0-alpha11')
         dependencies.add('implementation', 'androidx.activity:activity:1.9.3')
         dependencies.add('implementation', 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1')
     }

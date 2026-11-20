@@ -3253,21 +3253,53 @@ applyFont();
 if (window.MustatarAndroid) {
   window.JundNativeShare = async (text, path, name) => {
     show('assistant'); window.JundAttach?.homeSetup();
+    let file = null;
     if (path && /^\/__mustatar_share\/[0-9a-f-]{36}$/.test(path)) {
       try {
         const response = await fetch(path, { cache: 'no-store' });
         if (!response.ok) throw new Error('Shared file is unavailable');
         const blob = await response.blob();
-        window.JundAttach?.addHome([new File([blob], name, { type: blob.type })]);
+        file = new File([blob], name, { type: blob.type });
       } catch { window.JundCal?.toast('Could not open the shared file. Please add it using +.'); }
       finally { window.MustatarAndroid.postMessage(JSON.stringify({ action: 'shareDone', path })); }
     }
-    if (text) {
-      const input = $('#as-text'); if (!input) return;
-      input.value = text; input.dispatchEvent(new Event('input'));
-    }
+    sharedChoice(text || '', file);
   };
   document.addEventListener('DOMContentLoaded', () => window.MustatarAndroid.postMessage(JSON.stringify({ action: 'ready' })), { once: true });
+}
+/* Something shared into Mustatar from another app (Samsung Voice Recorder's transcript or recording, Samsung Notes,
+   a screenshot of handwritten notes, a PDF…): ask once what to do with it, with the likely choice first. */
+function sharedChoice(text, file) {
+  const A = window.ZadLang === 'ar', L = (en, ar) => A ? ar : en;
+  const isImg = file && /^image\//.test(file.type), isMedia = file && window.JundMedia?.isMedia?.(file), long = text.trim().length > 160;
+  const toChat = () => { if (file) window.JundAttach?.addHome([file]); if (text) { const input = $('#as-text'); if (input) { input.value = text; input.dispatchEvent(new Event('input')); } } };
+  if (!file && !long) { toChat(); return; }
+  const opts = [];
+  if (isMedia || long || (file && !isImg)) opts.push(['notes', '📝', L('Make notes from it', 'اصنع منه ملاحظات'), isMedia ? L('Transcribe it, then write the notes and tasks', 'يُفرَّغ ثم تُكتب الملاحظات والمهام') : L('Write it up as clear notes with tasks', 'يُكتب ملاحظات واضحة مع المهام')]);
+  if (isImg || long) opts.push(['keep', '📌', L('Save to My notes', 'احفظه في ملاحظاتي'), isImg ? L('The photo, with the words in it read out', 'الصورة، مع قراءة الكلام الذي فيها') : L('As it is, to find later', 'كما هو، لتجده لاحقًا')]);
+  if (isImg) opts.push(['notes', '📖', L('Make study notes from it', 'اصنع منه ملاحظات دراسية'), L('For a page of a book, a board or handwriting', 'لصفحة كتاب أو سبورة أو خط يد')]);
+  opts.push(['chat', '💬', L('Ask Mustatar about it', 'اسأل مستطر عنه'), L('Keep it in this chat', 'يبقى في هذه المحادثة')]);
+  const d = document.createElement('dialog'); d.className = 'mx-dlg sh-choice'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<b class="mx-dlg-h">${L('What should Mustatar do with it?', 'ماذا يفعل مستطر به؟')}</b>
+    <p class="muted fine" dir="auto">${esc(file ? file.name : text.trim().slice(0, 90) + (text.length > 90 ? '…' : ''))}</p>
+    <div class="mx-group">${opts.map(([k, ic, a, b], i) => `<button type="button" class="mx-row" data-k="${k}" data-i="${i}"><span class="sh-ic">${ic}</span><span class="mx-t"><b>${a}</b><small>${b}</small></span></button>`).join('')}</div>`;
+  document.body.appendChild(d); d.showModal();
+  d.addEventListener('close', () => d.remove());
+  d.addEventListener('cancel', toChat, { once: true });
+  d.querySelectorAll('[data-k]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.k; d.close();
+    if (k === 'chat') return toChat();
+    if (k === 'keep') {
+      window.JundCal?.toast(L('Saving to My notes…', 'يُحفظ في ملاحظاتي…'));
+      const n = await window.JundKeep?.capture({ text, files: file ? [file] : [] });
+      window.JundCal?.toast(L('✓ Saved in My notes', '✓ حُفظ في ملاحظاتي'));
+      if (n) { window.JundKeep.open(); setTimeout(() => window.JundKeep.edit(n.id), 400); }
+      return;
+    }
+    show('new');
+    if (file) await addFiles([file]);
+    else { const box = $('#paste-box'); if (box) box.open = true; const ta = $('#transcript'); ta.value = text; ta.dispatchEvent(new Event('input')); setTimeout(() => $('#make')?.click(), 300); }
+  });
 }
 async function receiveShared() {
   const u = new URL(location.href);
@@ -3292,13 +3324,16 @@ async function receiveShared() {
         files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('x-name') || 'file'), {type:r.headers.get('content-type') || ''}));
       }
       if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
-      show('assistant'); window.JundAttach.homeSetup(); window.JundAttach.addHome(files);
+      show('assistant'); window.JundAttach.homeSetup();
+      if (files.length === 1) { sharedChoice(text, files[0]); text = ''; } else window.JundAttach.addHome(files);
       for (const key of [...keys, ...(prefix ? [prefix + '-meta'] : ['shared-text','shared-title'])]) await c.delete(key);
     } catch { window.JundCal?.toast('Could not open the shared files. Please add them using +.'); }
   }
   if (text) {
     if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
-    show('assistant'); $('#as-text').value = text; $('#as-text').dispatchEvent(new Event('input')); $('#as-text').focus();
+    show('assistant');
+    if (text.trim().length > 160) sharedChoice(text, null);
+    else { $('#as-text').value = text; $('#as-text').dispatchEvent(new Event('input')); $('#as-text').focus(); }
   }
   const view = u.searchParams.get('view');
   if (view === 'calendar' || view === 'studio' || view === 'assistant') setTimeout(() => show(view), 0);

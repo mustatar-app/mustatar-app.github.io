@@ -256,6 +256,69 @@ function paintFitCard() {
   const off = $('#ph-fit-off'); if (off) off.onclick = () => { store.set('fitness', { on: false }); paintFitCard(); paintFitHome(); };
 }
 
+/* ---------- 5. folders on the phone: new recordings → notes, new screenshots → My notes ---------- */
+const FOLDERS = {
+  rec: { start: 'Recordings/Voice Recorder', ic: '🎙', en: ['Recordings', 'new recording', 'new recordings', 'Make notes'], ar: ['التسجيلات', 'تسجيل جديد', 'تسجيلات جديدة', 'اصنع ملاحظات'], want: /^(audio|video)\// },
+  shots: { start: 'DCIM/Screenshots', ic: '🖼', en: ['Screenshots', 'new screenshot', 'new screenshots', 'Save to My notes'], ar: ['لقطات الشاشة', 'لقطة جديدة', 'لقطات جديدة', 'احفظها في ملاحظاتي'], want: /^image\// },
+};
+const folders = () => store.get('phoneFolders', {});
+const waiting = {};   // new files found in each folder, not yet handled
+async function folderPick(k) {
+  const r = await ask({ action: 'folderPick', start: FOLDERS[k].start }, 300000);
+  if (!r.ok) return;
+  const f = folders(); f[k] = { uri: r.uri, name: r.name, since: Date.now() - 2 * 864e5 }; store.set('phoneFolders', f);
+  paintFolders(); await folderScan(true);
+}
+async function folderScan(force) {
+  const f = folders();
+  for (const k of Object.keys(FOLDERS)) {
+    if (!f[k]?.uri) continue;
+    const r = await ask({ action: 'folderList', uri: f[k].uri, since: f[k].since || 0 }, 20000);
+    if (!r.ok) continue;
+    waiting[k] = (r.files || []).filter(x => FOLDERS[k].want.test(x.mime || '')).sort((a, b) => a.modified - b.modified).slice(-20);
+  }
+  paintFolderCards(); void force;
+}
+async function folderTake(k) {
+  const f = folders(), list = waiting[k] || []; if (!list.length) return;
+  const files = [];
+  for (const x of list) {
+    const r = await ask({ action: 'folderFile', uri: f[k].uri, doc: x.doc, mime: x.mime }, 20000);
+    if (!r.ok) continue;
+    try { const b = await (await fetch(r.path, { cache: 'no-store' })).blob(); files.push(new File([b], x.name, { type: x.mime || b.type })); } catch {}
+  }
+  f[k].since = Math.max(...list.map(x => x.modified)); store.set('phoneFolders', f); waiting[k] = []; paintFolderCards();
+  if (!files.length) return;
+  if (k === 'rec') { J.show('new'); await window.JN.addFiles(files); }
+  else {
+    window.JundCal?.toast(t('Saving to My notes and reading the words…', 'تُحفظ في ملاحظاتي وتُقرأ كلماتها…'));
+    for (const file of files) await window.JundKeep?.capture({ files: [file] });
+    window.JundCal?.toast(t(`✓ ${files.length} saved in My notes`, `✓ حُفظت ${files.length} في ملاحظاتي`));
+  }
+}
+function paintFolderCards() {
+  const home = $('#screen-assistant'); if (!home) return;
+  for (const k of Object.keys(FOLDERS)) {
+    const n = (waiting[k] || []).length, F = FOLDERS[k], w = AR() ? F.ar : F.en;
+    let card = $('#hm-fold-' + k);
+    if (!n) { card?.remove(); continue; }
+    if (!card) { card = document.createElement('div'); card.id = 'hm-fold-' + k; card.className = 'hm-sec'; ($('#hm-fit') || $('#hm-habits-wrap') || $('#hm-tiles'))?.before(card); }
+    card.innerHTML = `<div class="fx-ask fold-ask"><span class="fx-ic">${F.ic}</span><span>${n} ${n === 1 ? w[1] : w[2]}</span><button type="button" class="primary small" data-go>${w[3]}</button><button type="button" class="icon-btn small" data-no aria-label="${t('Not now', 'ليس الآن')}">✕</button></div>`;
+    card.querySelector('[data-go]').onclick = () => folderTake(k);
+    card.querySelector('[data-no]').onclick = () => { const f = folders(); f[k].since = Math.max(...(waiting[k] || []).map(x => x.modified), f[k].since || 0); store.set('phoneFolders', f); waiting[k] = []; card.remove(); };
+  }
+}
+function paintFolders() {
+  const box = $('#ph-fold'); if (!box) return;
+  const f = folders();
+  box.innerHTML = `<p class="muted fine">${t('Choose a folder once. When something new appears there, Mustatar offers to make notes from it — no uploading one by one. On Samsung, recordings are in Recordings → Voice Recorder.', 'اختر المجلد مرة واحدة. وعندما يظهر فيه شيء جديد يعرض مستطر صنع ملاحظات منه — دون رفع كل ملف وحده. في سامسونج التسجيلات في Recordings ← Voice Recorder.')}</p>
+    ${Object.entries(FOLDERS).map(([k, F]) => `<div class="ph-row"><span class="fx-ic">${F.ic}</span><span class="ph-t"><b>${AR() ? F.ar[0] : F.en[0]}</b><small dir="ltr">${esc(f[k]?.name || t('not chosen', 'لم يُختر'))}</small></span>
+      <button type="button" class="ghost small" data-pick="${k}">${f[k] ? t('Change', 'غيّر') : t('Choose folder', 'اختر المجلد')}</button>${f[k] ? `<button type="button" class="link" data-off="${k}">${t('Stop', 'أوقف')}</button>` : ''}</div>`).join('')}
+    <p class="muted fine">${t('Samsung’s own transcript: in Voice Recorder, open the recording → Transcript → Share → Mustatar.', 'تفريغ سامسونج نفسه: في المسجّل افتح التسجيل ← النص ← مشاركة ← مستطر.')}</p>`;
+  box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => folderPick(b.dataset.pick));
+  box.querySelectorAll('[data-off]').forEach(b => b.onclick = () => { const f2 = folders(); delete f2[b.dataset.off]; store.set('phoneFolders', f2); waiting[b.dataset.off] = []; paintFolders(); paintFolderCards(); });
+}
+
 /* ---------- the Settings card (Android app only) ---------- */
 function settingsCard() {
   if (!APP() || $('#ph-card')) return;
@@ -264,10 +327,11 @@ function settingsCard() {
   c.innerHTML = `<div class="card-h">${t('This phone', 'هذا الجوال')}</div>
     <label class="check"><input type="checkbox" id="ph-vibe"${store.get('prayerVibrate', true) ? ' checked' : ''}> ${t('At prayer times: a gentle vibration, no sound', 'عند أوقات الصلاة: اهتزاز خفيف، بلا صوت')}</label>
     <div class="ph-sec"><div class="card-h small">${t('Your phone’s calendars', 'تقاويم جوالك')}</div><div id="ph-cal"></div></div>
-    <div class="ph-sec"><div class="card-h small">${t('Fitness: steps and sleep', 'اللياقة: الخطوات والنوم')}</div><div id="ph-fit"></div></div>`;
+    <div class="ph-sec"><div class="card-h small">${t('Fitness: steps and sleep', 'اللياقة: الخطوات والنوم')}</div><div id="ph-fit"></div></div>
+    <div class="ph-sec"><div class="card-h small">${t('Recordings and screenshots on this phone', 'التسجيلات ولقطات الشاشة في هذا الجوال')}</div><div id="ph-fold"></div></div>`;
   anchor.before(c);
   $('#ph-vibe').onchange = e => { store.set('prayerVibrate', e.target.checked); window.JundCal?.pushSync?.(); };
-  paintCalCard(); paintFitCard();
+  paintCalCard(); paintFitCard(); paintFolders();
 }
 
 /* ---------- when things run ---------- */
@@ -276,12 +340,13 @@ async function tick(force) {
   try { await pushWidgets(force); } catch {}
   calRefresh(force);
   if (fit().on && !document.hidden) { await fitRead(false); paintFitHome(); }
+  if (!document.hidden && Object.keys(folders()).length) folderScan();
 }
 if (window.MustatarAndroid) {
   setTimeout(() => { settingsCard(); paintFitHome(); tick(true); }, 2500);
   setInterval(() => { if (!document.hidden) tick(false); }, 60e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(false); paintFitHome(); } });
-  window.addEventListener('mustatar-screen', () => { settingsCard(); paintFitHome(); });
+  window.addEventListener('mustatar-screen', () => { settingsCard(); paintFitHome(); paintFolderCards(); });
 }
-window.JundPhone = { prayerAlarms, pushWidgets, widgetData, calRefresh, fitRead, paintFitHome, previewWidgets: () => N()?.ask?.({ action: 'widgetPreview' }, 30000) };
+window.JundPhone = { folderScan, folderTake, prayerAlarms, pushWidgets, widgetData, calRefresh, fitRead, paintFitHome, previewWidgets: () => N()?.ask?.({ action: 'widgetPreview' }, 30000) };
 })();

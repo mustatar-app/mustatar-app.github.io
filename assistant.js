@@ -334,7 +334,14 @@ async function context(q) {
   const myNotes = mine.map(n => `### ${n.title || 'Note'}\n${n.text.slice(0, 1500)}`).join('\n\n');
   const subs = (J.me().use === 'work' ? [] : (window.SUBJECTS || [])).map(s => `${s.name}${s.book ? ' (' + s.book + ')' : ''}${s.place ? ' — ' + s.place : ''}`).join('; ');
   const pt = window.JundFeatures?.timesFor(t);
-  return `${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\n${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
+  // questions about himself (habits, progress, strengths, what he is missing) get his habit record and the coach's last study
+  let self = '';
+  if (window.JundHabits && /habit|routine|progress|streak|swot|gap|weak|strength|missing|improve|advice|suggest|coach|discipline|productiv|عاد|روتين|تقدم|تقدّم|ضعف|قوة|قوّة|ينقص|نصيح|اقترح|مدرب|مدرّب|انضباط|فجوة|تحليل/i.test(String(q))) {
+    try { self = (await window.JundHabits.profileText()).slice(0, 3500); } catch {}
+    const c = store.get('coach', null); if (c?.summary) self += `\nCOACH'S LAST STUDY (${new Date(c.at).toISOString().slice(0, 10)}): ${c.summary} Weaknesses: ${(c.swot?.weaknesses || []).join('; ')}. Next: ${(c.next || []).join('; ')}`;
+    self = `\nHIS RECORD (habits, tasks, notes) — use it to give honest, specific advice; the full SWOT and gap study is in the Habit tracker → Your coach:\n${self}\n`;
+  }
+  return `${self}${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\n${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
 Week starts on ${DAYS[Number(store.get('weekStart', 0))]}.
 
 CALENDAR (past 2 weeks to next 2 months, plus weekly items):

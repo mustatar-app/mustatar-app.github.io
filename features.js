@@ -164,6 +164,7 @@ function streak(h) {
 }
 function renderHabits() {
   const box = $('#hm-habits'); if (!box) return;
+  if (window.JundHabits) { window.JundHabits.paintToday(box); return; }
   const list = habits();
   // Today stays quiet: your habits show only if you have some; the box for a new habit and the ideas only while adding one
   const wrap = $('#hm-habits-wrap'); if (wrap) wrap.hidden = !list.length && !document.body.classList.contains('habit-adding');
@@ -383,8 +384,8 @@ $('#focus-close').onclick = () => { $('#focus-dialog').close(); clearInterval(fo
 setInterval(() => { const r = store.get('focusRun'); if (r && Date.now() >= r.end) finishFocus(true); }, 15000);
 
 /* ---------- start ---------- */
-function addHabit() { document.body.classList.add('habit-adding'); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
-window.JundFeatures = { addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
+function addHabit() { if (window.JundHabits) { window.JundHabits.open(); setTimeout(() => document.getElementById('hb-add')?.click(), 120); return; } document.body.classList.add('habit-adding'); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
+window.JundFeatures = { renderHabits, addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
 // prayer place setting
 function placeSetting() {
   const sel = $('#prayer-place'); if (!sel) return;

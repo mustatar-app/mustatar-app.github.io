@@ -364,7 +364,7 @@ function renderPaletteSettings() {
 }
 
 /* ---------- navigation ---------- */
-const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me'];
+const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me', 'habits'];
 /* the phone's back button (and the browser's): goes back through the screens like other apps; tabs go back to Today;
    an open sheet or window closes first; on Today, a second press leaves the app */
 const TABS = ['assistant', 'library', 'calendar', 'me'];
@@ -400,7 +400,7 @@ window.JundBack = () => { const prev = backStack.pop() || 'assistant'; fromBack 
 function show(name) {
   remember(name); screenNow = name;
   for (const s of SCREENS) { const el = $('#screen-' + s); if (el) el.hidden = s !== name; }
-  const tab = name === 'result' || name === 'new' ? 'library' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
+  const tab = name === 'result' || name === 'new' ? 'library' : name === 'habits' ? 'calendar' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
   document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;
   noteUse(name);
   window.dispatchEvent(new Event('mustatar-screen'));

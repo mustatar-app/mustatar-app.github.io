@@ -1722,3 +1722,19 @@ html[dir="rtl"] .kp-card .kp-t, html[dir="rtl"] .kp-card .kp-first { padding-lef
 .brief-card ul { margin: 0; padding-inline-start: 18px; font-size: .9rem; line-height: 1.55; }
 .bf-task { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; padding: 3px 0; } .bf-task input { margin-top: 3px; accent-color: var(--accent); }
 .bf-late { color: #dc2626; } .bf-none { font-size: .84rem; margin: 8px 0 0; }
+/* the video trimmer (WhatsApp / Instagram style) */
+.tr-wrap { display: flex; align-items: center; gap: 10px; }
+.tr-play { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: .95rem; cursor: pointer; }
+.tr-strip { position: relative; flex: 1; height: 48px; border-radius: 8px; overflow: visible; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+#tr-thumbs { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 8px; display: block; background: #222; }
+.tr-dim { position: absolute; top: 0; bottom: 0; background: rgba(0, 0, 0, .58); pointer-events: none; }
+#tr-dl { left: 0; border-radius: 8px 0 0 8px; } #tr-dr { right: 0; border-radius: 0 8px 8px 0; }
+.tr-win { position: absolute; top: -3px; bottom: -3px; border: 3px solid #fbbf24; border-left-width: 14px; border-right-width: 14px; border-radius: 7px; box-sizing: border-box; pointer-events: none; min-width: 30px; }
+.tr-h { position: absolute; top: -3px; bottom: -3px; width: 30px; pointer-events: auto; touch-action: none; cursor: ew-resize; display: flex; align-items: center; justify-content: center; }
+.tr-h::after { content: ''; width: 3px; height: 16px; border-radius: 2px; background: #78350f; }
+#tr-h0 { left: -22px; } #tr-h1 { right: -22px; }
+.tr-h.on::after, .tr-h:focus-visible::after { background: #fff; }
+.tr-head { position: absolute; top: -6px; bottom: -6px; width: 3px; margin-left: -1.5px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.45); pointer-events: none; }
+.tr-times { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; color: var(--ink-2); margin: 6px 0 2px 50px; font-variant-numeric: tabular-nums; }
+.tr-times span { color: var(--ink); font-weight: 600; }
+.sx .tr-times { color: rgba(255, 255, 255, .62); } .sx .tr-times span { color: #fff; }

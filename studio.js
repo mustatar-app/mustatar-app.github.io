@@ -122,10 +122,20 @@ function build() {
         <button type="button" class="sx-r" id="st-more">${ic(IC.more)}<small>${L('More', 'المزيد')}</small></button>
       </div>
     </div>
+    <!-- the video trimmer, like WhatsApp and Instagram: frames in a strip, drag the two handles to keep a part,
+         tap the strip to jump, play to watch the part with a line moving along it -->
     <div id="st-trim" class="sx-trim" hidden>
-      <div class="st-trim-row"><span>${L('Start', 'البداية')}</span><input type="range" id="st-t0" min="0" step="0.1"><b id="st-t0v"></b></div>
-      <div class="st-trim-row"><span>${L('End', 'النهاية')}</span><input type="range" id="st-t1" min="0" step="0.1"><b id="st-t1v"></b></div>
-      <div class="row-gap"><button type="button" class="ghost small" id="st-play">▶ ${L('Play the part', 'شغّل الجزء')}</button><span class="muted" id="st-len"></span></div>
+      <div class="tr-wrap" dir="ltr">
+        <button type="button" class="tr-play" id="st-play" aria-label="${L('Play the part', 'شغّل الجزء')}">▶</button>
+        <div class="tr-strip" id="tr-strip" aria-label="${L('Video timeline: drag the handles to choose the part to keep', 'شريط الفيديو: اسحب الطرفين لاختيار الجزء الذي تبقيه')}">
+          <canvas id="tr-thumbs"></canvas>
+          <div class="tr-dim" id="tr-dl"></div><div class="tr-dim" id="tr-dr"></div>
+          <div class="tr-win" id="tr-win"><span class="tr-h" id="tr-h0" role="slider" tabindex="0" aria-label="${L('Start', 'البداية')}"></span><span class="tr-h" id="tr-h1" role="slider" tabindex="0" aria-label="${L('End', 'النهاية')}"></span></div>
+          <div class="tr-head" id="tr-head"></div>
+        </div>
+      </div>
+      <div class="tr-times" dir="ltr"><b id="st-t0v"></b><span id="st-len"></span><b id="st-t1v"></b></div>
+      <input type="range" id="st-t0" min="0" step="0.1" hidden><input type="range" id="st-t1" min="0" step="0.1" hidden>
     </div>
     <div class="sx-bottom">
       <button type="button" class="ghost small" id="st-draft">${L('Save draft', 'حفظ مسودة')}</button>
@@ -229,9 +239,11 @@ function build() {
   });
   $('#st-play').onclick = () => {
     const v = bg.video; if (!v) return;
-    if (!v.paused) { v.pause(); return; }
-    v.currentTime = trim.start; v.muted = false; v.play(); loop();
+    if (!v.paused) { v.pause(); playIcon(); return; }
+    if (v.currentTime < trim.start || v.currentTime >= trim.end - 0.05) v.currentTime = trim.start;
+    v.muted = false; v.play().then(playIcon, playIcon); loop();
   };
+  trimmer();
   window.addEventListener('resize', () => { if (!screen.hidden) { fit(); placeSel(); } });
   sync(); renderSaved(); draw();
 }
@@ -393,8 +405,10 @@ function loadMedia(f) {
       // pick the canvas shape from the video
       const r = v.videoWidth / v.videoHeight; size = r < 0.7 ? 'story' : r < 0.9 ? 'post' : 'square';
       bg = { kind: 'video', video: v }; sync(); showTrim(); v.currentTime = 0.05;
+      requestAnimationFrame(() => thumbs(v));
     };
-    v.onseeked = () => draw();
+    v.onseeked = () => { draw(); head(); };
+    v.onpause = v.onplay = playIcon;
     v.onerror = () => status('✗ This video cannot be opened here. Try an MP4 file.');
   } else {
     // photos from phone cameras can be very big: make a copy of at most 2400 px, so every phone can draw it
@@ -442,12 +456,74 @@ const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2,
 function showTrim() {
   $('#st-t0').value = trim.start; $('#st-t1').value = trim.end;
   $('#st-t0v').textContent = fmt(trim.start); $('#st-t1v').textContent = fmt(trim.end);
-  $('#st-len').textContent = `${fmt(trim.end - trim.start)} long${trim.end - trim.start > 90 ? ' · Reels are best under 90 seconds' : ''}`;
+  const len = trim.end - trim.start;
+  $('#st-len').textContent = len > 90 ? L(`${fmt(len)} · Reels are best under 90 s`, `${fmt(len)} · الريلز أفضل تحت ٩٠ ث`) : fmt(len);
+  const d = bg.video?.duration || 0; if (!d) return;
+  const a = trim.start / d * 100, b = trim.end / d * 100;
+  $('#tr-win').style.left = a + '%'; $('#tr-win').style.width = (b - a) + '%';
+  $('#tr-dl').style.width = a + '%'; $('#tr-dr').style.left = b + '%';
+  $('#tr-h0').setAttribute('aria-valuetext', fmt(trim.start)); $('#tr-h1').setAttribute('aria-valuetext', fmt(trim.end));
+  head();
+}
+const playIcon = () => { const v = bg.video; $('#st-play').textContent = v && !v.paused ? '❚❚' : '▶'; };
+function head() {
+  const v = bg.video, d = v?.duration || 0; if (!d) return;
+  $('#tr-head').style.left = Math.min(100, v.currentTime / d * 100) + '%';
 }
 function loop() {
-  const v = bg.video; if (!v || v.paused) return;
-  if (v.currentTime >= trim.end) { v.pause(); return; }
-  draw(); requestAnimationFrame(loop);
+  const v = bg.video; if (!v || v.paused) { playIcon(); return; }
+  if (v.currentTime >= trim.end) { v.currentTime = trim.start; }   // the part plays round, like WhatsApp's trimmer
+  draw(); head(); requestAnimationFrame(loop);
+}
+// the frames in the strip, taken from a second copy of the video (so the one on screen is not disturbed)
+async function thumbs(v) {
+  const c = $('#tr-thumbs'), box = $('#tr-strip').getBoundingClientRect();
+  const W = Math.max(200, Math.round(box.width || 300)), H = Math.max(36, Math.round(box.height || 48)), dpr = Math.min(2, devicePixelRatio || 1);
+  c.width = W * dpr; c.height = H * dpr;
+  const x = c.getContext('2d'); x.fillStyle = '#222'; x.fillRect(0, 0, c.width, c.height);
+  const n = Math.max(6, Math.min(14, Math.round(W / (H * 0.62)))), w = c.width / n;
+  const t = document.createElement('video'); t.muted = true; t.playsInline = true; t.preload = 'auto'; t.src = v.src;
+  try {
+    await new Promise((ok, no) => { t.onloadeddata = ok; t.onerror = no; setTimeout(ok, 6000); });
+    for (let i = 0; i < n; i++) {
+      if (bg.video !== v) return;   // another video was chosen
+      t.currentTime = Math.min(v.duration - 0.05, (i + 0.5) * v.duration / n);
+      await new Promise(ok => { t.onseeked = ok; setTimeout(ok, 1500); });
+      const r = t.videoWidth / t.videoHeight || 1, sw = Math.min(t.videoWidth, t.videoHeight * (w / c.height)), sh = sw / (w / c.height);
+      try { x.drawImage(t, (t.videoWidth - sw) / 2, (t.videoHeight - Math.min(sh, t.videoHeight)) / 2, sw, Math.min(sh, t.videoHeight), i * w, 0, w + 1, c.height); } catch {}
+      void r;
+    }
+  } catch {} finally { t.removeAttribute('src'); t.load(); }
+}
+// dragging the handles, and tapping the strip to jump
+function trimmer() {
+  const strip = $('#tr-strip');
+  const at = e => { const b = strip.getBoundingClientRect(), d = bg.video?.duration || 0; return Math.max(0, Math.min(d, (e.clientX - b.left) / b.width * d)); };
+  const MIN = 0.5;
+  const set = (which, t) => {
+    const d = bg.video?.duration || 0; if (!d) return;
+    if (which === 0) trim.start = Math.max(0, Math.min(t, trim.end - MIN));
+    else trim.end = Math.min(d, Math.max(t, trim.start + MIN));
+    const v = bg.video; if (!v.paused) v.pause();
+    v.currentTime = which === 0 ? trim.start : trim.end; showTrim();
+  };
+  for (const [id, which] of [['tr-h0', 0], ['tr-h1', 1]]) {
+    const h = $('#' + id);
+    h.onpointerdown = e => {
+      e.preventDefault(); e.stopPropagation(); h.setPointerCapture(e.pointerId); h.classList.add('on');
+      h.onpointermove = m => set(which, at(m));
+      h.onpointerup = h.onpointercancel = () => { h.onpointermove = null; h.classList.remove('on'); };
+    };
+    h.onkeydown = e => { const k = { ArrowLeft: -0.5, ArrowRight: 0.5, ArrowDown: -0.5, ArrowUp: 0.5 }[e.key]; if (k) { e.preventDefault(); set(which, (which ? trim.end : trim.start) + k); } };
+  }
+  strip.onpointerdown = e => {
+    if (e.target.classList.contains('tr-h') || !bg.video) return;
+    const v = bg.video, t = at(e);
+    v.currentTime = Math.max(trim.start, Math.min(trim.end - 0.05, t)); head();
+    strip.onpointermove = m => { v.currentTime = Math.max(trim.start, Math.min(trim.end - 0.05, at(m))); head(); };
+    strip.setPointerCapture(e.pointerId);
+    strip.onpointerup = strip.onpointercancel = () => { strip.onpointermove = null; };
+  };
 }
 
 /* ---------- drawing ---------- */

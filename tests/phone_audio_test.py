@@ -31,7 +31,12 @@ def main():
     wait(page, "document.readyState === 'complete' && !!window.JN", 30)
     page.js("localStorage.setItem('jn_welcomed','true'); localStorage.setItem('jn_opened','true'); localStorage.setItem('jn_consentOk','true'); localStorage.setItem('jn_autoMake','false'); true")
     page.js("location.reload(); true"); time.sleep(6)
-    page = Page(); wait(page, "document.readyState === 'complete' && !!window.JN", 30)
+    for attempt in range(3):   # after the reload the page may take a moment (or the app needs starting again)
+        try: page = Page(); break
+        except Exception as e:
+            print("     (no page after reload:", type(e).__name__, "- starting the app again)", flush=True)
+            adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765"); time.sleep(10)
+    wait(page, "document.readyState === 'complete' && !!window.JN", 30)
 
     # 1. the microphone itself (the same way the app opens it)
     adb("logcat", "-c")

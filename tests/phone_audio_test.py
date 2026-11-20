@@ -22,7 +22,12 @@ def main():
     adb("shell", "am", "force-stop", PKG)
     adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765")
     time.sleep(8)
-    page = Page()
+    page = None
+    for attempt in range(3):   # the app may still be starting (or another app is in front): try again
+        try: page = Page(); break
+        except Exception as e:
+            print("     (no page yet:", type(e).__name__, "- starting the app again)", flush=True)
+            adb("shell", "am", "start", "-n", f"{PKG}/sa.jund.notes.MainActivity", "--es", "testHome", "http://localhost:8765"); time.sleep(10)
     wait(page, "document.readyState === 'complete' && !!window.JN", 30)
     page.js("localStorage.setItem('jn_welcomed','true'); localStorage.setItem('jn_opened','true'); localStorage.setItem('jn_consentOk','true'); localStorage.setItem('jn_autoMake','false'); true")
     page.js("location.reload(); true"); time.sleep(6)

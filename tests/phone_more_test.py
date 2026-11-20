@@ -36,10 +36,11 @@ def main():
     page.js("localStorage.setItem('jn_welcomed','true'); localStorage.setItem('jn_opened','true'); true")
 
     # 1. a reminder rings with the app closed (swiped away / killed in the background)
-    page.js("""(() => { const at = Date.now() + 35000;
-      MustatarAndroid.postMessage(JSON.stringify({ action: 'sync', items: [
-        { id: 'closed-test', at, title: 'Closed-app reminder', body: 'It came with Mustatar closed' },
-        { id: 'pray-test', kind: 'prayer', at: at + 2000, title: 'It is time for Asr', body: 'gentle, no sound' } ] })); return true; })()""")
+    # the test items go in through the app's own list (the app re-sends its whole list when it is opened or hidden)
+    page.js("""(() => { const at = Date.now() + 40000;
+      const brief = window.JundBrief.alarms; window.JundBrief.alarms = () => [...brief(), { id: 'closed-test', at, title: 'Closed-app reminder', body: 'It came with Mustatar closed' }];
+      window.JundPhone.prayerAlarms = () => [{ id: 'pray-test', kind: 'prayer', at: at + 2000, title: 'It is time for Asr', body: 'gentle, no sound' }];
+      JundCal.pushSync(true); return true; })()""")
     time.sleep(2)
     adb("shell", "input", "keyevent", "KEYCODE_HOME"); time.sleep(1)
     adb("shell", "am", "kill", PKG)   # what Android does to an app in the background (alarms stay)
@@ -99,10 +100,11 @@ def main():
         if data[:4] == b"\x89PNG": show_png(name + "-ar-white", data)
 
     # 3. the phone's calendars: a calendar on the phone (made here, as an account would), both ways
-    adb("shell", "content", "insert", "--uri", "content://com.android.calendar/calendars?caller_is_syncadapter=true&account_name=test@example.com&account_type=LOCAL",
-        "--bind", "account_name:s:test@example.com", "--bind", "account_type:s:LOCAL", "--bind", "name:s:Work", "--bind", "calendar_displayName:s:Work",
-        "--bind", "calendar_access_level:i:700", "--bind", "ownerAccount:s:test@example.com", "--bind", "visible:i:1", "--bind", "sync_events:i:1",
-        "--bind", "calendar_color:i:-14575885", "--bind", "isPrimary:i:1")
+    made = adb("shell", "content insert --uri 'content://com.android.calendar/calendars?caller_is_syncadapter=true&account_name=test@example.com&account_type=LOCAL'"
+        " --bind account_name:s:test@example.com --bind account_type:s:LOCAL --bind name:s:Work --bind calendar_displayName:s:Work"
+        " --bind calendar_access_level:i:700 --bind ownerAccount:s:test@example.com --bind visible:i:1 --bind sync_events:i:1"
+        " --bind calendar_color:i:-14575885 --bind isPrimary:i:1")
+    print("     made a test calendar:", made.strip() or "ok", flush=True)
     cals = page.js("JundNative.ask({ action: 'calendarList' }, 20000)", timeout=30)
     print("     calendars:", json.dumps(cals)[:400], flush=True)
     work = next((c for c in (cals or {}).get("calendars", []) if c.get("name") == "Work"), None)

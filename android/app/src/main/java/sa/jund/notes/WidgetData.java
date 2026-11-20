@@ -348,12 +348,14 @@ public final class WidgetData {
         Calendar head = Calendar.getInstance(); head.set(Calendar.DAY_OF_WEEK, weekStart);
         SimpleDateFormat dow = new SimpleDateFormat("EEEEE", loc(d));
         tp.setTextSize(26); tp.setColor(k.faint);
-        for (int i = 0; i < 7; i++) { c.drawText(dow.format(head.getTime()), cw * i + cw / 2, 30, tp); head.add(Calendar.DAY_OF_MONTH, 1); }
+        boolean rtl = ar(d);   // Arabic: the week runs from right to left
+        for (int i = 0; i < 7; i++) { float hx = rtl ? W - (cw * i + cw / 2) : cw * i + cw / 2; c.drawText(dow.format(head.getTime()), hx, 30, tp); head.add(Calendar.DAY_OF_MONTH, 1); }
         Calendar first = Calendar.getInstance(); first.set(Calendar.DAY_OF_MONTH, 1);
         int offset = (first.get(Calendar.DAY_OF_WEEK) - weekStart + 7) % 7, daysIn = first.getActualMaximum(Calendar.DAY_OF_MONTH);
         int rowsN = (offset + daysIn + 6) / 7; float rh = (H - top) / (float) rowsN;
         for (int n = 1; n <= daysIn; n++) {
             int cell = offset + n - 1; float cx = cw * (cell % 7) + cw / 2, cy = top + rh * (cell / 7) + rh / 2;
+            if (rtl) cx = W - cx;
             Calendar day = (Calendar) first.clone(); day.set(Calendar.DAY_OF_MONTH, n);
             boolean isToday = n == today.get(Calendar.DAY_OF_MONTH), past = n < today.get(Calendar.DAY_OF_MONTH);
             if (isToday) { dot.setColor(k.accent); c.drawCircle(cx, cy - 4, Math.min(cw, rh) * 0.36f, dot); }

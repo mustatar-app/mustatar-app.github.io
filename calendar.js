@@ -320,6 +320,7 @@ function reminderList() {
   const run = store.get('focusRun');
   if (run && run.end > Date.now()) out.push({ at: run.end, title: 'Focus time done', body: `${run.min} min of ${run.subject}. Take a short break.`, tag: 'focus-' + run.start });
   for (const x of window.JundCount?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
+  for (const x of window.JundBrief?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // briefs before lessons and meetings
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });
@@ -335,6 +336,7 @@ function nativeReminders() {
   const run = store.get('focusRun');
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
   items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
+  items.push(...(window.JundBrief?.alarms?.() || []));   // a short brief before lessons and meetings
   return items;
 }
 function nativeMessage(action, details = {}) { android.postMessage(JSON.stringify({ action, ...details })); }
@@ -426,33 +428,62 @@ $('#notif-test').onclick = async () => {
 notifStatus();
 
 /* ---------- tasks found in a lesson ---------- */
+// tasks and dates found in a lesson or meeting: the person chooses which go to the calendar (none are added by themselves)
 function onLesson(l) {
   const box = $('#found-tasks');
   const list = (l?.notes?.tasks || []).filter(t => t && t.title);
   if (!store.get('findTasks', true) || !list.length || l.tasksHandled) { box.hidden = true; return; }
-  const def = addDays(l.date.slice(0, 10), 1);
+  const AR = window.ZadLang === 'ar', L = (en, ar) => AR ? ar : en;
+  // a small line on the result: the choice can always be opened again
   box.hidden = false;
-  box.innerHTML = `<b>Found ${list.length} ${list.length === 1 ? 'item' : 'items'} for your calendar</b>
-    ${list.map((t, i) => `<label><input type="checkbox" data-i="${i}" checked>
-      <span style="flex:1;min-width:0"><span dir="auto">${esc(t.title)}</span><br>
-      <span class="row-gap" style="margin:4px 0 0"><input type="date" data-date="${i}" value="${/^\d{4}-\d\d-\d\d$/.test(t.date || '') ? t.date : def}" style="width:auto;min-height:36px;padding:5px 8px">
-      <span class="type-pill" style="background:color-mix(in srgb, ${colorOf(t.type)} 22%, transparent);color:${colorOf(t.type)}">${TYPES[t.type] || 'Task'}</span>${t.date ? '' : '<small class="muted">no day was said — check it</small>'}</span></span></label>`).join('')}
-    <div class="row-gap" style="margin-top:8px"><button type="button" class="primary small" id="ft-add">Add to calendar</button><button type="button" class="ghost small" id="ft-skip">Not now</button></div>`;
-  const done = async () => { l.tasksHandled = true; box.hidden = true; await J.saveLesson(l); };
-  $('#ft-add').onclick = async () => {
+  box.innerHTML = `<button type="button" class="ft-chip" id="ft-open">📅 ${L(`${list.length} ${list.length === 1 ? 'task or date' : 'tasks and dates'} found — choose what to add`, `وُجدت ${list.length} ${list.length === 1 ? 'مهمة أو موعد' : 'مهام ومواعيد'} — اختر ما تضيفه`)}</button>`;
+  $('#ft-open').onclick = () => chooseTasks(l, list);
+  if (!l.tasksAsked) { l.tasksAsked = true; J.saveLesson(l); setTimeout(() => { if (!$('#screen-result')?.hidden) chooseTasks(l, list); }, 700); }
+}
+function chooseTasks(l, list) {
+  const AR = window.ZadLang === 'ar', L = (en, ar) => AR ? ar : en;
+  const t0 = today(), base = (l.date || '').slice(0, 10) || t0;
+  const fallback = addDays(base, 1) < t0 ? addDays(t0, 1) : addDays(base, 1);
+  const nice = d => new Date(d + 'T12:00').toLocaleDateString(AR ? 'ar-SA-u-ca-gregory' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  let d = $('#ft-sheet');
+  if (!d) { d = document.createElement('dialog'); d.id = 'ft-sheet'; d.className = 'ft-sheet'; document.body.appendChild(d); d.addEventListener('click', e => { if (e.target === d) d.close(); }); }
+  d.dir = AR ? 'rtl' : 'ltr';
+  const rows = list.map((t, i) => {
+    const said = /^\d{4}-\d\d-\d\d$/.test(t.date || '') ? t.date : '';
+    const past = said && said < t0;
+    return `<div class="ft-row${past ? ' past' : ''}" data-i="${i}">
+      <label class="ft-pick"><input type="checkbox" data-i="${i}"><span><b dir="auto">${esc(t.title)}</b>
+        <small><span class="type-pill" style="background:color-mix(in srgb, ${colorOf(t.type)} 22%, transparent);color:${colorOf(t.type)}">${TYPES[t.type] || 'Task'}</span>
+        ${t.who ? ' · ' + esc(t.who) : ''}${t.time ? ' · ' + esc(t.time) : ''}</small></span></label>
+      <div class="ft-when">${past ? `<span class="ft-past">⚠ ${L(`This was for ${nice(said)}, which has passed. Add it anyway on a new day?`, `كان هذا ليوم ${nice(said)} وقد مضى. أتضيفه في يوم جديد؟`)}</span>` : !said ? `<span class="ft-nodate">${L('No day was said — pick one', 'لم يُذكر يوم — اختر يومًا')}</span>` : ''}
+        <input type="date" data-date="${i}" value="${past ? addDays(t0, 1) : said || fallback}" min="${t0}"></div>
+    </div>`;
+  }).join('');
+  d.innerHTML = `<div class="ft-h"><b>${L('Add to your calendar?', 'أتضيفها إلى تقويمك؟')}</b><button type="button" class="icon-btn" id="ft-x" aria-label="${L('Close', 'إغلاق')}">✕</button></div>
+    <p class="muted ft-sub">${L(`From “${esc(l.unit || l.notes?.title || '')}”. Tick the ones you want; nothing is added unless you choose it.`, `من «${esc(l.unit || l.notes?.title || '')}». اختر ما تريد؛ لا يُضاف شيء إلا ما تختاره.`)}</p>
+    <div class="ft-list">${rows}</div>
+    <div class="ft-act"><button type="button" class="link" id="ft-all">${L('Tick all', 'اختر الكل')}</button><span class="ft-sp"></span>
+      <button type="button" class="ghost small" id="ft-none">${L('None of these', 'لا شيء منها')}</button><button type="button" class="primary small" id="ft-add" disabled>${L('Add', 'أضف')}</button></div>`;
+  const count = () => { const n = $$('input[data-i]:checked', d).length; const b = $('#ft-add', d); b.disabled = !n; b.textContent = n ? L(`Add ${n}`, `أضف ${n}`) : L('Add', 'أضف'); };
+  $$('input[data-i]', d).forEach(c => c.onchange = count);
+  $('#ft-all', d).onclick = () => { $$('input[data-i]', d).forEach(c => c.checked = true); count(); };
+  $('#ft-x', d).onclick = () => d.close();
+  const done = async () => { l.tasksHandled = true; $('#found-tasks').hidden = true; await J.saveLesson(l); d.close(); };
+  $('#ft-none', d).onclick = done;
+  $('#ft-add', d).onclick = async () => {
     let n = 0;
-    $$('input[data-i]', box).forEach(c => {
+    $$('input[data-i]', d).forEach(c => {
       if (!c.checked) return;
-      const t = list[+c.dataset.i], date = $(`input[data-date="${c.dataset.i}"]`, box).value || def;
+      const t = list[+c.dataset.i], date = $(`input[data-date="${c.dataset.i}"]`, d).value || fallback;
       events.push({ id: newId(), created: Date.now(), updated: Date.now(), title: t.title, date, time: /^\d\d:\d\d$/.test(t.time || '') ? t.time : '',
         type: TYPES[t.type] ? t.type : 'task', repeat: 'none', remind: Number(store.get('remindDefault', 30)),
         notes: [t.note, `From: ${l.subject?.name || ''} — ${l.unit || ''}`].filter(Boolean).join('\n'), src: l.id,
         who: t.who || '', project: J.me().use === 'work' ? (l.subject?.name || '') : '' });
       n++;
     });
-    save(); await done(); toast(`✓ Added ${n} to your calendar`);
+    save(); await done(); toast(L(`✓ Added ${n} to your calendar`, `✓ أُضيفت ${n} إلى تقويمك`));
   };
-  $('#ft-skip').onclick = done;
+  if (!d.open) d.showModal();
 }
 
 /* ---------- start ---------- */
@@ -467,7 +498,7 @@ function upcoming(days = 7, max = 8) {
   for (let i = 0; i <= days; i++) { const d = addDays(today(), i); for (const e of on(d)) if (!isDone(e, d)) out.push({ e, d }); }
   return out.slice(0, max).map(x => ({ ...x, when: x.late ? 'Overdue' : when(x.d), time: hm(x.e.time), type: TYPES[x.e.type] || 'Task', color: colorOf(x.e.type) }));
 }
-window.JundCal = { pushSync, widgetSync, widgetId, render, onLesson, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+window.JundCal = { pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();

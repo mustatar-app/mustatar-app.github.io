@@ -123,6 +123,7 @@ function me() {
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}
       ${row('count', L('Countdowns and timers', 'العدّ التنازلي والمؤقتات'), '', (window.JundCount?.timers?.().length || '') || '')}
+      ${row('brief', L('Brief before lessons and meetings', 'موجز قبل الدروس والاجتماعات'), (m => m ? (m >= 60 ? L(`${m / 60} h before`, `قبل ${m / 60} س`) : L(`${m} min before`, `قبل ${m} د`)) : L('Off', 'متوقف'))(Number(store.get('briefLead', 60))))}
       ${tools.study ? row('study', L('Study tools', 'أدوات المذاكرة'), L('Flashcards, quizzes, exam plan', 'بطاقات واختبارات وخطة امتحان')) : ''}
     </div>
     <div class="mx-h">${L('Workspace', 'مساحة العمل')}</div>
@@ -153,6 +154,7 @@ function me() {
   on('review', () => { J.show('calendar'); setTimeout(() => $('#week-review')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80); });
   on('focus', () => window.JundFeatures?.openFocus());
   on('count', () => window.JundCount?.open(window.JundCount.timers().length ? 'timer' : 'list'));
+  on('brief', () => pickBrief());
   on('study', () => window.JundStudy?.planner?.());
   on('chat', () => window.JundDrawer?.open());
   on('mic', () => J.show('recordings'));
@@ -208,6 +210,17 @@ function dlg(id, html) {
   d.dir = AR ? 'rtl' : 'ltr'; d.innerHTML = html; d.showModal();
   d.addEventListener('click', e => { if (e.target === d) d.close(); });
   return d;
+}
+// the short brief before lessons and meetings: when it comes
+function pickBrief() {
+  const now = Number(store.get('briefLead', 60));
+  const opts = [[0, L('Off', 'متوقف'), ''], [30, L('30 minutes before', 'قبل ٣٠ دقيقة'), ''], [60, L('1 hour before', 'قبل ساعة'), L('Recommended', 'مقترح')], [120, L('2 hours before', 'قبل ساعتين'), '']];
+  const d = dlg('brief-dlg', `<b class="mx-dlg-h">${L('Brief before lessons and meetings', 'موجز قبل الدروس والاجتماعات')}</b>
+    <p class="muted fine">${L('Before each class, meeting or exam in your calendar: a quick review of the last lesson, or what was decided and what is still left from the last meeting. It rings even with the app closed.', 'قبل كل درس أو اجتماع أو اختبار في تقويمك: مراجعة سريعة للدرس السابق، أو ما قُرّر وما بقي من الاجتماع السابق. يصلك حتى والتطبيق مغلق.')}</p>
+    <div class="mx-group">${opts.map(([m, a, b]) => `<button type="button" class="mx-row" data-m="${m}"><span class="mx-t"><b>${a}</b>${b ? `<small>${b}</small>` : ''}</span><span class="mx-x">${m === now ? '✓' : ''}</span></button>`).join('')}</div>
+    <div class="row-gap" style="justify-content:flex-end;margin-top:12px"><button type="button" class="ghost" data-x>${L('Close', 'إغلاق')}</button></div>`);
+  d.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { store.set('briefLead', Number(b.dataset.m)); d.close(); me(); window.JundBrief?.prepare(); window.JundCal?.pushSync?.(); });
+  d.querySelector('[data-x]').onclick = () => d.close();
 }
 function pickField() {
   const now = store.get('field', 'general');

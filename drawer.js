@@ -41,6 +41,7 @@ function build() {
         <button type="button" class="dr-item" data-go="keep"><span class="dr-ic">${svg(IC.keep)}</span><span class="dr-t">${L('My notes', 'ملاحظاتي')}</span></button>
         <button type="button" class="dr-item" data-nav-to="recordings"><span class="dr-ic">${svg(IC.rec)}</span><span class="dr-t">${L('Recordings & meetings', 'التسجيلات والاجتماعات')}</span><small id="dr-recs"></small></button>
         <button type="button" class="dr-item" data-nav-to="pending"><span class="dr-ic">${svg(IC.left)}</span><span class="dr-t">${L('Left to do', 'ما تبقّى')}</span><small id="dr-left"></small></button>
+        <button type="button" class="dr-item" data-nav-to="habits"><span class="dr-ic">${svg(IC.habit)}</span><span class="dr-t">${L('Habit tracker & coach', 'العادات والمدرّب')}</span><small id="dr-hab"></small></button>
         <button type="button" class="dr-item" data-nav-to="inbox"><span class="dr-ic">${svg(IC.bell)}</span><span class="dr-t">${L('Reminders', 'التذكيرات')}</span></button>
         <button type="button" class="dr-item" data-nav-to="studio"><span class="dr-ic dr-ic-studio">${svg(IC.studio)}</span><span class="dr-t">${L('Studio', 'الاستوديو')}</span><small class="dr-hint">${L('posts & stories', 'منشورات وستوري')}</small></button>
       </nav>
@@ -74,6 +75,7 @@ function build() {
 }
 
 async function fill() {
+  { const hs = window.JundHabits?.all() || [], d = new Date(), t = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`, e = $('#dr-hab', el); if (e) e.textContent = hs.length ? `${hs.filter(h => h.days?.[t]).length}/${hs.length}` : ''; }
   window.JundPending?.count().then(n => { const e = $('#dr-left', el); if (e) e.textContent = n || ''; }).catch(() => {});
   window.JundRecs?.summary().then(s => { const e = $('#dr-recs', el); if (e) e.textContent = s.left.length ? s.left.length + ' left' : ''; }).catch(() => {});
   // projects: one per subject, with how many notes it has

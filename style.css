@@ -1811,3 +1811,4 @@ html[dir="rtl"] .kp-card .kp-t, html[dir="rtl"] .kp-card .kp-first { padding-lef
 .fx-sh-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; } .fx-h { margin-top: 12px; font-weight: 500; }
 .sh-choice .mx-row { align-items: center; gap: 12px; }
 .sh-ic { font-size: 1.3rem; width: 30px; text-align: center; flex: none; }
+.up-card { border-style: solid; border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }

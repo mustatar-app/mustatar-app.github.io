@@ -363,6 +363,7 @@ async function context(q) {
   return `${self}${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\n${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
 Week starts on ${DAYS[Number(store.get('weekStart', 0))]}.
 
+DAYS OFF (weekly lessons hidden on these days): ${(window.JundCal?.daysOff?.() || []).map(o => `${o.from} to ${o.to}${o.label ? ' ' + o.label : ''}`).join('; ') || 'none'}
 CALENDAR (past 2 weeks to next 2 months, plus weekly items):
 ${soon || '(empty)'}
 
@@ -382,6 +383,8 @@ You can act on his calendar and habit tracker. Reply with JSON only, in this sha
    {"do": "undone", "id": "calendar id"},
    {"do": "move", "id": "calendar id", "date": "YYYY-MM-DD", "time": "HH:MM or empty"},
    {"do": "delete", "id": "calendar id"},
+   {"do": "off", "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "title": "holiday name"},
+   {"do": "skip", "id": "weekly lesson id", "date": "YYYY-MM-DD"},
    {"do": "youtube", "url": "a YouTube video or playlist link he gave, to transcribe and make notes from"},
    {"do": "habit", "title": "a daily habit the user explicitly asked to track", "time": "HH:MM if a daily reminder was requested, or empty"},
    {"do": "timer", "minutes": number, "label": "short name or empty"},
@@ -404,7 +407,9 @@ Rules:
 - "Set a timer for 10 minutes" / "مؤقت ربع ساعة" → a "timer" action. "Count down to my trip on 5 March" / "عدّ تنازلي لـ…" → a "countdown" action (yearly for birthdays and anniversaries). For "how many days until Ramadan/Eid/…" answer from COUNTDOWNS.
 - PLANS OVER DAYS: when he asks to split work over days ("split it into a 7-day plan", "how much should I memorise each day", "قسّمها على أسبوع"), DO THE ARITHMETIC yourself and add ONE dated "task" per day (starting today unless he says otherwise), each title with the exact amount for that day — e.g. "Memorise Quran: pages 3 (p. 41–43) + Surah Yusuf verses 1–16". Use real sizes you know (Surah Yusuf has 111 verses, about 13.5 pages; a juz is about 20 pages; a page is about 15 lines); for a book or course, divide the pages/lessons he gave evenly and put the remainder on the last days. Show the day-by-day table in the reply too. Add a "habit" only if he asks to track a repeated practice, never instead of the daily tasks.
 - END OF DAY: if he says what he did today ("I finished X, I missed Y because…"), mark the matching calendar items with "done" actions and keep his reason in your reply; for a full evening review by voice, tell him to say "check in" (or "راجع يومي") or tap “How did today go?” on Today.
-- Delete only when he clearly asks. If something is unclear (for example no day was given), ask one short question instead of guessing, with actions empty.
+- HOLIDAYS / NO LESSONS FOR A WHILE: "I have a holiday until Sunday", "no lessons this week", "إجازة", "لا أريد دروسًا هذا الأسبوع" → ONE action {"do":"off","from":"YYYY-MM-DD","to":"YYYY-MM-DD","title":"إجازة"}. This hides weekly lessons on those days only; NEVER delete weekly lessons for a period. To cancel one weekly lesson on one date only: {"do":"skip","id":"…","date":"YYYY-MM-DD"}.
+- NEVER ask him for ids, codes or which exact items when his meaning is clear (e.g. "all lessons this week"): decide and act; he can undo with one tap. Ask only when two readings would do very different things.
+- Delete only when he clearly asks to remove something for good (a weekly lesson deleted is gone every week). If something is unclear (for example no day was given), ask one short question instead of guessing, with actions empty.
 - For quick questions, keep "reply" short. For "what do I have", list the items with day and time. Use the reply for any draft, translation, explanation, or other requested text.`;
 
 // what the assistant is doing, step by step — shown live like "Running a command ›"; tap to see every step
@@ -598,7 +603,7 @@ async function send({ retryNotes = false } = {}) {
     S.ok(st, att ? (ar ? 'تمت القراءة' : 'read') : '');
     if (acts.length) {
       st = S.start(ar ? 'تحديث مهامك وعاداتك' : 'Updating your tasks and habits', ar ? `${acts.length} خطوة` : `${acts.length} step${acts.length > 1 ? 's' : ''}`);
-      pend.done = apply(acts);
+      pend.done = await apply(acts);
       if (pend.done.length) S.ok(st, pend.done.join(' · ')); else S.fail(st, ar ? 'لم يُنفَّذ شيء (تاريخ أو معرّف غير صالح)' : 'nothing could be done (missing date or unknown item)');
     }
     pend.text = out.reply || 'Done.';
@@ -619,10 +624,19 @@ async function send({ retryNotes = false } = {}) {
   }
 }
 
-function apply(actions) {
+async function apply(actions) {
   const cal = window.JundCal; if (!cal) return [];
-  const evs = cal.events(), done = [];
-  const nice = (d, t) => new Date(d + 'T12:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + (t ? ' ' + t : '');
+  const evs = cal.events(), done = [], A = AR_();
+  const nice = (d, t) => new Date(d + 'T12:00').toLocaleDateString(A ? 'ar-SA-u-ca-gregory' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + (t ? ' ' + t : '');
+  // changes to things already in the calendar (move, delete) are asked ONCE, together, in Mustatar's own window
+  const risky = actions.map(a => ({ a, e: a.id && evs.find(x => x.id === a.id) })).filter(x => x.e && (x.a.do === 'delete' || x.a.do === 'move'));
+  if (risky.length) {
+    const ok = await window.JundConfirm(A ? (risky.length === 1 ? 'أنفّذ هذا التغيير؟' : `أنفّذ هذه التغييرات (${risky.length})؟`) : (risky.length === 1 ? 'Make this change?' : `Make these ${risky.length} changes?`), {
+      list: risky.map(({ a, e }) => a.do === 'delete' ? (A ? `حذف: ${e.title}${e.repeat === 'weekly' ? ' (كل أسبوع — نهائيًا)' : ''}` : `Delete: ${e.title}${e.repeat === 'weekly' ? ' (every week — for good)' : ''}`) : (A ? `نقل: ${e.title} ← ${nice(a.date, a.time)}` : `Move: ${e.title} → ${nice(a.date, a.time)}`)),
+      yes: A ? 'نفّذ' : 'Do it', danger: risky.some(x => x.a.do === 'delete') });
+    if (!ok) actions = actions.filter(a => !risky.some(r => r.a === a));
+  }
+  const before = JSON.stringify(evs), offBefore = JSON.stringify(cal.daysOff?.() || []);
   for (const a of actions) {
     const e = a.id && evs.find(x => x.id === a.id);
     if (a.do === 'habit' && typeof a.title === 'string') {
@@ -636,8 +650,13 @@ function apply(actions) {
       const d = a.date || (e.repeat === 'weekly' ? iso(new Date()) : e.date);
       if (e.repeat === 'weekly') { e.doneDates ||= {}; if (a.do === 'done') e.doneDates[d] = true; else delete e.doneDates[d]; } else e.done = a.do === 'done';
       e.updated = Date.now(); done.push(`${a.do === 'done' ? 'Done' : 'Not done'}: ${e.title}`);
+    } else if (a.do === 'off' && /^\d{4}-\d\d-\d\d$/.test(a.from || a.date || '')) {
+      // a holiday / days off: weekly lessons hidden on those days, nothing deleted
+      const o = cal.addOff?.(a.from || a.date, a.to || a.from || a.date, a.title || a.label || '');
+      if (o) done.push((A ? '🌴 إجازة: ' : '🌴 Days off: ') + nice(o.from) + (o.to !== o.from ? ' – ' + nice(o.to) : '') + (A ? ' (الدروس مخفية)' : ' (lessons hidden)'));
+    } else if (e && a.do === 'skip' && e.repeat === 'weekly' && /^\d{4}-\d\d-\d\d$/.test(a.date || '')) {
+      e.skip = [...new Set([...(e.skip || []), a.date])]; e.updated = Date.now(); done.push((A ? 'أُلغي هذه المرة فقط: ' : 'Skipped this time only: ') + e.title + ' — ' + nice(a.date));
     } else if (e && a.do === 'move' && /^\d{4}-\d\d-\d\d$/.test(a.date || '')) {
-      if (!confirm(`Move "${e.title}" to ${nice(a.date, a.time)}?`)) continue;   // changes to existing items are always asked first
       e.date = a.date; if (a.time !== undefined) e.time = a.time; e.updated = Date.now(); done.push(`Moved: ${e.title} → ${nice(e.date, e.time)}`);
     } else if (a.do === 'note' && (a.text || a.items?.length || a.title) && window.JundKeep) {
       const items = Array.isArray(a.items) && a.items.length ? a.items.map(x => ({ t: String(x), done: false })) : null;
@@ -650,11 +669,17 @@ function apply(actions) {
     } else if (a.do === 'youtube' && /youtu\.?be/.test(a.url || '')) {
       setTimeout(() => J.startYouTube(a.url), 600); done.push('Started: transcribing the YouTube link');
     } else if (e && a.do === 'delete') {
-      if (!confirm(`Delete "${e.title}" from your calendar?`)) continue;   // changes to existing items are always asked first
       evs.splice(evs.indexOf(e), 1); done.push(`Deleted: ${e.title}`);
     }
   }
-  if (done.length) cal.merge([]);  // saves and redraws
+  if (done.length) {
+    cal.merge([]);  // saves and redraws
+    // one tap undoes everything this answer changed
+    window.JundCal?.toast?.(A ? `✓ ${done.length} ${done.length === 1 ? 'تغيير' : 'تغييرات'}` : `✓ ${done.length} change${done.length > 1 ? 's' : ''}`, 7000, { label: A ? 'تراجع' : 'Undo', fn: () => {
+      const back = JSON.parse(before), cur = cal.events(); cur.splice(0, cur.length, ...back.map(x => ({ ...x, updated: Date.now() })));
+      store.set('daysOff', JSON.parse(offBefore)); cal.merge([]); window.JundCal?.toast?.(A ? '↶ رجع كما كان' : '↶ Undone');
+    } });
+  }
   return done;
 }
 

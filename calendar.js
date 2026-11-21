@@ -43,9 +43,30 @@ function merge(list) {
   }
   save(); render();
 }
+// days off (a holiday, exams week, travel): weekly lessons and meetings are hidden on those days, never deleted
+const daysOff = () => store.get('daysOff', []) || [];
+const offOn = d => daysOff().find(o => d >= o.from && d <= o.to);
 const occurs = (e, d) => e.repeat === 'weekly'
-  ? d >= e.date && parse(d).getDay() === parse(e.date).getDay() && !(e.skip || []).includes(d)
+  ? d >= e.date && parse(d).getDay() === parse(e.date).getDay() && !(e.skip || []).includes(d) && !(offOn(d) && ['class', 'meeting'].includes(e.type || 'task'))
   : e.date === d;
+function offDialog() {
+  const d = document.createElement('dialog'); d.className = 'cf-dlg'; d.dir = ar() ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<b class="cf-t">🌴 ${L('Days off', 'إجازة')}</b>
+    <div class="grid2"><label class="field"><span>${L('From', 'من')}</span><input type="date" id="of-a" value="${today()}"></label><label class="field"><span>${L('To', 'إلى')}</span><input type="date" id="of-b" value="${addDays(today(), 6)}"></label></div>
+    <label class="field"><span>${L('Name (optional)', 'الاسم (اختياري)')}</span><input id="of-l" dir="auto" maxlength="60" placeholder="${L('Mid-year holiday', 'إجازة منتصف العام')}"></label>
+    <small class="muted">${L('Weekly lessons and meetings are hidden on these days; nothing is deleted.', 'تُخفى الدروس والاجتماعات الأسبوعية في هذه الأيام؛ ولا يُحذف شيء.')}</small>
+    <div class="cf-b"><button type="button" class="ghost" data-v="0">${L('Cancel', 'إلغاء')}</button><button type="button" class="primary" data-v="1">${L('Save', 'حفظ')}</button></div>`;
+  document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+  d.querySelector('[data-v="0"]').onclick = () => d.close();
+  d.querySelector('[data-v="1"]').onclick = () => { const o = addOff(d.querySelector('#of-a').value, d.querySelector('#of-b').value, d.querySelector('#of-l').value.trim()); d.close(); if (o) toast(L('✓ Days off saved — lessons hidden', '✓ حُفظت الإجازة — الدروس مخفية')); };
+}
+function addOff(from, to, label = '') {
+  if (!/^\d{4}-\d\d-\d\d$/.test(from)) return null;
+  if (!/^\d{4}-\d\d-\d\d$/.test(to) || to < from) to = from;
+  const o = { id: 'O' + Date.now().toString(36), from, to, label: String(label || '').slice(0, 60) };
+  store.set('daysOff', [...daysOff().filter(x => x.to >= addDays(today(), -60)), o]); save(); render(); return o;
+}
+function removeOff(id) { store.set('daysOff', daysOff().filter(x => x.id !== id)); save(); render(); }
 const isDone = (e, d) => e.repeat === 'weekly' ? !!e.doneDates?.[d] : !!e.done;
 const on = d => events.filter(e => occurs(e, d)).sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
 const colorOf = t => `var(--t-${TYPES[t] ? t : 'task'})`;
@@ -185,6 +206,11 @@ function renderAgenda() {
   const v = $('#cal-view'), t = today(), late = agFrom === t ? overdue() : [], nodate = events.filter(e => isTask(e) && !e.date && !e.done);
   let html = `<div class="ag-nav"><button type="button" class="icon-btn" data-ag="-7" aria-label="${L('Previous week', 'الأسبوع السابق')}">‹</button><b>${dayName(startOfWeek(agFrom), { month: 'long', year: 'numeric' })}</b>${agFrom !== t ? `<button type="button" class="ghost small" data-ag="today">${L('Today', 'اليوم')}</button>` : ''}<button type="button" class="icon-btn" data-ag="7" aria-label="${L('Next week', 'الأسبوع التالي')}">›</button></div>${strip()}`;
   if (late.length) html += `<section class="ag-day late"><h3>${L('Late', 'متأخرة')} <small>${late.length}</small><button type="button" class="link small" id="ag-move">${L('Move all to today', 'انقلها كلها لليوم')}</button></h3>${late.map(e => row2(e, e.date)).join('')}</section>`;
+  // days off: shown on top; lessons on those days are hidden, and come back by themselves afterwards
+  const offs = daysOff().filter(o => o.to >= t).sort((a, b) => a.from.localeCompare(b.from));
+  const dm = s => parse(s).toLocaleDateString(ar() ? 'ar-SA-u-ca-gregory' : 'en-GB', { day: 'numeric', month: 'short' });
+  html += offs.map(o => `<div class="ag-off">🌴 <span dir="auto"><b>${esc(o.label || L('Days off', 'إجازة'))}</b> · ${dm(o.from)}${o.to !== o.from ? ' – ' + dm(o.to) : ''}<small>${L('lessons hidden', 'الدروس مخفية')}</small></span><button type="button" class="link small" data-unoff="${esc(o.id)}">${L('End it', 'ألغِها')}</button></div>`).join('')
+    + `<button type="button" class="link small ag-addoff" id="ag-addoff">🌴 ${L('Add days off (holiday)', 'أضف إجازة')}</button>`;
   for (let i = 0; i < agDays; i++) {
     const d = addDays(agFrom, i), items = on(d);
     if (!items.length && i > 0) continue;
@@ -205,6 +231,8 @@ function renderAgenda() {
   $$('[data-sd]', v).forEach(b => b.onclick = () => { agFrom = b.dataset.sd; render(); });
   $$('[data-add]', v).forEach(b => b.onclick = () => openDialog(null, b.dataset.add));
   $('#ag-more').onclick = () => { agDays += 30; render(); };
+  $$('[data-unoff]', v).forEach(b => b.onclick = () => { removeOff(b.dataset.unoff); toast(L('✓ Lessons are back', '✓ عادت الدروس')); });
+  $('#ag-addoff').onclick = () => offDialog();
   $$('details.ag-day', v).forEach(dt => dt.addEventListener('toggle', () => { if (dt.open) agOpen.add(dt.dataset.day); else agOpen.delete(dt.dataset.day); }));
   const mv = $('#ag-move'); if (mv) mv.onclick = () => { for (const e of late) { e.date = t; e.updated = Date.now(); } save(); render(); toast(L(`✓ Moved ${late.length} to today`, `✓ نُقلت ${late.length} إلى اليوم`)); };
   const nd = $('#ag-nodate'); if (nd) nd.onclick = () => { mode = 'tasks'; store.set('calMode2', mode); render(); };
@@ -479,7 +507,7 @@ function nativeReminders() {
   const items = events.filter(e => e.remind >= 0 && (e.repeat === 'weekly' || (!e.done && e.date >= addDays(today(), -1))))
     .map(e => ({ id: e.id, title: e.title, body: TYPES[e.type] || L('Task', 'مهمة'), date: e.date,
       time: e.time || '08:00', lead: e.time ? e.remind : 0, every: e.repeat === 'weekly' ? 7 : 0,
-      skip: [...(e.skip || []), ...Object.keys(e.doneDates || {}).filter(d => e.doneDates[d])].filter(d => d >= addDays(today(), -1)) }));
+      skip: [...(e.skip || []), ...Object.keys(e.doneDates || {}).filter(d => e.doneDates[d]), ...(['class', 'meeting'].includes(e.type || 'task') ? daysOff().flatMap(o => { const out = []; for (let d = o.from; d <= o.to && out.length < 120; d = addDays(d, 1)) out.push(d); return out; }) : [])].filter(d => d >= addDays(today(), -1)) }));
   items.push(...(window.JundFeatures?.habitReminders?.() || []));
   const run = store.get('focusRun');
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
@@ -650,7 +678,7 @@ function upcoming(days = 7, max = 8) {
 }
 // every (item, day) between two days from today, repeats included (for the widgets and the phone's calendar)
 function between(a, b) { const out = []; for (let i = a; i <= b; i++) { const d = addDays(today(), i); for (const e of on(d)) out.push({ e, d, done: isDone(e, d), ...dueTime(e, d) }); } return out; }
-window.JundCal = { on, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+window.JundCal = { on, offOn, daysOff, addOff, removeOff, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();

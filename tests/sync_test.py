@@ -109,6 +109,8 @@ async def main():
         check("L-test-1" not in await p1.evaluate(COUNT), "a lesson deleted on one phone disappears from the other")
 
         await p1.evaluate("window.confirm = () => true; document.querySelector('#acct-signout').click()")
+        await p1.wait_for_timeout(400)
+        await p1.evaluate("document.querySelector('.cf-dlg[open] [data-v=\"1\"]')?.click()")  # the in-app confirmation
         await p1.wait_for_timeout(500)
         check(await p1.evaluate("!document.querySelector('#acct-out').hidden"), "signing out works")
         check(not err1 and not err2, "no errors on either phone: " + "; ".join((err1 + err2)[:3]))

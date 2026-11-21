@@ -402,6 +402,18 @@ window.addEventListener('popstate', e => {
 });
 window.JundBack = () => { const prev = backStack.pop() || 'assistant'; fromBack = true; show(prev); fromBack = false; };
 // the Android app's back button asks here: 'done' (handled) or 'exit' (leave the app); old pages are never walked back to
+// "are you sure?" in Mustatar's own look and language (instead of the browser's grey box)
+window.JundConfirm = (msg, opts = {}) => new Promise(res => {
+  const A = window.ZadLang === 'ar', d = document.createElement('dialog');
+  d.className = 'cf-dlg'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  const list = (opts.list || []).slice(0, 30);
+  d.innerHTML = `<b class="cf-t" dir="auto">${esc(msg)}</b>${list.length ? `<ul class="cf-l">${list.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ul>` : ''}
+    <div class="cf-b"><button type="button" class="ghost" data-v="0">${esc(opts.no || (A ? 'إلغاء' : 'Cancel'))}</button><button type="button" class="${opts.danger ? 'primary cf-danger' : 'primary'}" data-v="1">${esc(opts.yes || (A ? 'نعم' : 'Yes'))}</button></div>`;
+  document.body.appendChild(d);
+  let v = false; d.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { v = b.dataset.v === '1'; d.close(); });
+  d.addEventListener('close', () => { d.remove(); res(v); });
+  d.showModal(); setTimeout(() => d.querySelector('[data-v="1"]')?.focus(), 30);
+});
 window.JundHardBack = () => {
   if (closeTopLayer()) return 'done';
   const prev = backStack.pop() || (screenNow !== 'assistant' ? 'assistant' : null);
@@ -592,8 +604,8 @@ function initSettings() {
     try { const n = await space.pull(); acctSay('✓ In sync.' + (n ? ' ' + ar(n) + ' lessons updated.' : '')); renderLibrary(); }
     catch (e) { acctSay('✗ ' + e.message); }
   };
-  $('#acct-signout').onclick = () => {
-    if (!confirm('Sign out on this phone? Your notes stay here and in your space.')) return;
+  $('#acct-signout').onclick = async () => {
+    if (!(await window.JundConfirm(window.ZadLang === 'ar' ? 'أتخرج من حسابك على هذا الجوال؟ ملاحظاتك تبقى هنا وفي مساحتك.' : 'Sign out on this phone? Your notes stay here and in your space.'))) return;
     space.signOut(); acctRender(); acctSay('Signed out.');
   };
   $('#acct-delete').onclick = async () => {
@@ -3306,12 +3318,16 @@ async function renderLearned() {
 // themes: Auto (follows the phone's light/dark setting), Night, Day
 function applyTheme() {
   const pick = store.get('theme', 'auto');
-  const t = pick === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'navy') : pick;
+  let t = pick === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'navy') : pick;
+  // a wallpaper decides day or night so words stay readable on it
+  const wall = store.get('appBg', '');
+  if (wall === 'nightsky') t = 'navy'; else if (wall === 'desert') t = 'light';
   document.documentElement.dataset.theme = t;
   $('meta[name="theme-color"]')?.setAttribute('content', t === 'light' ? '#FFFFFF' : '#0C0C0E');
 }
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { if (store.get('theme', 'auto') === 'auto') applyTheme(); });
 applyTheme();
+window.JundApplyTheme = applyTheme;
 /* text size: bigger or smaller words in the whole app (for people who need large text, or like it small);
    "Phone" follows the phone's own text size (the Android app passes it in), kept within what the screens can hold */
 const TEXT_SIZES = [['phone', 'Phone', 'الهاتف', 0], ['s', 'A−', 'أ−', 0.9], ['m', 'A', 'أ', 1], ['l', 'A+', 'أ+', 1.15], ['xl', 'A++', 'أ++', 1.3]];

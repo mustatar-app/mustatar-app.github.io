@@ -2067,3 +2067,46 @@ details.ag-day.is-today > summary h3 { background: color-mix(in srgb, var(--acce
 .ci-save { width: 100%; min-height: 48px; }
 .ci-when { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--ink-2); font-size: .86rem; }
 .ci-note { border-radius: 10px; padding: 9px 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+/* search everything */
+.sr { position: fixed; inset: 0; z-index: 60; background: var(--bg); display: flex; flex-direction: column; opacity: 0; transform: translateY(8px); transition: opacity .16s, transform .16s; }
+.sr.in { opacity: 1; transform: none; }
+.sr-bar { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px; border-bottom: 1px solid var(--line); }
+.sr-bar input { flex: 1; min-height: 46px; border-radius: 14px; padding: 0 14px; font-size: 1rem; }
+.sr-body { flex: 1; overflow-y: auto; padding: 6px 12px calc(24px + env(safe-area-inset-bottom, 0px)); }
+.sr-h { margin: 14px 4px 6px; font-size: .78rem; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: .02em; }
+.sr-it { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 11px 10px; border: 0; border-radius: 12px; background: none; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.sr-it:hover, .sr-it:focus-visible { background: var(--surface); }
+.sr-i { width: 28px; flex: 0 0 auto; text-align: center; color: var(--ink-2); font-size: 1.05rem; line-height: 1.4; }
+.sr-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sr-t b { font-weight: 600; overflow-wrap: anywhere; } .sr-t small { color: var(--ink-2); font-size: .8rem; overflow-wrap: anywhere; }
+.sr-x { opacity: .9; line-height: 1.45; }
+.sr-more, .sr-none { padding: 18px 8px; color: var(--ink-2); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+body.sr-open { overflow: hidden; }
+/* alarm and focus lock */
+.al-dlg { max-width: 460px; width: calc(100% - 24px); max-height: calc(100dvh - 30px); border: 1px solid var(--line); border-radius: 18px; background: var(--bg); color: var(--ink); padding: 18px; }
+.al-dlg::backdrop, .al-ring::backdrop { background: rgb(0 0 0 / .6); }
+.al-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.al-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface); }
+.al-row.off { opacity: .55; }
+.al-t { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: none; color: var(--ink); font: inherit; text-align: start; padding: 0; }
+.al-t b { font-size: 1.9rem; font-weight: 600; letter-spacing: .5px; direction: ltr; } .al-t small { color: var(--ink-2); }
+.al-form { padding: 12px; border: 1px dashed var(--line); border-radius: 14px; }
+.al-ft { display: flex; gap: 8px; } .al-ft input[type=time] { width: 9.5em; font-size: 1.2rem; } .al-ft input:not([type]) { flex: 1; min-width: 0; }
+.al-days { display: flex; gap: 6px; margin: 10px 0 4px; flex-wrap: wrap; }
+.al-days button { flex: 1; min-width: 38px; min-height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+.al-days button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.al-warn { width: 100%; text-align: start; padding: 10px 12px; border-radius: 12px; border: 1px solid #E0A43A; background: color-mix(in srgb, #E0A43A 14%, transparent); color: var(--ink); font: inherit; font-size: .88rem; line-height: 1.5; }
+.al-note { font-size: .85rem; line-height: 1.55; color: var(--ink-2); background: var(--surface); padding: 10px 12px; border-radius: 12px; }
+.al-ring { border: 0; border-radius: 22px; padding: 28px; background: #0C1428; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 260px; }
+.al-ring:not([open]) { display: none; }
+.al-big { font-size: 3.2rem; } .al-ring button { width: 100%; min-height: 52px; }
+.lk-bar { position: fixed; top: 0; inset-inline: 0; z-index: 70; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 6px; background: #0C1428; color: #fff; font-size: .86rem; }
+.lk-bar button { border: 1px solid rgb(255 255 255 / .3); background: none; color: #fff; border-radius: 99px; padding: 4px 12px; font: inherit; }
+.switch { position: relative; display: inline-block; width: 46px; height: 28px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .15s; }
+.switch span::before { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::before { transform: translateX(18px); }
+[dir="rtl"] .switch input:checked + span::before { transform: translateX(-18px); }
+.dv-sec { margin: 14px 0; } .dv-sec ol { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.6; font-size: .9rem; }

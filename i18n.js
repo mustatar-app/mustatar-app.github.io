@@ -10,6 +10,7 @@ if (lang !== 'ar') return;
 document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
 
 const T = {
+"Save to Google Drive": "احفظ في Google Drive",
 "Text size": "حجم النص", "Mustatar · مستطر — the size of the words in the whole app": "مستطر — حجم الكلمات في التطبيق كله",
 "Reminders": "التذكيرات",
 "What is coming — exams, homework, projects and tasks (your daily classes are left out). Mustatar reminds you here, and plans study time in the free gaps of your timetable.": "ما هو قادم — الاختبارات والواجبات والمشاريع والمهام (دروسك اليومية غير مذكورة هنا). يذكّرك مستطر هنا، ويخطط وقت المذاكرة في الفراغات بين دروسك.",

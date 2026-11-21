@@ -375,6 +375,7 @@ function remember(name) {
   else { backStack.push(screenNow); if (backStack.length > 30) backStack.shift(); }
 }
 function closeTopLayer() {
+  if (window.JundSearch?.isOpen()) { window.JundSearch.close(); return true; }
   const d = [...document.querySelectorAll('dialog[open]')].pop(); if (d) { d.close(); return true; }
   const pp = document.getElementById('kp-pop'); if (pp) { pp.remove(); return true; }
   if (window.JundKeep?.back()) return true;
@@ -3422,6 +3423,7 @@ async function receiveShared() {
   if (view === 'task') setTimeout(() => window.JundCal?.open(), 300);
   if (view === 'focus') setTimeout(() => window.JundFeatures?.openFocus(), 300);
   if (view === 'checkin') setTimeout(() => window.JundCheckin?.open(), 600);
+  if (view === 'alarm') setTimeout(() => window.JundAlarm?.open(), 600);
   if (view === 'habits') setTimeout(() => show('habits'), 0);
   if (u.search) history.replaceState(null, '', location.pathname);
 }

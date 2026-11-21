@@ -2,6 +2,7 @@ package sa.jund.notes;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -25,6 +26,7 @@ import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Collections;
@@ -211,6 +213,42 @@ public class MainActivity extends Activity {
                             // "Continue with Google" in the phone's browser (works without the Android sign-in set-up in Google Cloud);
                             // the browser comes back with app.mustatar://signin
                             // which version this app is, so the page can offer a newer one
+                            // the alarm clock (AlarmClock.java) and the focus lock
+                            case "alarmSet": AlarmClock.replace(this, command.optJSONArray("alarms") == null ? new JSONArray() : command.getJSONArray("alarms")); answer(reply, command.optString("job"), AlarmClock.status(this)); return;
+                            case "alarmStatus": answer(reply, command.optString("job"), AlarmClock.status(this)); return;
+                            case "alarmTest": AlarmClock.ring(this, command.optString("label")); answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            case "alarmPerm": {
+                                Intent go;
+                                if (!ReminderReceiver.exact(this)) go = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName()));
+                                else if (Build.VERSION.SDK_INT >= 34 && !getSystemService(NotificationManager.class).canUseFullScreenIntent()) go = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + getPackageName()));
+                                else go = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+                                try { startActivity(go); } catch (ActivityNotFoundException ignored) {}
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            }
+                            case "focusLock": {
+                                NotificationManager nm = getSystemService(NotificationManager.class);
+                                boolean dnd = command.optBoolean("dnd", true) && nm.isNotificationPolicyAccessGranted();
+                                if (dnd) { getPreferences(MODE_PRIVATE).edit().putInt("filterBefore", nm.getCurrentInterruptionFilter()).apply(); nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS); }
+                                boolean pinned = true; try { startLockTask(); } catch (Exception e) { pinned = false; }
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("pinned", pinned).put("dnd", dnd).put("dndAllowed", nm.isNotificationPolicyAccessGranted())); return;
+                            }
+                            case "focusUnlock": {
+                                try { stopLockTask(); } catch (Exception ignored) {}
+                                NotificationManager nm = getSystemService(NotificationManager.class);
+                                int before = getPreferences(MODE_PRIVATE).getInt("filterBefore", 0);
+                                if (before != 0 && nm.isNotificationPolicyAccessGranted()) { nm.setInterruptionFilter(before); getPreferences(MODE_PRIVATE).edit().remove("filterBefore").apply(); }
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            }
+                            case "focusStatus": {
+                                NotificationManager nm = getSystemService(NotificationManager.class);
+                                android.app.ActivityManager am = getSystemService(android.app.ActivityManager.class);
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("dndAllowed", nm.isNotificationPolicyAccessGranted())
+                                    .put("pinned", Build.VERSION.SDK_INT >= 23 && am.getLockTaskModeState() != android.app.ActivityManager.LOCK_TASK_MODE_NONE)); return;
+                            }
+                            case "dndAsk": {
+                                try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)); } catch (ActivityNotFoundException ignored) {}
+                                answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            }
                             case "appInfo": {
                                 android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
                                 answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("versionCode", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : (long) pi.versionCode)

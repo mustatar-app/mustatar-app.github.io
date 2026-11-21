@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- the alarm clock inside Mustatar: rings at the exact time, on the lock screen, through do-not-disturb -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- focus lock: silence the phone while you focus (only after you allow it in the phone's settings) -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- the in-app browser needs this to start the microphone (echo and noise clean-up); without it: "Could not start audio source" -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -116,6 +122,18 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_month_info" />
         </receiver>
 
+        <activity android:name=".AlarmActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true"
+            android:launchMode="singleTask" android:excludeFromRecents="true" android:taskAffinity="sa.jund.notes.alarm"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+        <receiver android:name=".AlarmClock" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

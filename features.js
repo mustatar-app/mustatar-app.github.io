@@ -271,6 +271,7 @@ function outBox(title, { email } = {}) {
 $('#out-close').onclick = () => $('#out-dialog').close();
 $('#out-copy').onclick = async () => { try { await navigator.clipboard.writeText($('#out-text').value); $('#out-status').textContent = '✓ Copied'; } catch { $('#out-text').select(); } };
 $('#out-share').onclick = async () => { try { await navigator.share({ text: $('#out-text').value }); } catch {} };
+$('#out-drive').onclick = () => window.JundDrive?.save(new Blob([$('#out-text').value], { type: 'text/plain' }), ($('#out-title').textContent || 'Mustatar').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) + '.txt');
 $('#out-email').onclick = () => {
   const t = $('#out-text').value, m = t.match(/^Subject:\s*(.+)\n+/i);
   location.href = `mailto:?subject=${encodeURIComponent(m ? m[1] : $('#out-title').textContent)}&body=${encodeURIComponent(m ? t.slice(m[0].length) : t)}`;

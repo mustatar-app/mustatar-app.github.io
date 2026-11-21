@@ -34,7 +34,16 @@ function save() {
   store.set('events', events); store.set('eventsSaved', Date.now());
   if (android) pushSync();
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => { J.cloud.putData('calendar', { saved: store.get('eventsSaved'), events }).catch(() => {}); pushSync(); widgetSync(); }, 2500);
+  syncTimer = setTimeout(() => { J.cloud.putData('calendar', { saved: store.get('eventsSaved'), events }).catch(() => {}); pushSync(); widgetSync(); askNotify(); }, 2500);
+}
+// a browser or home-screen app: the first time a reminder is set, offer to allow notifications so it arrives when Mustatar is closed
+function askNotify() {
+  if (android || !('Notification' in window) || Notification.permission !== 'default') return;
+  if (!events.some(e => e.remind >= 0 && !e.done)) return;
+  const last = store.get('notifAsked', 0); if (Date.now() - last < 3 * 864e5) return;
+  store.set('notifAsked', Date.now());
+  toast(L('Allow notifications so reminders and alarms reach you when Mustatar is closed.', 'اسمح بالإشعارات لتصلك التذكيرات والمنبّهات ومستطر مغلق.'), 12000,
+    { label: L('Allow', 'اسمح'), fn: async () => { try { await Notification.requestPermission(); } catch {} notifStatus(); await pushSync(); notifStatus(); } });
 }
 function merge(list) {
   for (const e of list || []) {
@@ -497,6 +506,7 @@ function reminderList() {
   for (const x of window.JundCount?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const x of window.JundBrief?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // briefs before lessons and meetings
   for (const x of window.JundCheckin?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
+  for (const x of window.JundAlarm?.upcoming?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });

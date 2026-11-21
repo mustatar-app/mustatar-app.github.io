@@ -153,6 +153,8 @@ function nextPrayerText() {
   return `<span class="np"><i></i><b>${np.name}</b> ${tm}${lt}</span>`;
 }
 // how much of today is left — day management, so it sits outside the prayer card
+function homeShow() { return { prayer: true, sched: true, habits: true, count: true, ...(store.get('homeShow', {}) || {}) }; }
+window.JundHomeShow = homeShow;
 function dayLeft() {
   const now = new Date(), left = 1440 - (now.getHours() * 60 + now.getMinutes());
   return window.ZadLang === 'ar' ? `بقي من اليوم ${Math.floor(left / 60)} س ${left % 60} د` : `${Math.floor(left / 60)}h ${left % 60}m left today`;
@@ -200,25 +202,41 @@ async function renderHome() {
   // a timeline: time on one side, a dot on the rail, the item on the other (each row draws its own piece of the rail, so they always line up)
   // where "now" is on the timeline: finished items are faded, the running one carries the moving dot
   const nowT = Date.now(); let dotAt = -1;
-  const rows = up.slice(0, 5).map(x => {
+  const rows = up.slice(0, 12).map(x => {
     if (!x.e.time) return { ...x, st: '' };
     const a = new Date(`${x.d}T${x.e.time}`).getTime(), b = a + (x.e.type === 'class' ? 45 : 60) * 60e3;
     return { ...x, st: nowT >= b ? 'past' : nowT >= a ? 'run' : '', p: Math.min(1, Math.max(0, (nowT - a) / (b - a))) };
   });
+  // finished items leave the list (they do not stay greyed); the list itself folds into one line under the prayer card
+  const live = rows.filter(r => r.st !== 'past').slice(0, 6);
+  rows.length = 0; rows.push(...live);
   const run = rows.findIndex(r => r.st === 'run');
   if (run < 0) { const nxt = rows.findIndex(r => r.st !== 'past'); dotAt = nxt > 0 ? nxt : -1; }
-  $('#hm-next').innerHTML = up.length ? `<div class="tl">${rows.map((x, i, arr) => `<button type="button" class="nx tl-row${i === 0 ? ' first' : ''}${i === arr.length - 1 ? ' last' : ''}${x.st ? ' ' + x.st : ''}${i === dotAt ? ' here' : ''}" ${x.st === 'run' ? `style="--p:${x.p.toFixed(3)}"` : ''} data-ev="${J.esc(x.e.id)}" data-d="${x.d}">
+  const AR2 = window.ZadLang === 'ar', open = !!window.__tlOpen, first = rows[0];
+  const t12 = v => AR2 ? String(v).replace(/\s?am\b/i, ' ص').replace(/\s?pm\b/i, ' م') : v;
+  const head = rows.length ? `<button type="button" class="tl-fold${open ? ' open' : ''}" id="tl-fold" aria-expanded="${open}">
+      <b>${AR2 ? 'جدولك' : 'Your schedule'}</b><span class="tl-cnt">${rows.length}</span>
+      <span class="tl-nxt" dir="auto">${open ? '' : `${first.st === 'run' ? (AR2 ? 'الآن: ' : 'Now: ') : first.time ? t12(first.time) + ' ' : first.when + ' · '}${esc(first.e.title)}`}</span>
+      <svg class="tl-chev" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>` : '';
+  $('#hm-next').innerHTML = rows.length ? head + `<div class="tl"${open ? '' : ' hidden'}>${rows.map((x, i, arr) => `<button type="button" class="nx tl-row${i === 0 ? ' first' : ''}${i === arr.length - 1 ? ' last' : ''}${x.st ? ' ' + x.st : ''}${i === dotAt ? ' here' : ''}" ${x.st === 'run' ? `style="--p:${x.p.toFixed(3)}"` : ''} data-ev="${J.esc(x.e.id)}" data-d="${x.d}">
       <span class="tl-when${x.late ? ' late' : ''}"><span>${x.when}</span>${x.time ? `<b dir="ltr">${window.ZadLang === 'ar' ? String(x.time).replace(/\s?am\b/i, ' ص').replace(/\s?pm\b/i, ' م') : x.time}</b>` : ''}</span>
       <span class="tl-rail"><i style="--c:${x.color}"></i></span>
       <span class="tl-what"><b dir="auto">${esc(x.e.title)}</b><small style="color:${x.color}">${x.st === 'run' ? (window.ZadLang === 'ar' ? 'الآن · ' : 'Now · ') : ''}${x.type}</small></span></button>`).join('')}</div>`
     : '';
   { const td = window.JundCal?.today?.(); $('#hm-next').insertAdjacentHTML('afterbegin', dayClock(up.filter(x => !x.late && x.d === td && x.e.time))); }
+  { const sh = homeShow(), card = $('#hm-next')?.closest('.hm-card');
+    const dc = $('#hm-next .dc'); if (dc) dc.hidden = !sh.prayer;
+    const f = $('#tl-fold'), tl = $('#hm-next .tl'); if (f) f.hidden = !sh.sched; if (tl && !sh.sched) tl.hidden = true;
+    const hw = $('#hm-habits-wrap'); if (hw && !sh.habits) hw.hidden = true;
+    const cd = $('#hm-count'); if (cd) cd.hidden = !sh.count;
+    if (card) card.hidden = !sh.prayer && !sh.sched && !sh.count; }
   $('#hm-left').textContent = dayLeft();
   if (!up.length) $('#hm-brief').textContent = '· ' + (window.ZadLang === 'ar' ? 'يومك خالٍ' : 'Your day is clear');
   $('#screen-assistant')?.classList.toggle('day-clear', !up.length);
   clearInterval(renderHome.tick2); if (up.length) renderHome.tick2 = setInterval(() => { if (!document.hidden && $('#hm-next') && !$('#screen-assistant')?.hidden && !document.activeElement?.closest?.('.as-input')) renderHome(); }, 60000);
   clearInterval(renderHome.tick); if (!up.length) renderHome.tick = setInterval(() => { const c = $('#hm-next .dc'); if (c) c.outerHTML = dayClock(); const l = $('#hm-left'); if (l) l.textContent = dayLeft(); }, 30000);
   $$('.nx', $('#hm-next')).forEach(b => b.onclick = () => window.JundCal.open(b.dataset.ev, b.dataset.d));
+  const fb = $('#tl-fold'); if (fb) fb.onclick = () => { window.__tlOpen = !window.__tlOpen; renderHome(); };
   const ls = (await J.allLessons()).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
   $('#hm-recent-wrap').hidden = true;
   window.JundCount?.paint();
@@ -487,7 +505,7 @@ async function send({ retryNotes = false } = {}) {
     : input;
   if (!t) return;
   // "check in", "review my day", "راجع يومي": the evening check-in opens (you answer by voice there)
-  if (!att && /^(let'?s )?(check.?in|review (my|the) day|end.of.day|how was my day|daily review)\b|^(راجع(ة)?|مراجعة) (يومي|اليوم)|^(كيف كان يومي)|^مراجعة آخر اليوم/i.test(t) && window.JundCheckin) {
+  if (!att && /^(let'?s )?(check.?in|review (my|the) day|end.of.day|how was my day|daily review)\b|^(راجع(ة)?|مراجعة) (يومي|اليوم)|^(كيف كان يومي)|^مراجعة آخر اليوم|^محاسب(ة|ه) (النفس|نفسي)|^حاسبني|^self.?review|^muhasaba/i.test(t) && window.JundCheckin) {
     $('#as-text').value = ''; $('#as-text').dispatchEvent(new Event('input')); window.JundCheckin.open(); return;
   }
   // Basic: a few free assistant messages a day (they use the shared free AI allowance)

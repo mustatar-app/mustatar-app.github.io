@@ -34,7 +34,7 @@ const PLACES = () => [
   ['Plan for an exam', 'خطط لاختبار', 'exam test study plan اختبار امتحان مذاكرة', () => { J.show('calendar'); setTimeout(() => $('#plan-exam, [data-plan-exam]')?.click(), 80); }],
   ['Habit tracker', 'متابعة العادات', 'habits streak tracker العادات سلسلة', () => J.show('habits')],
   ['Your coach: SWOT and gap analysis', 'مدرّبك: تحليل SWOT والفجوة', 'coach swot gap analysis weakness strength مدرب تحليل ضعف قوة فجوة', () => { J.show('habits'); setTimeout(() => $('#hb-coach')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150); }],
-  ['Evening check-in (by voice)', 'مراجعة آخر اليوم (بالصوت)', 'check in review day done evening مراجعة اليوم أنجزت', () => window.JundCheckin?.open()],
+  ['Self-review (by voice)', 'محاسبة النفس (بالصوت)', 'check in review day done evening self accountability muhasaba مراجعة اليوم أنجزت محاسبة النفس', () => window.JundCheckin?.open()],
   ['Weekly review', 'مراجعة الأسبوع', 'week review المراجعة', meRow('review')],
   ['Focus session', 'جلسة تركيز', 'focus pomodoro concentrate تركيز', () => window.JundFeatures?.openFocus()],
   ['Focus lock (stay in the app)', 'قفل التركيز (ابقَ في التطبيق)', 'lock block distraction airplane phone قفل حجب منع', () => window.JundLock?.open()],

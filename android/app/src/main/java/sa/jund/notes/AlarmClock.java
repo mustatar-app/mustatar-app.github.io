@@ -103,28 +103,38 @@ public class AlarmClock extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent intent) {
         String action = intent.getAction() == null ? "" : intent.getAction();
         NotificationManager nm = c.getSystemService(NotificationManager.class);
-        if (STOP.equals(action)) { nm.cancel(NOTE); return; }
+        if (STOP.equals(action)) { AlarmService.stop(c); nm.cancel(NOTE); return; }
         if (SNOOZE.equals(action)) {
-            nm.cancel(NOTE);
-            prefs(c).edit().putLong("snoozeAt", System.currentTimeMillis() + 5 * 60_000L).putString("snoozeLabel", prefs(c).getString("ringLabel", "")).apply();
+            AlarmService.stop(c); nm.cancel(NOTE);
+            int min = prefs(c).getInt("ringSnooze", 5);
+            prefs(c).edit().putLong("snoozeAt", System.currentTimeMillis() + min * 60_000L).putString("snoozeLabel", prefs(c).getString("ringLabel", ""))
+                .putString("snoozeOpts", prefs(c).getString("ringOpts", "{}")).apply();
             schedule(c); return;
         }
         if (!RING.equals(action)) { schedule(c); return; }   // the phone restarted or the time changed
         String id = intent.getStringExtra("id"); String label = prefs(c).getString("nextLabel", "");
         SharedPreferences.Editor e = prefs(c).edit().putString("ringLabel", label);
-        if ("snooze".equals(id)) e.remove("snoozeAt");
+        JSONObject opts = new JSONObject();
+        if ("snooze".equals(id)) { e.remove("snoozeAt"); try { opts = new JSONObject(prefs(c).getString("snoozeOpts", "{}")); } catch (Exception ignored) {} }
         // an alarm without days rings once, then turns itself off
         try {
             JSONArray list = new JSONArray(prefs(c).getString("list", "[]"));
             for (int i = 0; i < list.length(); i++) {
                 JSONObject a = list.getJSONObject(i);
+                if (a.optString("id").equals(id)) opts = a;   // this alarm's own sound, length, volume, vibration and snooze
                 if (a.optString("id").equals(id) && (a.optJSONArray("days") == null || a.optJSONArray("days").length() == 0)) a.put("on", false);
             }
             e.putString("list", list.toString());
         } catch (Exception ignored) {}
         e.apply();
-        ring(c, label);
+        ring(c, label, opts);
         schedule(c);
+    }
+
+    // the alarm plays its own sound (AlarmService); if the phone refuses that, the older notification sound rings instead
+    static void ring(Context c, String label, JSONObject opts) {
+        try { AlarmService.start(c, label, opts); return; } catch (Exception ignored) {}
+        ring(c, label);
     }
 
     static void ring(Context c, String label) {

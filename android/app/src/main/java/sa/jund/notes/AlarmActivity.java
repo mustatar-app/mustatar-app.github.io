@@ -18,8 +18,14 @@ import android.widget.TextView;
 
 /* the page that comes up when an alarm rings — also on the lock screen: the time, its name, Stop and Snooze */
 public class AlarmActivity extends Activity {
+    static final String CLOSE = "sa.jund.notes.ALARM_CLOSE";
+    private final android.content.BroadcastReceiver closer = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context c, Intent i) { finish(); }
+    };
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(closer, new android.content.IntentFilter(CLOSE), RECEIVER_NOT_EXPORTED);
+        else registerReceiver(closer, new android.content.IntentFilter(CLOSE));
         if (Build.VERSION.SDK_INT >= 27) {
             setShowWhenLocked(true); setTurnScreenOn(true);
             KeyguardManager km = getSystemService(KeyguardManager.class);
@@ -40,7 +46,8 @@ public class AlarmActivity extends Activity {
         root.addView(time); root.addView(name);
         root.addView(button("إيقاف · Stop", 0xFFE5484D, Color.WHITE, dp, () -> { sendBroadcast(new Intent(this, AlarmClock.class).setAction(AlarmClock.STOP)); finish(); }));
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(1, (int) (16 * dp)); TextView space = new TextView(this); root.addView(space, gap);
-        root.addView(button("غفوة ٥ دقائق · Snooze 5 min", 0xFF22304F, Color.WHITE, dp, () -> { sendBroadcast(new Intent(this, AlarmClock.class).setAction(AlarmClock.SNOOZE)); finish(); }));
+        int snz = getIntent().getIntExtra("snooze", 5);
+        root.addView(button("غفوة " + snz + " دقائق · Snooze " + snz + " min", 0xFF22304F, Color.WHITE, dp, () -> { sendBroadcast(new Intent(this, AlarmClock.class).setAction(AlarmClock.SNOOZE)); finish(); }));
         setContentView(root);
     }
 
@@ -55,5 +62,5 @@ public class AlarmActivity extends Activity {
 
     // leaving the page with the back button does not stop the alarm by mistake: Stop or Snooze must be tapped
     @Override public void onBackPressed() { }
-    @Override protected void onDestroy() { super.onDestroy(); }
+    @Override protected void onDestroy() { try { unregisterReceiver(closer); } catch (Exception ignored) {} super.onDestroy(); }
 }

@@ -587,6 +587,23 @@ async function widgetConnect() {
 }
 if ($('#widget-connect')) $('#widget-connect').onclick = widgetConnect;
 if ($('#widget-style')) { $('#widget-style').value = store.get('widgetStyle', 'clear'); $('#widget-style').onchange = () => { store.set('widgetStyle', $('#widget-style').value); widgetSync(); toast('Widget style saved. It changes on your home screen within a few minutes, or tap the widget once.'); }; }
+/* iPhone and iPad: Safari shows notifications only for an app added to the Home Screen (iOS 16.4 or newer) */
+const iosTab = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? !(navigator.standalone || matchMedia('(display-mode: standalone)').matches) : false;
+function iosSteps() {
+  const steps = window.ZadLang === 'ar'
+    ? ['اضغط زر المشاركة <b>⬆︎</b> أسفل Safari.', 'اختر <b>«إضافة إلى الشاشة الرئيسية»</b> ثم «إضافة».', 'افتح مستطر من الأيقونة الجديدة (لا من Safari).', 'من «أنا» ← الإشعارات، اضغط <b>«اسمح»</b>.']
+    : ['Tap the Share button <b>⬆︎</b> at the bottom of Safari.', 'Choose <b>“Add to Home Screen”</b>, then Add.', 'Open Mustatar from the new icon (not from Safari).', 'In Me → Notifications, tap <b>Allow</b>.'];
+  return `<b>${L('On iPhone, reminders and alarms reach you when Mustatar is closed only after adding it to the Home Screen:', 'على الآيفون تصلك التذكيرات والمنبّهات ومستطر مغلق فقط بعد إضافته إلى الشاشة الرئيسية:')}</b><ol class="ios-steps">${steps.map(x => `<li>${x}</li>`).join('')}</ol><small>${L('Needs iOS 16.4 or newer.', 'يحتاج iOS 16.4 أو أحدث.')}</small>`;
+}
+// once, a few seconds after opening in Safari on an iPhone, the steps above
+function iosNudge() {
+  if (!iosTab() || store.get('iosNudged')) return;
+  store.set('iosNudged', Date.now());
+  const d = document.createElement('dialog'); d.className = 'cf-dlg ios-dlg'; d.dir = window.ZadLang === 'ar' ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<div>${iosSteps()}</div><div class="cf-b"><button type="button" class="primary" id="ios-ok">${L('OK', 'حسنًا')}</button></div>`;
+  document.body.appendChild(d); d.showModal(); d.querySelector('#ios-ok').onclick = () => d.close(); d.addEventListener('close', () => d.remove());
+}
+setTimeout(() => { if (store.get('welcomed') || store.get('opened')) iosNudge(); }, 6000);
 function notifStatus() {
   if (android) {
     const s = $('#notif-status');
@@ -597,7 +614,9 @@ function notifStatus() {
         : L('Reminders work in the background. Allow exact alarms for more precise delivery.', 'تعمل التذكيرات في الخلفية. اسمح بالمنبّهات الدقيقة لتحسين توقيت وصولها.');
     return;
   }
-  const s = $('#notif-status'); if (!('Notification' in window)) { s.textContent = 'This browser cannot show notifications; reminders show inside the app.'; return; }
+  const s = $('#notif-status');
+  if (iosTab()) { s.innerHTML = iosSteps(); $('#notif-allow').hidden = true; $('#notif-test').hidden = true; return; }
+  if (!('Notification' in window)) { s.textContent = L('This browser cannot show notifications; reminders show inside the app.', 'هذا المتصفح لا يعرض الإشعارات؛ تظهر التذكيرات داخل التطبيق.'); return; }
   const p = Notification.permission;
   $('#notif-allow').hidden = p === 'granted';
   $('#notif-test').hidden = p !== 'granted';
@@ -688,7 +707,7 @@ function upcoming(days = 7, max = 8) {
 }
 // every (item, day) between two days from today, repeats included (for the widgets and the phone's calendar)
 function between(a, b) { const out = []; for (let i = a; i <= b; i++) { const d = addDays(today(), i); for (const e of on(d)) out.push({ e, d, done: isDone(e, d), ...dueTime(e, d) }); } return out; }
-window.JundCal = { on, offOn, daysOff, addOff, removeOff, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+window.JundCal = { iosTab, iosSteps, on, offOn, daysOff, addOff, removeOff, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();

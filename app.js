@@ -3318,12 +3318,16 @@ async function renderLearned() {
 // themes: Auto (follows the phone's light/dark setting), Night, Day
 function applyTheme() {
   const pick = store.get('theme', 'auto');
-  const t = pick === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'navy') : pick;
+  let t = pick === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'navy') : pick;
+  // a wallpaper decides day or night so words stay readable on it
+  const wall = store.get('appBg', '');
+  if (wall === 'nightsky') t = 'navy'; else if (wall === 'desert') t = 'light';
   document.documentElement.dataset.theme = t;
   $('meta[name="theme-color"]')?.setAttribute('content', t === 'light' ? '#FFFFFF' : '#0C0C0E');
 }
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { if (store.get('theme', 'auto') === 'auto') applyTheme(); });
 applyTheme();
+window.JundApplyTheme = applyTheme;
 /* text size: bigger or smaller words in the whole app (for people who need large text, or like it small);
    "Phone" follows the phone's own text size (the Android app passes it in), kept within what the screens can hold */
 const TEXT_SIZES = [['phone', 'Phone', 'الهاتف', 0], ['s', 'A−', 'أ−', 0.9], ['m', 'A', 'أ', 1], ['l', 'A+', 'أ+', 1.15], ['xl', 'A++', 'أ++', 1.3]];

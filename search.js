@@ -75,7 +75,7 @@ function close() { if (!box) return; box.classList.remove('in'); document.body.c
 function build() {
   box = document.createElement('div'); box.className = 'sr'; box.hidden = true; box.setAttribute('data-noi18n', ''); box.dir = AR() ? 'rtl' : 'ltr';
   box.innerHTML = `<div class="sr-bar"><button type="button" class="icon-btn" id="sr-x" aria-label="${L('Close', 'إغلاق')}">${AR() ? '→' : '←'}</button>
-    <input id="sr-q" type="search" dir="auto" autocomplete="off" placeholder="${L('Search everything: notes, tasks, habits, settings…', 'ابحث في كل شيء: الملاحظات والمهام والعادات والإعدادات…')}"></div>
+    <input id="sr-q" type="search" dir="auto" autocomplete="off" placeholder="${L('Type a command or search…', 'اكتب أمرًا أو ابحث…')}">${matchMedia('(hover: hover)').matches ? `<span class="sr-kbd">${/Mac/.test(navigator.platform) ? '⌘K' : 'Ctrl K'}</span>` : ''}</div>
     <div class="sr-body" id="sr-body"></div>`;
   document.body.appendChild(box);
   $('#sr-x', box).onclick = close;
@@ -95,7 +95,17 @@ async function run(raw) {
   const groups = [];
   const places = PLACES().filter(p => !q || hit(q, p[0], p[1], p[2]));
   if (!q) {
-    groups.push([L('Go to', 'انتقل إلى'), places.slice(0, 12).map(p => ({ t: AR() ? p[1] : p[0], i: '↗', go: p[3] }))]);
+    // a command palette (⌘K / Ctrl+K on a computer): the most used actions first, then places
+    const MOST = [
+      [L('New note', 'ملاحظة جديدة'), '✎', () => window.JundKeep?.newNote()],
+      [L('Record a lesson or meeting', 'سجّل درسًا أو اجتماعًا'), '●', () => window.JundFeatures?.record()],
+      [L('Add a task or reminder', 'أضف مهمة أو تذكيرًا'), '＋', () => window.JundCal?.open()],
+      [L('Self-review (by voice)', 'محاسبة النفس (بالصوت)'), '🎙', () => window.JundCheckin?.open()],
+      [L('Focus session', 'جلسة تركيز'), '◷', () => window.JundFeatures?.openFocus()],
+      [L('Ask the assistant', 'اسأل المساعد'), '✦', () => { J.show('assistant'); setTimeout(() => $('#as-text')?.focus(), 80); }],
+    ];
+    groups.push([L('Most used', 'الأكثر استخدامًا'), MOST.map(([t, i, go]) => ({ t, i, go }))]);
+    groups.push([L('Go to', 'انتقل إلى'), places.filter(p => !MOST.some(m => m[0] === (AR() ? p[1] : p[0]))).slice(0, 8).map(p => ({ t: AR() ? p[1] : p[0], i: '↗', go: p[3] }))]);
     paint(body, groups, ''); return;
   }
   if (places.length) groups.push([L('In the app', 'في التطبيق'), places.slice(0, 8).map(p => ({ t: AR() ? p[1] : p[0], i: '↗', go: p[3] }))]);
@@ -129,6 +139,12 @@ function paint(body, groups, q, more) {
   const ask = $('#sr-ask', body); if (ask) ask.onclick = () => { const v = $('#sr-q', box).value; close(); J.show('assistant'); const t = $('#as-text'); if (t) { t.value = v; t.dispatchEvent(new Event('input')); t.focus(); } };
 }
 
+// ⌘K or Ctrl+K anywhere (and "/" when not typing) opens it, like a desktop app
+document.addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable;
+  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); box && !box.hidden ? close() : open(); }
+  else if (e.key === '/' && !typing && !document.querySelector('dialog[open]')) { e.preventDefault(); open(); }
+});
 const btn = $('#top-search');
 if (btn) { btn.onclick = open; btn.setAttribute('aria-label', L('Search everything', 'ابحث في كل شيء')); }
 window.JundSearch = { open, close, isOpen: () => !!box && !box.hidden };

@@ -2210,3 +2210,27 @@ body.sr-open { overflow: hidden; }
 .ag-off { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 0 8px; border-radius: 12px; background: color-mix(in srgb, #3FBF7F 12%, var(--surface)); border: 1px solid color-mix(in srgb, #3FBF7F 35%, var(--line)); }
 .ag-off span { flex: 1; display: flex; flex-direction: column; } .ag-off small { color: var(--ink-2); font-size: .78rem; }
 .ag-addoff { display: block; margin: 0 0 10px; }
+/* frosted glass over a wallpaper (from the "slop dashboard to product" reel): cards become translucent and blur the picture */
+:root[data-app-bg="desert"], :root[data-app-bg="nightsky"] { --glass: 1; }
+:root[data-app-bg="desert"] #app-bg-layer, :root[data-app-bg="nightsky"] #app-bg-layer { opacity: 1; }
+:root[data-app-bg="desert"] :is(.card, .hm-card, .tl-fold, .lb-card:not([data-c]), .lb-card[data-c=""], .kp-card[data-c=""], .mx-group, .pl-line, .settings-sec, .ci-card, .as-dock .as-input, .dr-panel, .tabbar),
+:root[data-app-bg="nightsky"] :is(.card, .hm-card, .tl-fold, .lb-card:not([data-c]), .lb-card[data-c=""], .kp-card[data-c=""], .mx-group, .pl-line, .settings-sec, .ci-card, .as-dock .as-input, .dr-panel, .tabbar) {
+  background: color-mix(in srgb, var(--surface) 70%, transparent) !important; -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25); border-color: color-mix(in srgb, #fff 22%, transparent) !important; }
+/* the main button feels like a win when you hover it (computers) */
+@media (hover: hover) {
+  button.primary { transition: transform .15s ease, box-shadow .15s ease, filter .15s; }
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); filter: brightness(1.05); }
+  button.primary:active { transform: translateY(0) scale(.98); box-shadow: none; }
+}
+/* the ⌘K palette: "most used" actions first */
+.sr-kbd { margin-inline-start: auto; font-size: .72rem; color: var(--ink-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+/* wallpapers: the composer's white fade and the home tiles join the glass */
+:root[data-app-bg="desert"] .as-dock, :root[data-app-bg="nightsky"] .as-dock { background: none !important; }
+:root[data-app-bg="desert"] .hm-tiles > *, :root[data-app-bg="nightsky"] .hm-tiles > * { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+/* on a computer the palette floats in the middle like a desktop app's ⌘K, instead of covering the screen */
+@media (min-width: 900px) {
+  .sr { inset: 0; background: color-mix(in srgb, #000 28%, transparent); align-items: center; padding-top: 12vh; }
+  .sr > * { width: min(640px, 92vw); background: var(--bg); }
+  .sr-bar { border-radius: 18px 18px 0 0; }
+  .sr-body { flex: 0 1 auto; max-height: 60vh; border-radius: 0 0 18px 18px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+}

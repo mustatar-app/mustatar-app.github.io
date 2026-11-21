@@ -2,7 +2,7 @@ name: Test on an Android phone
 # The real app on an Android emulator: Studio save and share, video, carousel, sharing words, reading aloud.
 on:
   pull_request:
-    paths: ['android/**', 'native.js', 'studio.js', 'app.js', 'voice.js', 'recorder.js', 'media.js', 'dictate.js', 'tests/phone_test.py', 'tests/phone_audio_test.py', 'tests/phone_more_test.py', 'phone.js', 'calendar.js', 'brief.js', '.github/workflows/phone-test.yml']
+    paths: ['android/**', 'alarm.js', 'native.js', 'studio.js', 'app.js', 'voice.js', 'recorder.js', 'media.js', 'dictate.js', 'tests/phone_test.py', 'tests/phone_audio_test.py', 'tests/phone_more_test.py', 'phone.js', 'calendar.js', 'brief.js', '.github/workflows/phone-test.yml']
   workflow_dispatch:
 permissions:
   contents: read

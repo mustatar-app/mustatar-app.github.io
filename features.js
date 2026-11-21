@@ -223,8 +223,9 @@ function home() {
   const today = items.filter(x => x.d === t && !x.late), late = items.filter(x => x.late);
   const np = nextPrayer();
   const parts = [];
-  if (today.length) parts.push(`${today.length} today`);
-  if (late.length) parts.push(`<span style="color:var(--danger)">${late.length} overdue</span>`);
+  const A = window.ZadLang === 'ar';
+  if (today.length) parts.push(A ? `${today.length} اليوم` : `${today.length} today`);
+  if (late.length) parts.push(`<span style="color:var(--danger)">${A ? `${late.length} متأخرة` : `${late.length} overdue`}</span>`);
   b.innerHTML = parts.length ? '· ' + parts.join(' · ') : '';
   prayerCard(np);
   renderHabits();
@@ -235,11 +236,12 @@ function morningNotice(today, late) {
   const now = new Date(), t = iso(now);
   if (now.getHours() < 4 || store.get('briefShown') === t) return;
   store.set('briefShown', t);
-  const top = today.slice(0, 3).map(x => (x.time ? x.time + ' ' : '') + x.e.title).join(', ');
-  const body = (today.length ? `Today: ${top}${today.length > 3 ? '…' : ''}` : 'Nothing planned today.') + (late.length ? ` · ${late.length} overdue` : '');
+  const A = window.ZadLang === 'ar', tm = s => A ? String(s).replace(/\s?am\b/i, ' ص').replace(/\s?pm\b/i, ' م') : s;
+  const top = today.slice(0, 3).map(x => (x.time ? tm(x.time) + ' ' : '') + x.e.title).join(A ? '، ' : ', ');
+  const body = (today.length ? (A ? `اليوم: ${top}` : `Today: ${top}`) + (today.length > 3 ? '…' : '') : (A ? 'لا شيء مخطط اليوم.' : 'Nothing planned today.')) + (late.length ? (A ? ` · ${late.length} متأخرة` : ` · ${late.length} overdue`) : '');
   if (!today.length && !late.length) return;   // nothing to say: no message
   toast('☀ ' + body, 5000);
-  try { if (Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification('Good morning', { body, tag: 'brief-' + t, icon: 'icon-192.png' })); } catch {}
+  try { if (Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification(window.ZadLang === 'ar' ? 'صباح الخير' : 'Good morning', { body, tag: 'brief-' + t, icon: 'icon-192.png' })); } catch {}
 }
 
 /* ---------- calendar additions: Hijri day numbers and prayer times ---------- */

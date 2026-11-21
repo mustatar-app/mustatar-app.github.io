@@ -45,7 +45,7 @@ const PLACES = () => [
   ['Left to do', 'ما تبقّى', 'pending left unfinished where I stopped ما تبقى توقفت', () => J.show('pending')],
   ['Reminders', 'التذكيرات', 'reminders notifications coming التذكيرات الإشعارات', () => J.show('inbox')],
   ['Studio: posts and stories', 'الاستوديو: منشورات وستوري', 'studio post story instagram carousel image ستوري منشور صورة', () => J.show('studio')],
-  ['Prayer times', 'أوقات الصلاة', 'prayer salah adhan times qibla الصلاة الأذان', meRow('pin')],
+  ['Prayer times', 'أوقات الصلاة', 'prayer salah adhan times qibla fajr dhuhr asr maghrib isha الصلاة الأذان الفجر الظهر العصر المغرب العشاء', meRow('pin')],
   ['Plan and usage', 'الخطة والاستخدام', 'plan usage limits subscription الخطة الاستخدام الحدود اشتراك', () => window.JundPlan?.usage()],
   ['Text size', 'حجم النص', 'font size big small large text الخط حجم كبير صغير', meRow('sun')],
   ['Theme: light or dark', 'المظهر: فاتح أو داكن', 'theme dark light night day mode المظهر داكن فاتح ليلي', meRow('sun')],
@@ -67,6 +67,7 @@ const PLACES = () => [
 let box, timer = 0;
 function open() {
   if (!box) build();
+  const tt = document.getElementById('toast'); if (tt && !tt.hidden) tt.click();   // a message would cover the search box
   box.hidden = false; document.body.classList.add('sr-open');
   requestAnimationFrame(() => { box.classList.add('in'); const i = $('#sr-q', box); i.value = ''; run(''); setTimeout(() => i.focus(), 60); });
 }
@@ -81,7 +82,9 @@ function build() {
   $('#sr-q', box).oninput = e => { clearTimeout(timer); timer = setTimeout(() => run(e.target.value), 120); };
   $('#sr-q', box).onkeydown = e => { if (e.key === 'Enter') $('.sr-it', box)?.click(); if (e.key === 'Escape') close(); };
 }
-const hit = (q, ...parts) => { const t = norm(parts.join(' ')); return q.split(/\s+/).filter(Boolean).every(w => t.includes(w)); };
+// a word matches with or without the Arabic article and the small joined words (ال، لل، بال، وال، فال)
+const stem = w => w.length > 4 ? w.replace(/^(وال|فال|بال|كال|لل|ال)/, '') : w;
+const hit = (q, ...parts) => { const t = norm(parts.join(' ')); return q.split(/\s+/).filter(Boolean).every(w => t.includes(w) || t.includes(stem(w))); };
 function snippet(text, q) {
   const t = String(text || '').replace(/\s+/g, ' '), n = norm(t), w = q.split(/\s+/)[0] || '', i = w ? n.indexOf(w) : -1;
   if (i < 0) return esc(t.slice(0, 90));
@@ -100,6 +103,8 @@ async function run(raw) {
   if (evs.length) groups.push([L('Tasks and calendar', 'المهام والتقويم'), evs.map(e => ({ t: e.title, s: [e.date || L('no date', 'بلا تاريخ'), e.time, e.done ? '✓' : ''].filter(Boolean).join(' · '), i: e.done ? '☑' : '☐', go: () => window.JundCal?.open(e.id) }))]);
   const hs = (store.get('habits', []) || []).filter(h => hit(q, h.name, h.target)).slice(0, 6);
   if (hs.length) groups.push([L('Habits', 'العادات'), hs.map(h => ({ t: h.name, s: h.target || '', i: '◎', go: () => J.show('habits') }))]);
+  const als = (window.JundAlarm?.all?.() || []).filter(a => hit(q, a.label, a.time, L('alarm', 'منبه'))).slice(0, 4);
+  if (als.length) groups.push([L('Alarms', 'المنبّهات'), als.map(a => ({ t: `${a.time}${a.label ? ' · ' + a.label : ''}`, s: a.on === false ? L('off', 'متوقف') : L('on', 'مفعّل'), i: '⏰', go: () => window.JundAlarm?.open() }))]);
   const cds = (window.JundCount?.list?.() || []).filter(c => hit(q, c.title || c.name)).slice(0, 4);
   if (cds.length) groups.push([L('Countdowns', 'العدّ التنازلي'), cds.map(c => ({ t: c.title || c.name, s: c.date || '', i: '⏳', go: () => window.JundCount?.open('list') }))]);
   paint(body, groups, q, true);

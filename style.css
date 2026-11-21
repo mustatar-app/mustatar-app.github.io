@@ -2008,7 +2008,7 @@ details.ag-day[open] > summary h3::before { transform: rotate(90deg); }
 details.ag-day.is-today > summary h3 { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .ag-day h3 .ag-sum { color: var(--ink-2); font-weight: 400; font-size: .8rem; }
 .ag-sd.sel b, .ag-sd.sel.today b { color: var(--on-accent); }
-.toast[popover] { inset: auto; left: 50%; margin: 0; border: 0; overflow: visible; }
+.toast[popover] { top: auto; right: auto; left: 50%; margin: 0; border: 0; overflow: visible; }
 .toast[popover]:not(:popover-open) { display: none; }
 /* text size */
 .ts-seg { display: flex; margin-top: 6px; }
@@ -2091,7 +2091,7 @@ body.sr-open { overflow: hidden; }
 .al-t { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: none; color: var(--ink); font: inherit; text-align: start; padding: 0; }
 .al-t b { font-size: 1.9rem; font-weight: 600; letter-spacing: .5px; direction: ltr; } .al-t small { color: var(--ink-2); }
 .al-form { padding: 12px; border: 1px dashed var(--line); border-radius: 14px; }
-.al-ft { display: flex; gap: 8px; } .al-ft input[type=time] { width: 9.5em; font-size: 1.2rem; } .al-ft input:not([type]) { flex: 1; min-width: 0; }
+.al-ft { display: flex; flex-direction: column; gap: 8px; } .al-ft input[type=time] { width: 100%; font-size: 1.6rem; text-align: center; min-height: 54px; } .al-ft input:not([type]) { width: 100%; }
 .al-days { display: flex; gap: 6px; margin: 10px 0 4px; flex-wrap: wrap; }
 .al-days button { flex: 1; min-width: 38px; min-height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
 .al-days button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }

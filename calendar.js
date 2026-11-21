@@ -439,6 +439,7 @@ function banner() {
   const t = today(), items = on(t).filter(e => !isDone(e, t)), late = overdue();
   if (!items.length && !late.length) { b.hidden = true; return; }
   b.hidden = false;
+  if (window.ZadLang === 'ar') { b.innerHTML = `<b>اليوم:</b> ${items.length ? items.slice(0, 3).map(e => `${e.time ? clock(e.time) + ' ' : ''}<span dir="auto">${esc(e.title)}</span>`).join(' · ') + (items.length > 3 ? ` +${items.length - 3}` : '') : 'لا شيء'}${late.length ? `<br><span style="color:var(--danger)">${late.length} غير منجزة من قبل</span>` : ''} · <button type="button" class="link" id="due-open">افتح التقويم</button>`; $('#due-open').onclick = () => { goToday(); J.show('calendar'); }; return; }
   b.innerHTML = `<b>Today:</b> ${items.length ? items.slice(0, 3).map(e => `${e.time ? hm(e.time) + ' ' : ''}<span dir="auto">${esc(e.title)}</span>`).join(' · ') + (items.length > 3 ? ` +${items.length - 3}` : '') : 'nothing left'}
     ${late.length ? `<br><span style="color:var(--danger)">${late.length} unfinished from earlier</span>` : ''}
     · <button type="button" class="link" id="due-open">Open calendar</button>`;

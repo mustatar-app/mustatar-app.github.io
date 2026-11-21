@@ -391,11 +391,25 @@ window.addEventListener('popstate', e => {
   const prev = backStack.pop() || (screenNow !== 'assistant' ? 'assistant' : null);
   if (prev) { fromBack = true; show(prev); fromBack = false; history.pushState({ mst: 'app' }, ''); return; }
   // on Today with nothing to go back to: a second press leaves the app
-  if (Date.now() - leaveArmed < 2500) { history.back(); return; }
+  if (Date.now() - leaveArmed < 2500) {
+    const signin = /google\.html|accounts\.google|signin/.test(document.referrer) || store.get('signinLinkAt', 0) > Date.now() - 864e5 * 30;
+    if (!signin) { history.back(); return; }
+    history.pushState({ mst: 'app' }, ''); show('assistant'); return;
+  }
   leaveArmed = Date.now(); history.pushState({ mst: 'app' }, '');
   window.JundCal?.toast?.(window.ZadLang === 'ar' ? 'اضغط رجوع مرة أخرى للخروج' : 'Press back again to leave');
 });
 window.JundBack = () => { const prev = backStack.pop() || 'assistant'; fromBack = true; show(prev); fromBack = false; };
+// the Android app's back button asks here: 'done' (handled) or 'exit' (leave the app); old pages are never walked back to
+window.JundHardBack = () => {
+  if (closeTopLayer()) return 'done';
+  const prev = backStack.pop() || (screenNow !== 'assistant' ? 'assistant' : null);
+  if (prev) { fromBack = true; show(prev); fromBack = false; return 'done'; }
+  if (Date.now() - leaveArmed < 2500) return 'exit';
+  leaveArmed = Date.now();
+  window.JundCal?.toast?.(window.ZadLang === 'ar' ? 'اضغط رجوع مرة أخرى للخروج' : 'Press back again to leave');
+  return 'done';
+};
 
 function show(name) {
   remember(name); screenNow = name;
@@ -806,7 +820,10 @@ async function serverFetch(path, init = {}) {
   catch (e) {
     if (e.name === 'AbortError') throw e;
     if (navigator.onLine === false) throw Object.assign(new Error('No internet connection right now.'), { code: 'offline' });
-    throw Object.assign(new Error('Could not reach Mustatar’s AI server. Try again in a moment.'), { code: 'ai_busy' });
+    // one quiet second try (a weak signal often drops only one request); a stream body cannot be sent twice
+    const again = !(init.body instanceof ReadableStream);
+    if (again) { await new Promise(r => setTimeout(r, 900)); try { res = await fetch(base + path, init); } catch {} }
+    if (!res) throw Object.assign(new Error(path === '/write' || path.startsWith('/ask') ? 'Could not reach Mustatar’s AI server. Try again in a moment.' : 'Could not reach Mustatar’s server. Try again in a moment.'), { code: 'ai_busy' });
   }
   if (!res.ok) {
     let j = {}; try { j = await res.json(); } catch {}
@@ -819,6 +836,7 @@ async function serverFetch(path, init = {}) {
     if (j.code === 'owner') throw Object.assign(new Error('wrong code'), { code: 'owner', status: 403 });
     if (j.code === 'bad') throw Object.assign(new Error('The AI refused this request.'), { code: 'bad', status: 400, detail: j.error || '' });
     if (j.code === 'ai_busy' || (j.code === 'ai' && Number(j.status) >= 500) || (!j.code && [502, 503, 504].includes(res.status))) throw aiRetryError('ai_busy');
+    if (j.error && !/^\/(write|ask|transcribe|read-pages)/.test(path)) throw Object.assign(new Error(String(j.error).slice(0, 200)), { code: j.code || 'server', status: res.status });
     throw Object.assign(new Error('The server could not write right now (' + (res.status) + '). Try again in a few minutes.'), { code: 'server', status: res.status });
   }
   return res;
@@ -1086,7 +1104,40 @@ function setBar(wrapSel, barSel, frac) {
   if (frac == null || !isFinite(frac)) { w.classList.add('busy'); return; }
   w.classList.remove('busy'); b.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
 }
+// the app's error messages in Arabic (the English ones are matched by their start)
+const ERR_AR = [
+  [/^No internet connection/, 'لا يوجد اتصال بالإنترنت الآن.'],
+  [/^Could not reach Mustatar’s AI server/, 'تعذّر الوصول إلى خادم الذكاء في مستطر. حاول بعد لحظة.'],
+  [/^Could not reach Mustatar’s server/, 'تعذّر الوصول إلى خادم مستطر. حاول بعد لحظة.'],
+  [/^Could not connect/, 'تعذّر الاتصال. تأكد من الإنترنت وحاول مرة أخرى.'],
+  [/^The AI is receiving too many requests|^Too many requests/, 'طلبات كثيرة على الذكاء الآن. انتظر قليلًا ثم أعد المحاولة.'],
+  [/^The AI service is busy|^The service is busy/, 'خدمة الذكاء مشغولة أو انقطع الرد. أعد المحاولة.'],
+  [/^The AI took too long/, 'تأخر رد الذكاء الاصطناعي. أعد المحاولة.'],
+  [/^Too big for one go/, 'كبير جدًا دفعة واحدة. اختر صفحات أقل أو ملفًا أقصر.'],
+  [/^The AI server could not read this attachment/, 'لم يستطع الخادم قراءة هذا المرفق. حاول مرة أخرى أو اختر ملفًا أصغر.'],
+  [/^The AI refused this request/, 'رفض الذكاء هذا الطلب.'],
+  [/^The server could not write right now/, 'تعذّر على الخادم الكتابة الآن. حاول بعد دقائق.'],
+  [/^Please sign in again|please sign in/i, 'سجّل الدخول من جديد من فضلك.'],
+  [/^The answer came back (incomplete|messy)/, 'جاء الرد ناقصًا أو غير مرتب. حاول مرة أخرى.'],
+  [/^No translation came back/, 'لم تصل ترجمة. حاول مرة أخرى.'],
+  [/^No ideas came back/, 'لم تصل أفكار. حاول مرة أخرى.'],
+  [/^No readable text was found/, 'لم يوجد نص مقروء في هذا الملف.'],
+  [/^Something went wrong/, 'حدث خطأ. أرسل لي صورة من هذه الرسالة.'],
+  [/^Stopped\./, 'توقف.'],
+  [/^The internet dropped/, 'انقطع الإنترنت. ما تبقى محفوظ وسيكمل تلقائيًا عند عودة الاتصال.'],
+  [/^this note is too big to share/, 'هذه الملاحظة كبيرة على المشاركة (قلّل الصور).'],
+  [/^sharing failed on the server/, 'تعذّرت المشاركة على الخادم. حاول مرة أخرى بعد قليل.'],
+  [/^sharing is not set up/, 'المشاركة غير متاحة الآن.'],
+  [/^nothing to share/, 'لا شيء لمشاركته في هذه الملاحظة.'],
+  [/^Mustatar is already making notes/, 'مستطر يكتب ملاحظات الآن. انتظر حتى ينتهي.'],
+];
 function errText(e) {
+  const m = errTextEn(e);
+  if (window.ZadLang !== 'ar' || /[\u0600-\u06ff]/.test(m)) return m;
+  for (const [re, a] of ERR_AR) if (re.test(m)) return a;
+  return m;
+}
+function errTextEn(e) {
   if (!e) return 'Something went wrong.';
   if (e.name === 'AbortError' && !/GPU|mapAsync|Buffer/i.test(e.message || '')) return 'Stopped.';
   let raw = (e.message || (typeof e === 'string' ? e : '') || e.name || '').toString();
@@ -3209,15 +3260,20 @@ function saveProfile() { cloud.putData('me', { saved: Date.now(), me: store.get(
 function noteUse(name) { if (!store.get('learnOn', true)) return; const u = store.get('usage', {}); u[name] = (u[name] || 0) + 1; store.set('usage', u); }
 async function renderLearned() {
   const el = $('#me-learned'); if (!el) return;
-  if (!store.get('learnOn', true)) { el.textContent = 'Learning is off. Mustatar only knows what you wrote above.'; return; }
+  if (!store.get('learnOn', true)) { el.textContent = window.ZadLang === 'ar' ? 'التعلّم متوقف. يعرف مستطر ما كتبته أعلاه فقط.' : 'Learning is off. Mustatar only knows what you wrote above.'; return; }
   const u = store.get('usage', {}), top = Object.entries(u).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
   const lessons = await idb.all().catch(() => []);
   const subj = {}; lessons.forEach(l => { const n = l.subject?.name; if (n) subj[n] = (subj[n] || 0) + 1; });
   const topSubj = Object.entries(subj).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+  const A = window.ZadLang === 'ar', LL = (en, a) => A ? a : en;
+  const NAMES = { assistant: LL('Today', 'اليوم'), library: LL('Notes', 'الملاحظات'), calendar: LL('Calendar', 'التقويم'), me: LL('Me', 'أنا'), studio: LL('Studio', 'الاستوديو'), new: LL('New notes', 'ملاحظات جديدة'), recordings: LL('Recordings', 'التسجيلات'), settings: LL('Settings', 'الإعدادات'), habits: LL('Habits', 'العادات'), result: LL('Notes', 'الملاحظات'), pending: LL('Left to do', 'ما تبقّى'), inbox: LL('Reminders', 'التذكيرات') };
+  const nice = top.map(k => NAMES[k] || k);
+  const nH = (store.get('habits', []) || []).length, nE = (store.get('events', []) || []).length;
+  el.setAttribute('data-noi18n', '');
   el.innerHTML = [
-    `${ar(lessons.length)} notes saved` + (topSubj.length ? `, mostly in ${topSubj.map(esc).join(', ')}` : '') + '.',
-    top.length ? `You use ${top.map(esc).join(', ')} the most.` : 'Nothing learned yet from how you use the app.',
-    `${ar((store.get('habits', []) || []).length)} habits, ${ar((store.get('events', []) || []).length)} calendar items.`,
+    LL(`${lessons.length} notes saved`, `${ar(lessons.length)} ملاحظة محفوظة`) + (topSubj.length ? LL(`, mostly in ${topSubj.map(esc).join(', ')}`, `، أكثرها في ${topSubj.map(esc).join('، ')}`) : '') + '.',
+    nice.length ? LL(`You use ${nice.map(esc).join(', ')} the most.`, `أكثر ما تستخدمه: ${nice.map(esc).join('، ')}.`) : LL('Nothing learned yet from how you use the app.', 'لم يتعلّم شيئًا بعد من طريقة استخدامك.'),
+    LL(`${nH} habits, ${nE} calendar items.`, `${ar(nH)} عادة، و${ar(nE)} عنصرًا في التقويم.`),
   ].map(t => `<div>${t}</div>`).join('');
 }
 
@@ -3231,6 +3287,27 @@ function applyTheme() {
 }
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { if (store.get('theme', 'auto') === 'auto') applyTheme(); });
 applyTheme();
+/* text size: bigger or smaller words in the whole app (for people who need large text, or like it small);
+   "Phone" follows the phone's own text size (the Android app passes it in), kept within what the screens can hold */
+const TEXT_SIZES = [['phone', 'Phone', 'الهاتف', 0], ['s', 'A−', 'أ−', 0.9], ['m', 'A', 'أ', 1], ['l', 'A+', 'أ+', 1.15], ['xl', 'A++', 'أ++', 1.3]];
+function textScale() {
+  const k = store.get('textSize', 'phone'), f = TEXT_SIZES.find(x => x[0] === k);
+  if (f && f[3]) return f[3];
+  const phone = Number(store.get('phoneFontScale', 1)) || 1;   // 1 in a browser (the browser already applies its own size)
+  return Math.max(0.9, Math.min(1.35, phone));
+}
+function applyTextSize() {
+  document.documentElement.style.fontSize = (100 * textScale()).toFixed(1) + '%';
+  document.documentElement.dataset.textSize = store.get('textSize', 'phone');
+  const box = $('#text-size'); if (!box) return;
+  const A = window.ZadLang === 'ar', k = store.get('textSize', 'phone');
+  box.innerHTML = TEXT_SIZES.map(([id, en, ar, f]) => `<button type="button" data-ts="${id}" class="${k === id ? 'on' : ''}" style="${f ? `font-size:${f}rem` : ''}" aria-label="${A ? 'حجم النص' : 'Text size'} ${A ? ar : en}">${A ? ar : en}</button>`).join('');
+  box.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { store.set('textSize', b.dataset.ts); applyTextSize(); });
+}
+applyTextSize();
+// the Android app tells the phone's text size (it no longer enlarges the page by itself, so screens do not break)
+window.addEventListener('mustatar-native-ready', applyTextSize);
+setTimeout(async () => { try { const r = await window.JundNative?.ask?.({ action: 'appInfo' }, 3000); if (r?.fontScale) { store.set('phoneFontScale', r.fontScale); applyTextSize(); } } catch {} }, 1200);
 
 /* ---------- the server: is it up? ---------- */
 async function checkServer() {
@@ -3402,7 +3479,7 @@ if ('serviceWorker' in navigator) {
   // after updating by itself: a short note, once
   try { const d = sessionStorage.getItem('jn_draft'); sessionStorage.removeItem('jn_draft'); if (d) setTimeout(() => { const t = $('#as-text'); if (t && !t.value) t.value = d; }, 1200); if (sessionStorage.getItem('jn_updated')) { sessionStorage.removeItem('jn_updated'); setTimeout(() => window.JundCal?.toast?.(window.ZadLang === 'ar' ? '✓ تم تحديث مستطر' : '✓ Mustatar is up to date'), 900); } } catch {}
 }
-$('#app-version').textContent = 'version ' + APP_VERSION;
+$('#app-version').textContent = (window.ZadLang === 'ar' ? 'الإصدار ' : 'version ') + APP_VERSION;
 setTimeout(checkServer, 1200);
 $('#lib-search').addEventListener('input', () => renderLibrary());
 // ask a question across all your notes: the assistant answers from them and names the lesson

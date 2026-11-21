@@ -142,7 +142,7 @@ function me() {
       ${row('words', L('My words', 'كلماتي'), L('Names and terms the app should hear and spell right', 'أسماء ومصطلحات يسمعها التطبيق ويكتبها صحيحة'), (store.get('myWords', '') || '').split(/[,،\n]/).filter(w => w.trim()).length || '')}
       ${row('tools', L('Tools', 'الأدوات'), '', nTools ? L(nTools + ' on', nTools + ' مفعّلة') : '')}
       ${row('pin', L('Prayer and calendar', 'الصلاة والتقويم'), '', esc(place))}
-      ${row('sun', L('Appearance', 'المظهر'), '', esc(theme))}
+      ${row('sun', L('Appearance and text size', 'المظهر وحجم النص'), '', esc(theme))}
       ${row('shield', L('Account and privacy', 'الحساب والخصوصية'), '')}
       ${row('save', L('Saving and backup', 'الحفظ والنسخ الاحتياطي'), '')}
       ${row('send', L('Send feedback', 'أرسل ملاحظة'), '')}

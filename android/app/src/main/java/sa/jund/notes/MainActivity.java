@@ -77,6 +77,9 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        // the app sizes its own words (Me → Appearance → Text size, "Phone" follows the phone's setting within safe limits),
+        // so the page is not blown up by a very large phone font and nothing spills out of its box
+        web.getSettings().setTextZoom(100);
         // Studio plays the chosen video while it makes the new one (a few moments after the tap): allow it
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.getSettings().setGeolocationEnabled(true);
@@ -211,7 +214,8 @@ public class MainActivity extends Activity {
                             case "appInfo": {
                                 android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
                                 answer(reply, command.optString("job"), new JSONObject().put("ok", true).put("versionCode", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : (long) pi.versionCode)
-                                    .put("versionName", pi.versionName).put("canInstall", getPackageManager().canRequestPackageInstalls()));
+                                    .put("versionName", pi.versionName).put("canInstall", getPackageManager().canRequestPackageInstalls())
+                                    .put("fontScale", (double) getResources().getConfiguration().fontScale));
                                 return;
                             }
                             // updating itself: download the new version, then Android's installer asks the person to confirm
@@ -659,9 +663,16 @@ public class MainActivity extends Activity {
         if (web != null) web.evaluateJavascript("window.JundCal?.pushSync()", null);
     }
 
+    /* the back button: the app decides (close a window, go to the previous screen, or leave). It never walks back
+       through old pages such as the sign-in page. */
     @Override public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        if (web == null) { super.onBackPressed(); return; }
+        web.evaluateJavascript("(window.JundHardBack ? window.JundHardBack() : 'old')", v -> {
+            String r = v == null ? "" : v.replace("\"", "");
+            if ("done".equals(r)) return;
+            if ("old".equals(r) && web.canGoBack()) { web.goBack(); return; }
+            moveTaskToBack(true);
+        });
     }
 
     @Override protected void onDestroy() {

@@ -281,6 +281,7 @@ function closeEditor() {
   $('#st-edit').hidden = true;
   $('#st-text').blur();
   if (!l.text.trim()) { layers = layers.filter(x => x !== l); sel = layers.at(-1) || null; }
+  else if (!l.of) fitText(l);
   sync(); draw();
 }
 function syncEditor() {
@@ -377,15 +378,28 @@ async function renderDrafts() {
     closeSheet(); sync(); draw();
     if (d.video) status('This draft had a video: pick it again with “Photo or video”.');
   });
-  $$('[data-dx]', box).forEach(b => b.onclick = async () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Delete?'; return; } await tx('readwrite', s => s.delete(b.dataset.dx)); if (draftId === b.dataset.dx) draftId = null; renderDrafts(); });
+  $$('[data-dx]', box).forEach(b => b.onclick = async () => { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = trAr('Delete?'); return; } await tx('readwrite', s => s.delete(b.dataset.dx)); if (draftId === b.dataset.dx) draftId = null; renderDrafts(); });
 }
 
 function addLayer(o) {
   if (layers.length || o.text) snap();
   const l = { id: newId(), text: o.text ?? 'اكتب هنا', look: o.look || 'classic', font: o.font || LOOKS[o.look || 'classic'].font,
     color: o.color || '#ffffff', size: o.size || 0.075, align: o.align || 'center', x: 0.5, y: 0.4 + (layers.length % 3) * 0.12, wrap: o.wrap || 0.84, rot: o.rot || 0 };
-  layers.push(l); sel = l; sync(); draw();
+  layers.push(l); fitText(l); sel = l; sync(); draw();
   return l;
+}
+// a long text is made smaller until all of it (and its translation) fits on the picture
+function fitText(base) {
+  const tr = layers.filter(x => x.of === base.id);
+  for (let i = 0; i < 24; i++) {
+    const h = hOf(base) + tr.reduce((a, t) => a + hOf(t) + 0.025, 0);
+    if (h <= 0.86 || base.size <= 0.03) break;
+    base.size = Math.max(0.03, base.size * 0.9); placeTr(base);
+  }
+  const h = hOf(base) + tr.reduce((a, t) => a + hOf(t) + 0.025, 0);
+  // keep the whole block inside the picture
+  const top = base.y - hOf(base) / 2;
+  if (top < 0.06 || top + h > 0.94) { base.y = Math.max(0.06, Math.min(0.94 - h, top)) + hOf(base) / 2; placeTr(base); }
 }
 
 /* ---------- media ---------- */
@@ -702,6 +716,8 @@ function placeSel() {
 }
 
 /* ---------- saved texts ---------- */
+// a light text colour is shown on a dark tile (and a dark one on a light tile), so it can be read in any theme
+const light = c => { const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(String(c || '')); if (!m) return true; const [r, g, b] = m.slice(1).map(h => parseInt(h, 16)); return (r * 299 + g * 587 + b * 114) / 1000 > 150; };
 const saved = () => store.get('studioSaved', []);
 function saveText(l) {
   const list = saved().filter(x => !(x.text === l.text && x.look === l.look && x.font === l.font && x.color === l.color));
@@ -714,7 +730,7 @@ function renderSaved() {
   const box = $('#st-saved'); if (!box) return;
   const list = saved();
   const nb = $('#st-saved-n'); if (nb) nb.textContent = list.length ? (AR ? ar(list.length) : list.length) : '';
-  box.innerHTML = list.length ? list.map(x => `<div class="sx-sv"><button type="button" class="sx-sv-t" data-use="${x.id}" dir="auto" style="font-family:${(FONTS[x.font] || FONTS.modern).css};font-weight:${(FONTS[x.font] || FONTS.modern).w};color:${x.color === '#111111' ? 'inherit' : x.color}">${esc(x.text.slice(0, 90))}${x.text.length > 90 ? '…' : ''}</button><button type="button" class="x ghost small" data-rm="${x.id}" aria-label="${L('Remove', 'إزالة')}">×</button></div>`).join('')
+  box.innerHTML = list.length ? list.map(x => `<div class="sx-sv"><button type="button" class="sx-sv-t" data-use="${x.id}" dir="auto" style="font-family:${(FONTS[x.font] || FONTS.modern).css};font-weight:${(FONTS[x.font] || FONTS.modern).w};color:${x.color};background:${light(x.color) ? '#1d1f24' : '#f4f4f6'}">${esc(x.text.slice(0, 400))}</button><button type="button" class="x ghost small" data-rm="${x.id}" aria-label="${L('Remove', 'إزالة')}">×</button></div>`).join('')
     : `<p class="muted">${L('Texts you save appear here. Next time, one tap puts the same text and look back. Tap ☆ while writing to save a text.', 'النصوص التي تحفظها تظهر هنا، وبضغطة واحدة تعود بنفس الشكل. اضغط ☆ أثناء الكتابة لحفظ النص.')}</p>`;
   $$('[data-use]', box).forEach(b => b.onclick = () => { const x = saved().find(s => s.id === b.dataset.use); if (x) { closeSheet(); addLayer({ ...x }); } });
   $$('[data-rm]', box).forEach(b => b.onclick = () => { store.set('studioSaved', saved().filter(s => s.id !== b.dataset.rm)); renderSaved(); });
@@ -723,7 +739,7 @@ function renderSaved() {
 /* ---------- carousel: several slides in one go ---------- */
 async function carousel() {
   const slides = $('#st-car').value.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-  if (!slides.length) { $('#st-car-st').textContent = 'Write the slides first.'; return; }
+  if (!slides.length) { $('#st-car-st').textContent = trAr('Write the slides first.'); return; }
   await loadFonts();
   const base = sel || layers[0] || { look: 'classic', font: 'modern', color: '#ffffff', size: 0.07, align: 'center' };
   const keep = layers, keepSel = sel, [W, H] = SIZES[size], files = [];
@@ -736,24 +752,24 @@ async function carousel() {
     files.push(new File([b], `carousel-${stamp()}-${i + 1}.jpg`, { type: 'image/jpeg' }));
   }
   layers = keep; sel = keepSel; draw();
-  if (navigator.canShare?.({ files })) { try { await navigator.share({ files }); $('#st-car-st').textContent = '✓ Shared ' + files.length + ' slides.'; return; } catch (e) { if (e.name === 'AbortError') return; } }
+  if (navigator.canShare?.({ files })) { try { await navigator.share({ files }); $('#st-car-st').textContent = trAr('✓ Shared ' + files.length + ' slides.'); return; } catch (e) { if (e.name === 'AbortError') return; } }
   if (window.JundNative) {
     const r = await window.JundNative.saveAll(files);
-    $('#st-car-st').textContent = r.ok ? `✓ Saved ${files.length} slides in your gallery (${r.where === 'chosen' ? 'the place you chose' : r.where}).` : r.cancelled ? '' : '✗ Could not save: ' + (r.error || '');
+    $('#st-car-st').textContent = trAr(r.ok ? `✓ Saved ${files.length} slides in your gallery (${r.where === 'chosen' ? 'the place you chose' : r.where}).` : r.cancelled ? '' : '✗ Could not save: ' + (r.error || ''));
     return;
   }
   for (const f of files) { J.download(f, f.name); await new Promise(r => setTimeout(r, 400)); }
-  $('#st-car-st').textContent = `✓ Saved ${files.length} slides to your downloads.`;
+  $('#st-car-st').textContent = trAr(`✓ Saved ${files.length} slides to your downloads.`);
 }
 async function carouselFromNote() {
   const l = (await J.allLessons()).filter(x => !x.draft).sort((a, b) => b.date.localeCompare(a.date))[0];
-  if (!l) { $('#st-car-st').textContent = 'Make some notes first.'; return; }
-  $('#st-car-st').textContent = 'Writing slides from “' + (l.notes?.title || l.unit) + '”…';
+  if (!l) { $('#st-car-st').textContent = trAr('Make some notes first.'); return; }
+  $('#st-car-st').textContent = trAr('Writing slides from “' + (l.notes?.title || l.unit) + '”…');
   const text = window.JundFeatures.lessonText(l);
   try {
-    const r = await J.callServer({ json: false, maxTokens: 2000, system: `Turn these notes into an Instagram carousel of 6 slides, in the same language as the notes. Slide 1 is a hook (max 10 words). Slides 2–5: one clear point each (max 30 words). Slide 6: a short takeaway. Separate slides with one empty line. Only the slide texts, no numbers, no labels. Stay faithful to the notes.`, user: text });
-    $('#st-car').value = r.text.trim(); $('#st-car-st').textContent = '✓ Check the slides, then make the carousel.';
-  } catch (e) { $('#st-car-st').textContent = '✗ ' + J.errText(e); }
+    const r = await J.callServer({ assistant: true, json: false, maxTokens: 2000, system: `Turn these notes into an Instagram carousel of 6 slides, in the same language as the notes. Slide 1 is a hook (max 10 words). Slides 2–5: one clear point each (max 30 words). Slide 6: a short takeaway. Separate slides with one empty line. Only the slide texts, no numbers, no labels. Stay faithful to the notes.`, user: text });
+    $('#st-car').value = r.text.trim(); $('#st-car-st').textContent = trAr('✓ Check the slides, then make the carousel.');
+  } catch (e) { $('#st-car-st').textContent = trAr('✗ ' + J.errText(e)); }
 }
 
 /* ---------- caption bank ---------- */
@@ -773,7 +789,35 @@ function renderCaps() {
 }
 
 /* ---------- export ---------- */
-function status(t) { const s = $('#st-status'); if (s) s.textContent = t; }
+// the Studio's messages in Arabic when the app is in Arabic
+const TX = [
+  [/^This draft had a video/, 'كانت في هذه المسودة فيديو: اختره مرة أخرى من «صورة أو فيديو».'],
+  [/^Delete\?$/, 'أحذف؟'],
+  [/^✗ This video cannot be opened here/, '✗ لا يمكن فتح هذا الفيديو هنا. جرّب ملف MP4.'],
+  [/^Opening the picture…/, 'تُفتح الصورة…'],
+  [/^Converting the HEIC photo…/, 'تُحوَّل صورة HEIC…'],
+  [/^Write the slides first\./, 'اكتب الشرائح أولًا.'],
+  [/^✓ Shared (\d+) slides\./, (m) => `✓ شُورِكت ${m[1]} شرائح.`],
+  [/^✓ Saved (\d+) slides in your gallery/, (m) => `✓ حُفظت ${m[1]} شرائح في معرض الصور.`],
+  [/^✓ Saved (\d+) slides to your downloads\./, (m) => `✓ حُفظت ${m[1]} شرائح في التنزيلات.`],
+  [/^✗ Could not save: /, '✗ تعذّر الحفظ.'],
+  [/^Make some notes first — ideas/, 'اكتب ملاحظات أولًا — الأفكار تأتي مما درسته.'],
+  [/^Make some notes first\./, 'اكتب ملاحظات أولًا.'],
+  [/^Writing slides from “(.*)”…/, (m) => `تُكتب الشرائح من «${m[1]}»…`],
+  [/^✓ Check the slides, then make the carousel\./, '✓ راجع الشرائح، ثم اصنع الكاروسيل.'],
+  [/^✓ Caption copied/, '✓ نُسخ الوصف'],
+  [/^✗ The picture could not be made/, '✗ تعذّر صنع الصورة. حاول مرة أخرى، أو اختر صورة أصغر.'],
+  [/^✓ Shared\.$/, '✓ شُورِكت.'],
+  [/^✗ This phone cannot make videos in the app/, '✗ هذا الهاتف لا يصنع الفيديو داخل التطبيق. احفظ الصورة بدلًا منه.'],
+  [/^Finishing the video…/, 'يُنهى الفيديو…'],
+  [/^⏳ Translating…/, '⏳ تُترجم…'],
+  [/^✓ Translation added under your text/, '✓ أُضيفت الترجمة تحت نصك — اسحبها حيث تشاء.'],
+  [/^Reading your week…/, 'يُقرأ أسبوعك…'],
+  [/^✓ The hook is on the picture/, '✓ الجملة الافتتاحية على الصورة؛ والوصف منسوخ ومحفوظ.'],
+  [/^Thinking… (\d+) words/, (m) => `يفكّر… ${m[1]} كلمة`],
+];
+const trAr = t => { if (!AR || !t) return t; for (const [re, a] of TX) { const m = re.exec(t); if (m) return typeof a === 'function' ? a(m) : a; } return t; };
+function status(t) { const s = $('#st-status'); if (s) s.textContent = trAr(t); }
 async function deliver(blob, name, share) {
   const file = new File([blob], name, { type: blob.type });
   if (!blob || !blob.size) { status('✗ The picture could not be made. Try again, or pick a smaller photo.'); return; }
@@ -877,13 +921,15 @@ async function translate() {
   if (!src || src === 'Your text' || src === 'اكتب هنا') { status(L('Write a text first (tap Aa), then tap Translate.', 'اكتب نصًا أولًا (اضغط Aa)، ثم اضغط ترجمة.')); return; }
   const toEn = J.langOf(src) === 'ar', b = $('#st-tr'); b.disabled = true; status('⏳ Translating…');
   try {
-    const r = await J.callServer({ json: false, maxTokens: 800, system: `Translate the user's text into ${toEn ? 'clear, natural English' : 'clear, eloquent Arabic'} for a social-media picture. If it is a Quran verse, give the meaning faithfully (like Saheeh International) and do not add anything. If it is a hadith or a scholar's words, translate faithfully. Keep it short. Return only the translation, no quotes, no notes, no source.`, user: src });
-    const t = r.text.trim().replace(/^["“]|["”]$/g, ''); if (!t) throw new Error('No translation came back');
+    const ask = (extra = '') => J.callServer({ assistant: true, json: false, maxTokens: 800, system: `Translate the user's text into ${toEn ? 'clear, natural English' : 'clear, eloquent Arabic'} for a social-media picture. If it is a Quran verse, give the meaning faithfully (like Saheeh International) and do not add anything. If it is a hadith or a scholar's words, translate faithfully. Translate only — never summarise, explain, add headings, a summary, notes, the source or the original. Every word of the answer must be in ${toEn ? 'English (no Arabic words at all)' : 'Arabic'}. Return only the translation, no quotes.`, user: src + extra });
+    let r = await ask();
+    if (toEn ? /[\u0600-\u06ff]/.test(r.text) : /[a-z]{4,}/i.test(r.text.replace(/\b(Allah|Quran|Muhammad)\b/gi, ''))) r = await ask(toEn ? '\n\n(Answer in English only, with no Arabic word.)' : '\n\n(أجب بالعربية فقط.)');
+    const t = r.text.trim().replace(/^\*\*?[^*\n]{0,40}(summary|translation|ملخص|الترجمة)[^*\n]{0,20}\*\*?:?\s*/i, '').replace(/^["“]|["”]$/g, '').trim(); if (!t) throw new Error('No translation came back');
     const base = l || addLayer({ text: src });
     snap();
     layers = layers.filter(x => x.of !== base.id);
     const n = { id: newId(), of: base.id, text: t, look: 'classic', font: toEn ? 'elegant' : 'naskh', color: base.color, size: 0.04, align: base.align, x: base.x, y: base.y };
-    layers.push(n); placeTr(base); sel = n; $('#st-text').value = t; sync(); draw(); status('✓ Translation added under your text — drag it where you like.');
+    layers.push(n); placeTr(base); fitText(base); sel = n; $('#st-text').value = t; sync(); draw(); status('✓ Translation added under your text — drag it where you like.');
   } catch (e) { status('✗ ' + J.errText(e)); }
   b.disabled = false;
 }
@@ -906,7 +952,7 @@ y: where the text sits, 0.15 (top) to 0.8 (bottom)
 For each design write a short name, and "why": one or two simple sentences on the feeling and how to finish it (e.g. add the source small at the bottom, a photo of the sky behind, leave space). Keep it modest and halal: no faces, no music.
 Return JSON only: {"designs":[{"name":"","why":"","look":"","font":"","color":"","bg":"","align":"","size":0.07,"y":0.4}]}`;
   try {
-    const r = await J.callServer({ system, user: text, maxTokens: 2000 });
+    const r = await J.callServer({ assistant: true, system, user: text, maxTokens: 2000 });
     const list = (J.parseJSON(r.text).designs || []).filter(d => d.name).slice(0, 4);
     if (!list.length) throw new Error('No ideas came back — try again');
     box.innerHTML = list.map((d, i) => `<div class="idea st-dz"><span class="st-dz-sw" style="background:linear-gradient(135deg,${(BGS[d.bg] || BGS.navy).join(',')});color:${COLORS.includes(d.color) ? d.color : '#fff'};font-family:${(FONTS[d.font] || FONTS.modern).css}">Aa</span>
@@ -932,11 +978,11 @@ Return JSON only: {"designs":[{"name":"","why":"","look":"","font":"","color":""
 async function ideas() {
   if (!built) build();
   const box = $('#st-ideas-list');
-  box.classList.remove('muted'); box.textContent = 'Reading your week…';
+  box.classList.remove('muted'); box.textContent = trAr('Reading your week…');
   const all = (await J.allLessons()).filter(l => !l.draft).sort((a, b) => b.date.localeCompare(a.date));
   const week = all.filter(l => Date.now() - new Date(l.date) < 7 * 864e5);
   const use = (week.length ? week : all).slice(0, 8);
-  if (!use.length) { box.textContent = 'Make some notes first — ideas come from what you studied.'; return; }
+  if (!use.length) { box.textContent = trAr('Make some notes first — ideas come from what you studied.'); return; }
   const digest = use.map(l => {
     const n = l.notes || {};
     const keys = (n.sections || []).flatMap(s => [s.heading, ...(s.blocks || []).filter(b => ['def', 'rule', 'example', 'quote'].includes(b.t)).slice(0, 2).map(b => b.text)]);
@@ -947,7 +993,7 @@ async function ideas() {
     ? 'أنت تقترح أفكار منشورات إنستغرام لطالب علم من ملاحظات دروسه. كل فكرة: جملة افتتاحية قصيرة جذابة (hook) تصلح نصًا على الصورة، وتعليق قصير (caption)، وشكل المنشور (format: صورة نصية / كاروسيل / ريلز قصير). التزم بما في الملاحظات ولا تخترع معلومات. أعد JSON فقط: {"ideas":[{"hook":"","caption":"","format":"","from":"اسم الدرس"}]} وست أفكار.'
     : 'You suggest Instagram post ideas for a student from his lesson notes. Each idea: a short catchy hook that works as text on the picture, a short caption, and a format (text image / carousel / short reel). Stay with what is in the notes and invent nothing. Return JSON only: {"ideas":[{"hook":"","caption":"","format":"","from":"lesson name"}]} with six ideas.';
   try {
-    const r = await J.callServer({ system, user: digest, maxTokens: 4000, onText: t => { box.textContent = `Thinking… ${t.split(/\s+/).length} words`; } });
+    const r = await J.callServer({ assistant: true, system, user: digest, maxTokens: 4000, onText: t => { box.textContent = trAr(`Thinking… ${t.split(/\s+/).length} words`); } });
     const list = (J.parseJSON(r.text).ideas || []).filter(x => x.hook);
     store.set('studioIdeas', list);
     showIdeas(list);

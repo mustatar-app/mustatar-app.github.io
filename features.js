@@ -278,7 +278,7 @@ $('#out-email').onclick = () => {
 async function write(title, system, user, opts) {
   const o = outBox(title, opts);
   try {
-    const r = await J.callServer({ system, user, maxTokens: 4000, json: false, onText: t => o.set(t) });
+    const r = await J.callServer({ assistant: true, system, user, maxTokens: 4000, json: false, onText: t => o.set(t) });
     o.done(r.text.trim());
   } catch (e) { o.fail(e); }
 }

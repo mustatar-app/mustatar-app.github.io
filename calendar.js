@@ -179,6 +179,8 @@ function strip() {
   return `<div class="ag-strip">${[...Array(7)].map((_, i) => { const d = addDays(ws, i), n = on(d).filter(e => !isDone(e, d)).length;
     return `<button type="button" class="ag-sd ${d === today() ? 'today' : ''} ${d === agFrom ? 'sel' : ''}" data-sd="${d}"><small>${dayName(d, { weekday: 'narrow' })}</small><b>${parse(d).getDate()}</b><i>${n ? '•'.repeat(Math.min(3, n)) : ''}</i></button>`; }).join('')}</div>`;
 }
+const agOpen = new Set();
+const ar2 = n => window.ZadLang === 'ar' ? String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]) : String(n);
 function renderAgenda() {
   const v = $('#cal-view'), t = today(), late = agFrom === t ? overdue() : [], nodate = events.filter(e => isTask(e) && !e.date && !e.done);
   let html = `<div class="ag-nav"><button type="button" class="icon-btn" data-ag="-7" aria-label="${L('Previous week', 'الأسبوع السابق')}">‹</button><b>${dayName(startOfWeek(agFrom), { month: 'long', year: 'numeric' })}</b>${agFrom !== t ? `<button type="button" class="ghost small" data-ag="today">${L('Today', 'اليوم')}</button>` : ''}<button type="button" class="icon-btn" data-ag="7" aria-label="${L('Next week', 'الأسبوع التالي')}">›</button></div>${strip()}`;
@@ -187,8 +189,11 @@ function renderAgenda() {
     const d = addDays(agFrom, i), items = on(d);
     if (!items.length && i > 0) continue;
     const hj = hijriL(d);
-    html += `<section class="ag-day ${d === t ? 'is-today' : ''}"><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-hj">${esc(hj)}</span></h3>
-      ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</section>`;
+    // today (and the day picked in the strip) is open; every other day is folded to one line — tap it to open
+    const open = d === t || d === agFrom || agOpen.has(d);
+    const sum = items.length ? L(`${items.length} ${items.length === 1 ? 'item' : 'items'}`, `${ar2(items.length)} ${items.length === 1 ? 'عنصر' : items.length === 2 ? 'عنصران' : items.length <= 10 ? 'عناصر' : 'عنصرًا'}`) + (items[0].time ? ' · ' + L('from ', 'من ') + clock(items[0].time) : '') : '';
+    html += `<details class="ag-day ${d === t ? 'is-today' : ''}" data-day="${d}" ${open ? 'open' : ''}><summary><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-sum">${esc(sum)}</span><span class="ag-hj">${esc(hj)}</span></h3></summary>
+      ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</details>`;
   }
   html += `<button type="button" class="ghost ag-more" id="ag-more">${L('Show 30 more days', 'اعرض ٣٠ يومًا أخرى')}</button>`;
   if (nodate.length) html += `<button type="button" class="ag-nodate" id="ag-nodate">📌 ${L(`${nodate.length} ${nodate.length === 1 ? 'task has' : 'tasks have'} no date yet — see them in Tasks`, `${nodate.length} من المهام بلا تاريخ — تجدها في «المهام»`)}</button>`;
@@ -197,6 +202,7 @@ function renderAgenda() {
   $$('[data-sd]', v).forEach(b => b.onclick = () => { agFrom = b.dataset.sd; render(); });
   $$('[data-add]', v).forEach(b => b.onclick = () => openDialog(null, b.dataset.add));
   $('#ag-more').onclick = () => { agDays += 30; render(); };
+  $$('details.ag-day', v).forEach(dt => dt.addEventListener('toggle', () => { if (dt.open) agOpen.add(dt.dataset.day); else agOpen.delete(dt.dataset.day); }));
   const mv = $('#ag-move'); if (mv) mv.onclick = () => { for (const e of late) { e.date = t; e.updated = Date.now(); } save(); render(); toast(L(`✓ Moved ${late.length} to today`, `✓ نُقلت ${late.length} إلى اليوم`)); };
   const nd = $('#ag-nodate'); if (nd) nd.onclick = () => { mode = 'tasks'; store.set('calMode2', mode); render(); };
 }
@@ -376,7 +382,9 @@ function toast(t, ms = 3200, act = null) {
   el.querySelector('.tst-t').textContent = s.replace(/^[✓✗⚠]\uFE0F?\s*/, '');
   if (act?.label) { const b = document.createElement('button'); b.type = 'button'; b.className = 'tst-act'; b.textContent = act.label; b.onclick = e => { e.stopPropagation(); hide(); act.fn?.(); }; el.appendChild(b); }
   el.hidden = false; el.classList.remove('out'); void el.offsetWidth; el.classList.add('in');
-  const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 220); };
+  // above any open window too (otherwise a message during a window shows half-hidden under its edge)
+  try { if (!el.hasAttribute('popover')) el.setAttribute('popover', 'manual'); if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); } catch {}
+  const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); try { el.hidePopover(); } catch {} }, 220); };
   el.onclick = hide;
   let y0 = null;
   el.ontouchstart = e => { y0 = e.touches[0].clientY; };

@@ -195,6 +195,7 @@ async function profileText() {
     lines.push(`\nCALENDAR: ${classes} weekly classes; ${late.length} tasks late (${late.slice(0, 6).map(e => `${e.title} due ${e.date}`).join('; ')}); ${done14} items done in the last 14 days; coming in 3 weeks: ${soon.slice(0, 10).map(e => `${e.type} "${e.title}" ${e.date}`).join('; ') || 'nothing'}; tasks without a deadline: ${ev.filter(e => !e.date && !e.done).length}.`);
   }
   try { const ls = await J.allLessons(); const n = ls.filter(l => (l.date || '') >= addDays(t, -30)).length; lines.push(`NOTES: ${n} lessons/meetings written up in 30 days; subjects: ${[...new Set(ls.slice(0, 40).map(l => l.subject?.name).filter(Boolean))].slice(0, 8).join(', ')}.`); } catch {}
+  const ci = window.JundCheckin?.recent?.(14); if (ci) lines.push(`\nEVENING CHECK-INS (what was missed or partly done, with their reasons):\n${ci.slice(0, 1500)}`);
   const f = store.get('fitness', {}); if (f?.on && f.data?.length) {
     const st = f.data.filter(x => x.steps), sl = f.data.filter(x => x.sleepMin);
     lines.push(`FITNESS (7 days): steps avg ${st.length ? Math.round(st.reduce((a, x) => a + x.steps, 0) / st.length) : '?'}; sleep avg ${sl.length ? (sl.reduce((a, x) => a + x.sleepMin, 0) / sl.length / 60).toFixed(1) + ' h' : '?'}.`);

@@ -21,6 +21,7 @@ const IC = {
   review: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   studio: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/>',
+  checkin: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/><path d="M16.5 20.5l1.5 1.5 3-3"/>',
   mic: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/>',
   left: '<path d="M12 21a9 9 0 1 0 0-18v9z"/>',
   bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2.2 2.2 0 0 0 4 0"/>',
@@ -119,6 +120,7 @@ function me() {
     <div id="me-plan"></div>
     <div class="mx-h">${L('Growth', 'النموّ')}</div>
     <div class="mx-group">
+      ${row('checkin', L('Evening check-in', 'مراجعة آخر اليوم'), L('Tell the app by voice what you did today', 'أخبر التطبيق بصوتك بما أنجزت اليوم'))}
       ${row('habit', L('Habits', 'العادات'), '', habits || '')}
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}
@@ -150,7 +152,8 @@ function me() {
     </div>
     <button type="button" class="link me-all" id="me-all">${L('All settings', 'كل الإعدادات')}</button>`;
   const on = (k, fn) => { const b = $(`[data-k="${k}"]`, sc); if (b) b.onclick = fn; };
-  on('habit', () => window.JundFeatures?.addHabit());
+  on('habit', () => J.show('habits'));
+  on('checkin', () => window.JundCheckin?.open());
   on('review', () => { J.show('calendar'); setTimeout(() => $('#week-review')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80); });
   on('focus', () => window.JundFeatures?.openFocus());
   on('count', () => window.JundCount?.open(window.JundCount.timers().length ? 'timer' : 'list'));

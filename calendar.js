@@ -464,6 +464,7 @@ function reminderList() {
   if (run && run.end > Date.now()) out.push({ at: run.end, title: 'Focus time done', body: `${run.min} min of ${run.subject}. Take a short break.`, tag: 'focus-' + run.start });
   for (const x of window.JundCount?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const x of window.JundBrief?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // briefs before lessons and meetings
+  for (const x of window.JundCheckin?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });
@@ -480,6 +481,7 @@ function nativeReminders() {
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
   items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
   items.push(...(window.JundBrief?.alarms?.() || []));   // a short brief before lessons and meetings
+  items.push(...(window.JundCheckin?.alarms?.() || []));   // the evening check-in
   items.push(...(window.JundPhone?.prayerAlarms?.() || []));   // a gentle vibration at prayer times (Android app)
   return items;
 }
@@ -644,11 +646,11 @@ function upcoming(days = 7, max = 8) {
 }
 // every (item, day) between two days from today, repeats included (for the widgets and the phone's calendar)
 function between(a, b) { const out = []; for (let i = a; i <= b; i++) { const d = addDays(today(), i); for (const e of on(d)) out.push({ e, d, done: isDone(e, d), ...dueTime(e, d) }); } return out; }
-window.JundCal = { between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+window.JundCal = { on, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();
-  if (missed.length) toast(`🔔 You missed ${missed.length} ${missed.length === 1 ? 'reminder' : 'reminders'} — see Today`, 6000);
+  if (missed.length) toast(window.ZadLang === 'ar' ? `🔔 فاتتك ${missed.length} من التذكيرات — انظر «اليوم»` : `🔔 You missed ${missed.length} ${missed.length === 1 ? 'reminder' : 'reminders'} — see Today`, 6000);
   weeklyNudge();
 }, 1500);
 setInterval(() => { checkReminders(); weeklyNudge(); }, 30000);

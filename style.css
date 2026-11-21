@@ -2035,3 +2035,35 @@ details.ag-day.is-today > summary h3 { background: color-mix(in srgb, var(--acce
 .pu-free { display: flex; flex-direction: column; gap: 4px; margin: 14px 0; padding: 12px; border-radius: 14px; border: 1px dashed var(--line); font-size: .88rem; line-height: 1.5; }
 .pu-free span { color: var(--ink-2); }
 .pu-up { width: 100%; min-height: 46px; }
+/* evening check-in */
+.ci-card { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 12px; padding: 14px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.ci-card span:last-child { display: flex; flex-direction: column; gap: 2px; } .ci-card small { color: var(--ink-2); }
+.ci-card-ic { font-size: 1.6rem; }
+.ci-dlg { max-width: 520px; width: calc(100% - 20px); max-height: calc(100dvh - 30px); border: 1px solid var(--line); border-radius: 18px; background: var(--bg); color: var(--ink); padding: 16px; }
+.ci-dlg::backdrop { background: rgb(0 0 0 / .6); }
+.ci-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ci-top > div { display: flex; flex-direction: column; } .ci-top b { font-size: 1.15rem; } .ci-top small { color: var(--ink-2); }
+.ci-voice { display: flex; align-items: center; gap: 12px; margin: 14px 0 8px; padding: 12px; border-radius: 16px; background: var(--surface); }
+.ci-mic { flex: 0 0 auto; width: 64px; height: 64px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 1.4rem; cursor: pointer; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+.ci-mic.on { background: #E5484D; color: #fff; animation: ciPulse 1.2s ease-in-out infinite; }
+@keyframes ciPulse { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, #E5484D 25%, transparent); } }
+.ci-say { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; line-height: 1.45; }
+.ci-say small { color: var(--ink-2); font-size: .82rem; }
+.ci-read { flex: 0 0 auto; }
+.ci-dlg textarea { width: 100%; margin: 4px 0 6px; }
+.ci-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.ci-row { border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: var(--surface); }
+.ci-row.done { border-color: color-mix(in srgb, #3FBF7F 55%, var(--line)); }
+.ci-row.not { border-color: color-mix(in srgb, #E5484D 50%, var(--line)); }
+.ci-row.part { border-color: color-mix(in srgb, #E0A43A 55%, var(--line)); }
+.ci-t { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; } .ci-t small { color: var(--ink-2); font-size: .78rem; }
+.ci-ch { display: flex; gap: 6px; flex-wrap: wrap; }
+.ci-ch button { flex: 1; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: .86rem; white-space: nowrap; }
+.ci-ch button[data-s="done"].on { background: #3FBF7F; border-color: #3FBF7F; color: #06240f; }
+.ci-ch button[data-s="part"].on { background: #E0A43A; border-color: #E0A43A; color: #2a1a00; }
+.ci-ch button[data-s="not"].on { background: #E5484D; border-color: #E5484D; color: #fff; }
+.ci-note { width: 100%; margin-top: 8px; }
+.ci-move { margin: 4px 0 10px; }
+.ci-save { width: 100%; min-height: 48px; }
+.ci-when { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--ink-2); font-size: .86rem; }
+.ci-note { border-radius: 10px; padding: 9px 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }

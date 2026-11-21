@@ -208,7 +208,7 @@ async function renderHome() {
   const run = rows.findIndex(r => r.st === 'run');
   if (run < 0) { const nxt = rows.findIndex(r => r.st !== 'past'); dotAt = nxt > 0 ? nxt : -1; }
   $('#hm-next').innerHTML = up.length ? `<div class="tl">${rows.map((x, i, arr) => `<button type="button" class="nx tl-row${i === 0 ? ' first' : ''}${i === arr.length - 1 ? ' last' : ''}${x.st ? ' ' + x.st : ''}${i === dotAt ? ' here' : ''}" ${x.st === 'run' ? `style="--p:${x.p.toFixed(3)}"` : ''} data-ev="${J.esc(x.e.id)}" data-d="${x.d}">
-      <span class="tl-when${x.late ? ' late' : ''}"><span>${x.when}</span>${x.time ? `<b dir="ltr">${x.time}</b>` : ''}</span>
+      <span class="tl-when${x.late ? ' late' : ''}"><span>${x.when}</span>${x.time ? `<b dir="ltr">${window.ZadLang === 'ar' ? String(x.time).replace(/\s?am\b/i, ' ص').replace(/\s?pm\b/i, ' م') : x.time}</b>` : ''}</span>
       <span class="tl-rail"><i style="--c:${x.color}"></i></span>
       <span class="tl-what"><b dir="auto">${esc(x.e.title)}</b><small style="color:${x.color}">${x.st === 'run' ? (window.ZadLang === 'ar' ? 'الآن · ' : 'Now · ') : ''}${x.type}</small></span></button>`).join('')}</div>`
     : '';
@@ -383,6 +383,8 @@ Rules:
 - When he gives a YouTube link and wants it transcribed or made into notes, use the "youtube" action and say you started it.
 - "Save this as a note" / "اكتبها ملاحظة" / "احفظ هذا في ملاحظاتي" → a "note" action with the content (to My notes). Only when he asks.
 - "Set a timer for 10 minutes" / "مؤقت ربع ساعة" → a "timer" action. "Count down to my trip on 5 March" / "عدّ تنازلي لـ…" → a "countdown" action (yearly for birthdays and anniversaries). For "how many days until Ramadan/Eid/…" answer from COUNTDOWNS.
+- PLANS OVER DAYS: when he asks to split work over days ("split it into a 7-day plan", "how much should I memorise each day", "قسّمها على أسبوع"), DO THE ARITHMETIC yourself and add ONE dated "task" per day (starting today unless he says otherwise), each title with the exact amount for that day — e.g. "Memorise Quran: pages 3 (p. 41–43) + Surah Yusuf verses 1–16". Use real sizes you know (Surah Yusuf has 111 verses, about 13.5 pages; a juz is about 20 pages; a page is about 15 lines); for a book or course, divide the pages/lessons he gave evenly and put the remainder on the last days. Show the day-by-day table in the reply too. Add a "habit" only if he asks to track a repeated practice, never instead of the daily tasks.
+- END OF DAY: if he says what he did today ("I finished X, I missed Y because…"), mark the matching calendar items with "done" actions and keep his reason in your reply; for a full evening review by voice, tell him to say "check in" (or "راجع يومي") or tap “How did today go?” on Today.
 - Delete only when he clearly asks. If something is unclear (for example no day was given), ask one short question instead of guessing, with actions empty.
 - For quick questions, keep "reply" short. For "what do I have", list the items with day and time. Use the reply for any draft, translation, explanation, or other requested text.`;
 
@@ -484,6 +486,10 @@ async function send({ retryNotes = false } = {}) {
     ? (AR_() ? 'ما محتوى المرفقات؟ لخّصها باختصار.' : 'What do the attachments contain? Summarise them briefly.')
     : input;
   if (!t) return;
+  // "check in", "review my day", "راجع يومي": the evening check-in opens (you answer by voice there)
+  if (!att && /^(let'?s )?(check.?in|review (my|the) day|end.of.day|how was my day|daily review)\b|^(راجع(ة)?|مراجعة) (يومي|اليوم)|^(كيف كان يومي)|^مراجعة آخر اليوم/i.test(t) && window.JundCheckin) {
+    $('#as-text').value = ''; $('#as-text').dispatchEvent(new Event('input')); window.JundCheckin.open(); return;
+  }
   // Basic: a few free assistant messages a day (they use the shared free AI allowance)
   try { window.JundPlan?.check('msg'); } catch (e) {   // no limit on the assistant now; kept for paid-plan use later
     log.push({ who: 'me', text: t }, { who: 'ai', text: e.message }); if (!retryNotes) { $('#as-text').value = ''; } persist(); render(); return;

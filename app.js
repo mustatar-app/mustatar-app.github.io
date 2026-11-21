@@ -3421,6 +3421,8 @@ async function receiveShared() {
   if (view === 'record') setTimeout(() => window.JundFeatures?.record(), 300);
   if (view === 'task') setTimeout(() => window.JundCal?.open(), 300);
   if (view === 'focus') setTimeout(() => window.JundFeatures?.openFocus(), 300);
+  if (view === 'checkin') setTimeout(() => window.JundCheckin?.open(), 600);
+  if (view === 'habits') setTimeout(() => show('habits'), 0);
   if (u.search) history.replaceState(null, '', location.pathname);
 }
 

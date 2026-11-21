@@ -402,6 +402,18 @@ window.addEventListener('popstate', e => {
 });
 window.JundBack = () => { const prev = backStack.pop() || 'assistant'; fromBack = true; show(prev); fromBack = false; };
 // the Android app's back button asks here: 'done' (handled) or 'exit' (leave the app); old pages are never walked back to
+// "are you sure?" in Mustatar's own look and language (instead of the browser's grey box)
+window.JundConfirm = (msg, opts = {}) => new Promise(res => {
+  const A = window.ZadLang === 'ar', d = document.createElement('dialog');
+  d.className = 'cf-dlg'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  const list = (opts.list || []).slice(0, 30);
+  d.innerHTML = `<b class="cf-t" dir="auto">${esc(msg)}</b>${list.length ? `<ul class="cf-l">${list.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ul>` : ''}
+    <div class="cf-b"><button type="button" class="ghost" data-v="0">${esc(opts.no || (A ? 'إلغاء' : 'Cancel'))}</button><button type="button" class="${opts.danger ? 'primary cf-danger' : 'primary'}" data-v="1">${esc(opts.yes || (A ? 'نعم' : 'Yes'))}</button></div>`;
+  document.body.appendChild(d);
+  let v = false; d.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { v = b.dataset.v === '1'; d.close(); });
+  d.addEventListener('close', () => { d.remove(); res(v); });
+  d.showModal(); setTimeout(() => d.querySelector('[data-v="1"]')?.focus(), 30);
+});
 window.JundHardBack = () => {
   if (closeTopLayer()) return 'done';
   const prev = backStack.pop() || (screenNow !== 'assistant' ? 'assistant' : null);
@@ -592,8 +604,8 @@ function initSettings() {
     try { const n = await space.pull(); acctSay('✓ In sync.' + (n ? ' ' + ar(n) + ' lessons updated.' : '')); renderLibrary(); }
     catch (e) { acctSay('✗ ' + e.message); }
   };
-  $('#acct-signout').onclick = () => {
-    if (!confirm('Sign out on this phone? Your notes stay here and in your space.')) return;
+  $('#acct-signout').onclick = async () => {
+    if (!(await window.JundConfirm(window.ZadLang === 'ar' ? 'أتخرج من حسابك على هذا الجوال؟ ملاحظاتك تبقى هنا وفي مساحتك.' : 'Sign out on this phone? Your notes stay here and in your space.'))) return;
     space.signOut(); acctRender(); acctSay('Signed out.');
   };
   $('#acct-delete').onclick = async () => {

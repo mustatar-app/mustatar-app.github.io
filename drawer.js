@@ -110,7 +110,7 @@ function paintChats() {
         return `<div class="dr-row${c.id === cur ? ' on' : ''}"><button type="button" class="dr-item dr-chat" data-c="${esc(c.id)}"><span class="dr-t" dir="auto"><b>${esc(c.title)}</b>${tip ? `<small dir="auto">${esc(String(tip).replace(/\s+/g, ' ').slice(0, 90))}</small>` : ''}</span><small class="dr-day">${day(c.t)}</small></button><button type="button" class="dr-del" data-d="${esc(c.id)}" aria-label="${L('Delete', 'حذف')}">✕</button></div>`; }).join('')
     : `<div class="dr-empty">${q ? L('No chat has that.', 'لا محادثة فيها ذلك.') : L('Your chats will be kept here.', 'ستُحفظ محادثاتك هنا.')}</div>`;
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { A()?.openChat(b.dataset.c); J.show('assistant'); close(); });
-  el.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { if (confirm(L('Delete this chat?', 'حذف هذه المحادثة؟'))) { A()?.deleteChat(b.dataset.d); paintChats(); } });
+  el.querySelectorAll('[data-d]').forEach(b => b.onclick = async () => { if (await window.JundConfirm(L('Delete this chat?', 'حذف هذه المحادثة؟'), { danger: true, yes: L('Delete', 'حذف') })) { A()?.deleteChat(b.dataset.d); paintChats(); } });
 }
 // on a computer (a wide screen) the menu stays open at the side, like the Claude desktop app
 const wide = matchMedia('(min-width: 1100px)');

@@ -2197,3 +2197,16 @@ body.sr-open { overflow: hidden; }
   body.dr-docked main, body.dr-docked .screen { max-width: 860px; margin-inline: auto; }
   body.dr-docked #screen-library, body.dr-docked #screen-calendar, body.dr-docked #screen-habits { max-width: 1100px; }
 }
+/* Mustatar's own "are you sure?" window */
+.cf-dlg { max-width: 420px; width: calc(100% - 32px); border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--ink); padding: 18px 18px 14px; }
+.cf-dlg::backdrop { background: rgb(0 0 0 / .55); }
+.cf-t { display: block; font-size: 1.05rem; line-height: 1.5; margin-bottom: 10px; }
+.cf-l { margin: 0 0 12px; padding-inline-start: 18px; max-height: 40vh; overflow: auto; font-size: .9rem; line-height: 1.6; color: var(--ink-2); }
+.cf-b { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.cf-b button { min-width: 96px; min-height: 44px; }
+.cf-danger { background: #E5484D !important; border-color: #E5484D !important; color: #fff !important; }
+.cf-dlg .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* days off in the calendar */
+.ag-off { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 0 8px; border-radius: 12px; background: color-mix(in srgb, #3FBF7F 12%, var(--surface)); border: 1px solid color-mix(in srgb, #3FBF7F 35%, var(--line)); }
+.ag-off span { flex: 1; display: flex; flex-direction: column; } .ag-off small { color: var(--ink-2); font-size: .78rem; }
+.ag-addoff { display: block; margin: 0 0 10px; }

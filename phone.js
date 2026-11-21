@@ -167,7 +167,7 @@ function paintCalCard() {
   $('#ph-write').onchange = e => { const c2 = cal(); c2.write = e.target.value ? Number(e.target.value) : null; c2.sig = ''; store.set('phoneCal', c2); if (!c2.write) ask({ action: 'calendarClear' }); calRefresh(true); };
   $('#ph-cal-now').onclick = () => calRefresh(true);
   $('#ph-cal-off').onclick = async () => {
-    if (!confirm(t('Disconnect? Mustatar’s copies are taken out of your phone’s calendar; your phone’s events leave Mustatar.', 'فصل؟ تُحذف نسخ مستطر من تقويم جوالك، وتخرج مواعيد جوالك من مستطر.'))) return;
+    if (!(await window.JundConfirm(t('Disconnect? Mustatar’s copies are taken out of your phone’s calendar; your phone’s events leave Mustatar.', 'فصل؟ تُحذف نسخ مستطر من تقويم جوالك، وتخرج مواعيد جوالك من مستطر.')))) return;
     await ask({ action: 'calendarClear' });
     const evs = window.JundCal.events(); for (let i = evs.length - 1; i >= 0; i--) if (evs[i].ext === 'phone') evs.splice(i, 1);
     window.JundCal.save(); store.set('phoneCal', { on: false, show: [], write: null }); paintCalCard();

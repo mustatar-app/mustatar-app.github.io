@@ -192,10 +192,11 @@ function dayClock(todayItems = []) {
 async function renderHome() {
   if (!$('#hm-next')) return;
   const now = new Date(), h = now.getHours();
-  $('#hm-date').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const AR0 = window.ZadLang === 'ar';
+  $('#hm-date').textContent = now.toLocaleDateString(AR0 ? 'ar-SA-u-ca-gregory' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   window.JundFeatures?.home(); window.JundStudy?.home(); window.JundReminder?.render();
   const nm = J.me().name ? ', ' + J.me().name : '';
-  $('#hm-hello').textContent = (h < 12 ? 'Good morning' : h < 18 ? 'Salam' : 'Good evening') + nm;
+  $('#hm-hello').textContent = (AR0 ? (h < 12 ? 'صباح الخير' : h < 18 ? 'السلام عليكم' : 'مساء الخير') : (h < 12 ? 'Good morning' : h < 18 ? 'Salam' : 'Good evening')) + (AR0 ? nm.replace(/^, /, '، ') : nm);
   const ask = $('#hm-about');
   if (ask) ask.hidden = !!J.me().name;
   const up = window.JundCal?.upcoming(7, 8) || [];

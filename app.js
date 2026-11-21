@@ -209,7 +209,7 @@ const space = (() => {
         for (const [id, u] of Object.entries(sent)) if (m[id] && m[id].updated === u) delete m[id];
         setPending(m); ids = Object.keys(m).filter(id => !(id in sent));
       }
-      if (!Object.keys(pending()).length) setStatus('☁ Saved in your own private space.');
+      if (!Object.keys(pending()).length) setStatus(window.ZadLang === 'ar' ? '☁ محفوظ في مساحتك الخاصة.' : '☁ Saved in your own private space.');
     })();
     try { await flushing; } catch (e) { setStatus(navigator.onLine === false ? '⏳ Waiting for internet to save your changes.' : '⚠ Not saved yet; it will retry.'); throw e; }
     finally { flushing = null; }
@@ -2991,26 +2991,50 @@ async function renderLibrary() {
   $('#book-year').hidden = !all.length;
   $('#book-mawaiz').hidden = !all.some(l => l.notes?.mawaiz?.length);
   if (!all.length) {
-    list.innerHTML = q ? '<div class="empty"><b>No lessons yet.</b></div>' : `<div class="empty"><b>No lessons yet.</b><br>The first notes you make will appear here.<br><button type="button" class="ghost small" id="lib-bring" style="margin-top:10px">${window.ZadLang === 'ar' ? 'انقل ملاحظاتك من Keep أو Evernote أو Notion' : 'Bring your notes from Keep, Evernote or Notion'}</button></div>`;
+    const A0 = window.ZadLang === 'ar';
+    list.innerHTML = q ? `<div class="empty"><b>${A0 ? 'لا نتائج.' : 'No lessons yet.'}</b></div>` : `<div class="empty"><b>${A0 ? 'لا دروس بعد.' : 'No lessons yet.'}</b><br>${A0 ? 'أول ملاحظات تصنعها تظهر هنا.' : 'The first notes you make will appear here.'}<br><button type="button" class="ghost small" id="lib-bring" style="margin-top:10px">${window.ZadLang === 'ar' ? 'انقل ملاحظاتك من Keep أو Evernote أو Notion' : 'Bring your notes from Keep, Evernote or Notion'}</button></div>`;
     const b = $('#lib-bring'); if (b) b.onclick = () => window.JundImport?.open();
     return;
   }
   all.sort((a, b) => b.date.localeCompare(a.date));
-  const groups = {};
-  for (const l of all) (groups[l.subject.id] ??= []).push(l);
-  list.innerHTML = Object.entries(groups).map(([sid, ls]) => `
-    <div class="lib-group"><h2>${esc(ls[0].subject.name)}${ls[0].subject.place ? ' <small class="muted">' + esc(ls[0].subject.place) + '</small>' : ''}</h2>
-    ${ls.length > 1 ? `<button type="button" class="ghost small book-btn" data-book="${esc(sid)}">Make the subject book (${ar(ls.length)} lessons)</button>` : ''}
-    ${ls.map(l => `<div class="lib-item">
-      <button type="button" class="open" data-open="${l.id}" dir="auto">${l.draft ? '<span class="tag">Draft</span> ' : ''}${esc(l.notes?.title || l.unit)}<small>${esc(l.unit)} · ${new Date(l.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</small></button>
-      <button type="button" class="ghost danger small" data-del="${l.id}">Delete</button>
-    </div>`).join('')}</div>`).join('');
+  // like Google Keep: cards in columns, each with its colour and background drawing; subjects are chips on top
+  const A = window.ZadLang === 'ar', LL = (en, a) => A ? a : en;
+  const subs = {}; for (const l of all) (subs[l.subject.id] ??= { name: l.subject.name, n: 0 }).n++;
+  const subName = n => n === 'General' ? LL('General', 'عام') : n === 'Other subject' ? LL('Other subject', 'مادة أخرى') : n;
+  if (libSub && !subs[libSub]) libSub = '';
+  const shown = libSub ? all.filter(l => l.subject.id === libSub) : all;
+  const preview = l => { const n = l.notes || {}; const sec = (n.sections || [])[0]; const b = (sec?.blocks || []).map(x => x.text || (x.items || []).join(' · ')).join(' '); return String(n.subtitle || n.summary || b || '').replace(/[*#_>`]/g, '').slice(0, 220); };
+  const when = d => new Date(d).toLocaleDateString(A ? 'ar-SA-u-ca-gregory' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const unitName = u => A ? String(u || '').replace(/^Recording (\d+ \w+) (\d+:\d+)$/, (m, d, t) => `تسجيل ${d} ${t}`) : u;
+  list.innerHTML = `${Object.keys(subs).length > 1 ? `<div class="lb-subs" data-noi18n><button type="button" class="chip${libSub ? '' : ' on'}" data-sub="">${LL('All', 'الكل')} <small>${ar(all.length)}</small></button>${Object.entries(subs).map(([id, x]) => `<button type="button" class="chip${libSub === id ? ' on' : ''}" data-sub="${esc(id)}" dir="auto">${esc(subName(x.name))} <small>${ar(x.n)}</small></button>`).join('')}</div>` : ''}
+    ${libSub && shown.length > 1 ? `<button type="button" class="ghost small book-btn" data-book="${esc(libSub)}">${LL(`Make the subject book (${shown.length} lessons)`, `اصنع كتاب المادة (${ar(shown.length)} دروس)`)}</button>` : ''}
+    <div class="lb-grid" data-noi18n>${shown.map(l => `<article class="kp-card lb-card" data-c="${esc(l.color || '')}"${l.bg && window.JundBg ? ` style="${window.JundBg.style(l.bg)}"` : ''}>
+      <button type="button" class="lb-open" data-open="${l.id}" dir="auto">${l.draft ? `<span class="tag">${LL('Draft', 'مسودة')}</span> ` : ''}<b>${esc(l.notes?.title || unitName(l.unit))}</b>${preview(l) ? `<span class="lb-pre">${esc(preview(l))}</span>` : ''}
+        <small><span class="lb-sub">${esc(subName(l.subject.name))}</span> · ${when(l.date)}</small></button>
+      <button type="button" class="icon-btn lb-more" data-more="${l.id}" aria-label="${LL('More', 'المزيد')}">⋮</button></article>`).join('')}</div>`;
+  $$('[data-sub]', list).forEach(b => b.onclick = () => { libSub = b.dataset.sub; renderLibrary(); });
   $$('[data-open]', list).forEach(b => b.onclick = async () => openLesson(await idb.get(b.dataset.open)));
   $$('[data-book]', list).forEach(b => b.onclick = () => makeBook(b.dataset.book));
-  $$('[data-del]', list).forEach(b => b.onclick = async () => {
-    if (b.dataset.sure) { await removeLesson(b.dataset.del); if (current?.id === b.dataset.del) current = null; renderLibrary(); }
-    else { b.dataset.sure = '1'; b.textContent = 'Tap again to delete'; }
-  });
+  $$('[data-more]', list).forEach(b => b.onclick = () => lessonMenu(b, b.dataset.more));
+}
+let libSub = '';
+// ⋮ on a lesson card: colour, background drawing, delete
+const LCOLORS = ['', 'coral', 'peach', 'sand', 'mint', 'sage', 'fog', 'storm', 'dusk', 'blossom', 'clay', 'chalk'];
+function lessonMenu(btn, id) {
+  const A = window.ZadLang === 'ar', LL = (en, a) => A ? a : en;
+  document.querySelector('.lb-pop')?.remove();
+  const p = document.createElement('div'); p.className = 'lb-pop'; p.dir = A ? 'rtl' : 'ltr'; p.setAttribute('data-noi18n', '');
+  p.innerHTML = `<div class="kp-bgh">${LL('Colour', 'اللون')}</div><div class="kp-pal">${LCOLORS.map(c => `<button type="button" class="kp-dot" data-c="${c}" data-col="${c}" aria-label="${c || LL('Default', 'افتراضي')}"></button>`).join('')}</div>
+    ${window.JundBg ? `<div class="kp-bgh">${LL('Background', 'الخلفية')}</div><div class="kp-pal kp-bgs">${['', ...window.JundBg.names].map(x => window.JundBg.swatch(x, false)).join('')}</div>` : ''}
+    <button type="button" class="ghost danger small lb-del">${LL('Delete', 'حذف')}</button>`;
+  document.body.appendChild(p);
+  const r = btn.getBoundingClientRect(); p.style.top = Math.min(innerHeight - p.offsetHeight - 10, r.bottom + 6) + 'px'; p.style.insetInlineEnd = '12px';
+  const set = async (k, v) => { const l = await idb.get(id); if (!l) return; l[k] = v; await saveLesson(l); p.remove(); renderLibrary(); };
+  p.querySelectorAll('[data-col]').forEach(b => b.onclick = () => set('color', b.dataset.col));
+  p.querySelectorAll('[data-bg]').forEach(b => b.onclick = () => set('bg', b.dataset.bg));
+  const del = p.querySelector('.lb-del');
+  del.onclick = async () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = LL('Tap again to delete', 'اضغط مرة أخرى للحذف'); return; } await removeLesson(id); if (current?.id === id) current = null; p.remove(); renderLibrary(); };
+  setTimeout(() => document.addEventListener('pointerdown', function off(e) { if (!p.contains(e.target)) { p.remove(); document.removeEventListener('pointerdown', off); } }), 0);
 }
 
 /* ---------- year-end books (put together by the app, no AI cost) ---------- */

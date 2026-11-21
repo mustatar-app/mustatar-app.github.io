@@ -195,7 +195,7 @@ function card(n) {
     ? `<ul class="kp-items${n.title ? '' : ' kp-first'}">${open.slice(0, 8).map(i => `<li dir="auto"><span class="kp-box"></span>${esc(i.t)}</li>`).join('')}${done.length ? `<li class="kp-more">${t(`+ ${done.length} ticked`, `+ ${num(done.length)} منجزة`)}</li>` : ''}${open.length > 8 ? `<li class="kp-more">…</li>` : ''}</ul>`
     : n.text ? `<div class="kp-body${n.title ? '' : ' kp-first'}" dir="auto">${esc(String(n.text).slice(0, 600))}</div>` : '';
   const im = (n.images || [])[0];
-  return `<article class="kp-card${selected.has(n.id) ? ' sel' : ''}${im ? ' has-img' : ''}" data-id="${esc(n.id)}" data-c="${esc(n.color || '')}" tabindex="0" role="button" aria-label="${esc(n.title || plain(n).slice(0, 40) || t('Note', 'ملاحظة'))}">
+  return `<article class="kp-card${selected.has(n.id) ? ' sel' : ''}${im ? ' has-img' : ''}" data-id="${esc(n.id)}" data-c="${esc(n.color || '')}"${n.bg && window.JundBg ? ` style="${window.JundBg.style(n.bg)}"` : ''} tabindex="0" role="button" aria-label="${esc(n.title || plain(n).slice(0, 40) || t('Note', 'ملاحظة'))}">
     <span class="kp-chk" aria-hidden="true">${I(IC.check, 14)}</span>
     ${im ? `<div class="kp-cimg" style="aspect-ratio:${Math.max(0.6, Math.min(1.8, (im.w || 4) / (im.h || 3)))}"><img alt="" data-img="${esc(im.id)}">${n.images.length > 1 ? `<span class="kp-imgn">+${num(n.images.length - 1)}</span>` : ''}</div>` : ''}
     ${n.share?.id ? `<span class="kp-shared" title="${t('Shared', 'مشاركة')}">${I(IC.people, 14)}</span>` : ''}
@@ -254,7 +254,7 @@ async function selAction(a, btn) {
     if (view === 'trash') { for (const n of sel) await remove(n.id, true); toast(t('✓ Deleted forever', '✓ حُذفت نهائيًا')); }
     else { for (const n of sel) await remove(n.id, false); undoToast(sel); }
   }
-  if (a === 'color') { pickColor(btn, async c => { for (const n of sel) { n.color = c; await save(n, { quiet: true }); } paint(); }); return; }
+  if (a === 'color') { pickColor(btn, async c => { for (const n of sel) { n.color = c; await save(n, { quiet: true }); } paint(); }, null, async bg => { for (const n of sel) { n.bg = bg; await save(n, { quiet: true }); } paint(); }, sel[0]?.bg || ''); return; }
   if (a === 'label') { pickLabels(sel, () => paint()); return; }
   clearSel(); paint();
 }
@@ -280,9 +280,13 @@ function pop(anchor, html, wire) {
   wire(p);
   return p;
 }
-function pickColor(anchor, done, cur = null) {
-  pop(anchor, `<div class="kp-pal">${COLORS.map(c => `<button type="button" class="kp-dot${c === cur ? ' on' : ''}" data-c="${c}" data-col="${c}" aria-label="${(AR() ? CNAME[c][1] : CNAME[c][0])}"></button>`).join('')}</div>`,
-    p => $$('[data-col]', p).forEach(b => b.onclick = () => { p.remove(); done(b.dataset.col); }));
+// colour and background drawing (leaves, waves, night, pattern, desert…), like Google Keep
+function pickColor(anchor, done, cur = null, onBg = null, curBg = '') {
+  const B = window.JundBg;
+  pop(anchor, `<div class="kp-pal">${COLORS.map(c => `<button type="button" class="kp-dot${c === cur ? ' on' : ''}" data-c="${c}" data-col="${c}" aria-label="${(AR() ? CNAME[c][1] : CNAME[c][0])}"></button>`).join('')}</div>
+    ${onBg && B ? `<div class="kp-bgh">${t('Background', 'الخلفية')}</div><div class="kp-pal kp-bgs">${['', ...B.names].map(id => B.swatch(id, id === (curBg || ''))).join('')}</div>` : ''}`,
+    p => { $$('[data-col]', p).forEach(b => b.onclick = () => { p.remove(); done(b.dataset.col); });
+      $$('[data-bg]', p).forEach(b => b.onclick = () => { p.remove(); onBg?.(b.dataset.bg); }); });
 }
 function pickLabels(sel, done) {
   const all = labels();
@@ -355,7 +359,9 @@ async function edit(id, opts = {}) {
   const pin = $('#kp-ed-pin', d); if (pin) pin.onclick = () => { cur.pinned = !cur.pinned; pin.innerHTML = I(cur.pinned ? IC.pinOff : IC.pin); pin.setAttribute('aria-pressed', String(cur.pinned)); dirty(); };
   const ar = $('#kp-ed-arch', d); if (ar) ar.onclick = async () => { cur.archived = !cur.archived; const id = cur.id, on = cur.archived; await flush(); d.close(); if (on) undoToast([id], 'archive'); else toast(t('✓ Back in your notes', '✓ عادت إلى ملاحظاتك')); };
   const rs = $('#kp-ed-restore', d); if (rs) rs.onclick = () => { cur.trashed = 0; dirty(true); d.close(); };
-  $('#kp-ed-color', d).onclick = e => pickColor(e.currentTarget, c => { cur.color = c; d.dataset.c = c; dirty(); }, cur.color || '');
+  const paintBg = () => { d.style.cssText = cur.bg && window.JundBg ? window.JundBg.style(cur.bg) : ''; };
+  paintBg();
+  $('#kp-ed-color', d).onclick = e => pickColor(e.currentTarget, c => { cur.color = c; d.dataset.c = c; dirty(); }, cur.color || '', bg => { cur.bg = bg; paintBg(); dirty(); }, cur.bg || '');
   // ＋ like Keep: a photo, a checklist, or speak
   $('#kp-ed-add', d).onclick = e => pop(e.currentTarget, `<div class="kp-menu">
       <button type="button" data-a="photo">${I(IC.photo, 18)} ${t('Add a photo', 'أضف صورة')}</button>

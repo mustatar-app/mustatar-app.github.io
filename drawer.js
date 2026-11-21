@@ -83,10 +83,10 @@ async function fill() {
   // projects: one per subject, with how many notes it has
   const ls = await J.allLessons();
   const by = new Map();
-  ls.forEach(l => { const n = l.subject?.name || L('Other', 'أخرى'); const p = by.get(n) || { n, c: 0, last: '' }; p.c++; if (l.date > p.last) p.last = l.date; by.set(n, p); });
+  ls.forEach(l => { const n0 = l.subject?.name || L('Other', 'أخرى'), n = AR && n0 === 'General' ? 'عام' : AR && n0 === 'Other subject' ? 'مادة أخرى' : n0; const p = by.get(n) || { n, raw: n0, c: 0, last: '' }; p.c++; if (l.date > p.last) p.last = l.date; by.set(n, p); });
   const ps = [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
   $('#dr-projects', el).innerHTML = ps.length
-    ? ps.slice(0, 6).map(p => `<button type="button" class="dr-item" data-p="${esc(p.n)}"><span class="dr-ic">▣</span><span class="dr-t" dir="auto">${esc(p.n)}</span><small>${p.c}</small></button>`).join('')
+    ? ps.slice(0, 6).map(p => `<button type="button" class="dr-item" data-p="${esc(p.raw || p.n)}"><span class="dr-ic">▣</span><span class="dr-t" dir="auto">${esc(p.n)}</span><small>${p.c}</small></button>`).join('')
     : `<div class="dr-empty">${L('Your subjects appear here when you make notes.', 'تظهر موادك هنا عندما تصنع ملاحظات.')}</div>`;
   if (ps.length > 6) $('#dr-projects', el).insertAdjacentHTML('beforeend', `<button type="button" class="dr-item dr-all" data-all="lib"><span class="dr-ic"></span><span class="dr-t">${L(`All ${ps.length} projects`, `كل المشاريع (${ps.length})`)}</span></button>`);
   const all = $('[data-all]', el); if (all) all.onclick = () => { J.show('library'); close(); };
@@ -112,9 +112,19 @@ function paintChats() {
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { A()?.openChat(b.dataset.c); J.show('assistant'); close(); });
   el.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { if (confirm(L('Delete this chat?', 'حذف هذه المحادثة؟'))) { A()?.deleteChat(b.dataset.d); paintChats(); } });
 }
-function open() { if (!el) return; fill(); el.hidden = false; requestAnimationFrame(() => el.classList.add('in')); document.body.classList.add('vx-open'); }
-function close() { if (!el) return; el.classList.remove('in'); document.body.classList.remove('vx-open'); setTimeout(() => { el.hidden = true; }, 200); }
+// on a computer (a wide screen) the menu stays open at the side, like the Claude desktop app
+const wide = matchMedia('(min-width: 1100px)');
+const docked = () => wide.matches && !document.body.classList.contains('no-dock');
+function open() { if (!el) return; fill(); el.hidden = false; requestAnimationFrame(() => el.classList.add('in')); if (!docked()) document.body.classList.add('vx-open'); }
+function close() { if (!el) return; if (docked()) { fill(); return; } el.classList.remove('in'); document.body.classList.remove('vx-open'); setTimeout(() => { el.hidden = true; }, 200); }
+function dock() {
+  document.body.classList.toggle('dr-docked', docked());
+  if (docked()) { open(); document.body.classList.remove('vx-open'); } else if (el && !el.hidden && el.classList.contains('in') && !document.body.classList.contains('vx-open')) { el.classList.remove('in'); el.hidden = true; }
+}
 
 build();
-window.JundDrawer = { open, close };
+wide.addEventListener?.('change', dock);
+setTimeout(dock, 300);
+window.addEventListener('mustatar-screen', () => { if (docked()) fill(); });
+window.JundDrawer = { open, close, docked };
 })();

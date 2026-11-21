@@ -373,11 +373,13 @@ async function edit(id, opts = {}) {
       ${cur.trashed ? '' : `<button type="button" data-m="friend">${I(IC.people, 18)} ${cur.share?.id ? t('Shared with friends', 'مشاركة مع الأصدقاء') : t('Share with a friend', 'شاركها مع صديق')}</button>`}
       <button type="button" data-m="copy">${I(IC.copy, 18)} ${t('Make a copy', 'نسخة')}</button>
       <button type="button" data-m="share">${I(IC.share, 18)} ${t('Send', 'إرسال')}</button>
+      <button type="button" data-m="drive">${I(IC.share, 18)} ${t('Save to Google Drive', 'احفظها في Google Drive')}</button>
       <button type="button" data-m="del">${I(IC.trash, 18)} ${cur.trashed ? t('Delete forever', 'حذف نهائي') : t('Delete', 'حذف')}</button></div>`,
     p => $$('[data-m]', p).forEach(b => b.onclick = async () => {
       p.remove();
       const m = b.dataset.m;
       if (m === 'friend') { await flush(); shareSheet(); return; }
+      if (m === 'drive') { await flush(); const title = (cur.title || plain(cur).split('\n')[0] || 'Mustatar note').slice(0, 60); window.JundDrive?.save(new Blob([plain(cur)], { type: 'text/plain' }), title.replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.txt'); return; }
       if (m === 'copy') { await flush(); const c = { ...JSON.parse(JSON.stringify(cur)), id: newId(), pinned: false, created: 0 }; await save(c); toast(t('✓ Copy made', '✓ صُنعت نسخة')); }
       if (m === 'share') {   // a copy of the text (and photos) to any app
         const txt = plain(cur);

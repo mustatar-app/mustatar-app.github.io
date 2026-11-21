@@ -21,6 +21,9 @@ const IC = {
   review: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   studio: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/>',
+  checkin: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/><path d="M16.5 20.5l1.5 1.5 3-3"/>',
+  alarm: '<circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1.5M5 4L2.5 6.5M19 4l2.5 2.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   mic: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/>',
   left: '<path d="M12 21a9 9 0 1 0 0-18v9z"/>',
   bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2.2 2.2 0 0 0 4 0"/>',
@@ -68,6 +71,8 @@ function buildSheet() {
       ${row('task', L('Task or reminder', 'مهمة أو تذكير'), '')}
       ${row('habit', L('Habit', 'عادة'), '')}
       ${row('focus', L('Focus session', 'جلسة تركيز'), '')}
+      ${row('alarm', L('Alarm', 'منبّه'), L('Wake up, prayer, study — rings even when the app is closed', 'للاستيقاظ والصلاة والمذاكرة — يرن حتى والتطبيق مغلق'))}
+      ${row('lock', L('Focus lock', 'قفل التركيز'), L('Stay in Mustatar, phone silent', 'ابقَ في مستطر والهاتف صامت'))}
       ${row('timer', L('Timer or stopwatch', 'مؤقت أو ساعة إيقاف'), '')}
       ${row('count', L('Countdown', 'عدّ تنازلي'), L('Ramadan, Eid, exams, your own dates', 'رمضان والعيد والاختبارات ومناسباتك'))}
     </div>
@@ -89,6 +94,8 @@ function buildSheet() {
   go('habit', () => window.JundFeatures?.addHabit());
   go('focus', () => window.JundFeatures?.openFocus());
   go('timer', () => window.JundCount?.open('timer'));
+  go('alarm', () => window.JundAlarm?.open());
+  go('lock', () => window.JundLock?.open());
   go('count', () => window.JundCount?.open('add'));
   // swipe the sheet down to close it
   let y0 = null;
@@ -119,9 +126,12 @@ function me() {
     <div id="me-plan"></div>
     <div class="mx-h">${L('Growth', 'النموّ')}</div>
     <div class="mx-group">
+      ${row('checkin', L('Evening check-in', 'مراجعة آخر اليوم'), L('Tell the app by voice what you did today', 'أخبر التطبيق بصوتك بما أنجزت اليوم'))}
       ${row('habit', L('Habits', 'العادات'), '', habits || '')}
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}
+      ${row('lock', L('Focus lock', 'قفل التركيز'), L('Stay in Mustatar, phone silent', 'ابقَ في مستطر والهاتف صامت'))}
+      ${row('alarm', L('Alarm', 'المنبّه'), '', (window.JundAlarm?.all?.().filter(a => a.on !== false).length || '') || '')}
       ${row('count', L('Countdowns and timers', 'العدّ التنازلي والمؤقتات'), '', (window.JundCount?.timers?.().length || '') || '')}
       ${row('brief', L('Brief before lessons and meetings', 'موجز قبل الدروس والاجتماعات'), (m => m ? (m >= 60 ? L(`${m / 60} h before`, `قبل ${m / 60} س`) : L(`${m} min before`, `قبل ${m} د`)) : L('Off', 'متوقف'))(Number(store.get('briefLead', 60))))}
       ${tools.study ? row('study', L('Study tools', 'أدوات المذاكرة'), L('Flashcards, quizzes, exam plan', 'بطاقات واختبارات وخطة امتحان')) : ''}
@@ -142,7 +152,7 @@ function me() {
       ${row('words', L('My words', 'كلماتي'), L('Names and terms the app should hear and spell right', 'أسماء ومصطلحات يسمعها التطبيق ويكتبها صحيحة'), (store.get('myWords', '') || '').split(/[,،\n]/).filter(w => w.trim()).length || '')}
       ${row('tools', L('Tools', 'الأدوات'), '', nTools ? L(nTools + ' on', nTools + ' مفعّلة') : '')}
       ${row('pin', L('Prayer and calendar', 'الصلاة والتقويم'), '', esc(place))}
-      ${row('sun', L('Appearance', 'المظهر'), '', esc(theme))}
+      ${row('sun', L('Appearance and text size', 'المظهر وحجم النص'), '', esc(theme))}
       ${row('shield', L('Account and privacy', 'الحساب والخصوصية'), '')}
       ${row('save', L('Saving and backup', 'الحفظ والنسخ الاحتياطي'), '')}
       ${row('send', L('Send feedback', 'أرسل ملاحظة'), '')}
@@ -150,7 +160,10 @@ function me() {
     </div>
     <button type="button" class="link me-all" id="me-all">${L('All settings', 'كل الإعدادات')}</button>`;
   const on = (k, fn) => { const b = $(`[data-k="${k}"]`, sc); if (b) b.onclick = fn; };
-  on('habit', () => window.JundFeatures?.addHabit());
+  on('habit', () => J.show('habits'));
+  on('checkin', () => window.JundCheckin?.open());
+  on('alarm', () => window.JundAlarm?.open());
+  on('lock', () => window.JundLock?.open());
   on('review', () => { J.show('calendar'); setTimeout(() => $('#week-review')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80); });
   on('focus', () => window.JundFeatures?.openFocus());
   on('count', () => window.JundCount?.open(window.JundCount.timers().length ? 'timer' : 'list'));

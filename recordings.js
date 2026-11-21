@@ -101,7 +101,7 @@ async function paint() {
   sc.innerHTML = `<h1 class="screen-title">Recordings &amp; meetings</h1>
     <p class="muted fine">Every recording is saved here as a dated text copy. The sound is deleted as soon as its text is ready, unless you tick “Keep the audio”.</p>
     <div class="row-gap" style="margin:6px 0 12px"><button type="button" class="primary small" id="rx-rec">● Record a meeting or class</button><button type="button" class="ghost small" data-go="new">＋ Add a file</button></div>
-    <div class="seg rx-filter">${[['all', `All ${list.length}`], ['done', `Done ${done}`], ['left', `Left ${left}`]].map(([k, t]) => `<button type="button" data-f="${k}" class="${filter === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <div class="seg rx-filter">${[['all', (window.ZadLang === 'ar' ? 'الكل ' : 'All ') + list.length], ['done', (window.ZadLang === 'ar' ? 'المكتوبة ' : 'Done ') + done], ['left', (window.ZadLang === 'ar' ? 'المتبقية ' : 'Left ') + left]].map(([k, t]) => `<button type="button" data-f="${k}" class="${filter === k ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div class="rx-list">${shown.length ? shown.map(card).join('') : `<p class="muted" style="margin-top:14px">${filter === 'left' ? 'Nothing left — everything is transcribed. ✓' : 'No recordings yet. Record a class or a meeting, or add an audio file.'}</p>`}</div>`;
   $('#rx-rec', sc).onclick = () => window.JundRecorder?.start();
   $$('[data-f]', sc).forEach(b => b.onclick = () => { filter = b.dataset.f; paint(); });

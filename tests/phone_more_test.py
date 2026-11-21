@@ -152,6 +152,33 @@ def main():
     adb("shell", "input", "keyevent", "KEYCODE_BACK"); time.sleep(2)
     page = start()
 
+    # 4b. the alarm clock: set an alarm a minute ahead; it is the phone's real next alarm, then it rings (full screen, alarm sound)
+    adb("shell", "appops", "set", PKG, "SCHEDULE_EXACT_ALARM", "allow")
+    fs = page.js("(() => { const d = new Date(Date.now() + 70e3); const t = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); localStorage.setItem('jn_alarms', JSON.stringify([{ id: 'Atest', time: t, days: [], label: 'Test alarm', on: true }])); return JundAlarm.sync().then(() => JundNative.ask({ action: 'alarmStatus' }, 8000)); })()", timeout=20)
+    print("     alarm status:", fs, flush=True)
+    check(isinstance(fs, dict) and fs.get("ok") and int(fs.get("nextAt") or 0) > 0, "an alarm set in Mustatar becomes the phone's next alarm")
+    nxt = adb("shell", "dumpsys", "alarm")
+    check("AlarmClock" in nxt or "sa.jund.notes" in nxt, "the phone's alarm list holds Mustatar's alarm")
+    rang = page.js("JundNative.ask({ action: 'alarmTest', label: 'Test' }, 8000)", timeout=15); time.sleep(3)
+    notes = adb("shell", "dumpsys", "notification", "--noredact")
+    check(isinstance(rang, dict) and rang.get("ok") and "mustatar-alarm-v1" in notes, "the alarm rings on the alarm channel (loud, until stopped)")
+    adb("shell", "cmd", "statusbar", "collapse")
+    adb("shell", "am", "broadcast", "-a", "sa.jund.notes.ALARM_STOP", "-n", f"{PKG}/sa.jund.notes.AlarmClock")
+    time.sleep(2)
+    adb("shell", "input", "keyevent", "KEYCODE_HOME"); time.sleep(1)
+    page = start()
+    # 4c. focus lock: the app pins itself, then unpins
+    lk = page.js("JundNative.ask({ action: 'focusLock', dnd: false }, 8000)", timeout=15); time.sleep(3)
+    pinned = "mLockTaskModeState=PINNED" in adb("shell", "dumpsys", "activity", "activities") or "LOCKED" in adb("shell", "dumpsys", "activity", "lastanr") 
+    print("     focus lock:", lk, pinned, flush=True)
+    check(isinstance(lk, dict) and lk.get("ok"), "focus lock answers (pins Mustatar on the screen)")
+    page.js("JundNative.ask({ action: 'focusUnlock' }, 8000)", timeout=15); time.sleep(2)
+    # 4d. the back button never leaves to an old page: Calendar → back → Today
+    page.js("JN.show('calendar')"); time.sleep(1)
+    adb("shell", "input", "keyevent", "KEYCODE_BACK"); time.sleep(2)
+    scr = page.js("[...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id")
+    check(scr == "screen-assistant", f"the phone's back button goes from Calendar to Today, inside the app ({scr})")
+
     # 5. fitness: Health Connect is there, permission can be given, and the last 7 days can be read
     st = page.js("JundNative.ask({ action: 'healthStatus' }, 20000)", timeout=30)
     print("     health status:", st, flush=True)

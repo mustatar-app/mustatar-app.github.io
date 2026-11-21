@@ -49,12 +49,12 @@ async function paint() {
       </form>
     </div>
 
-    <div class="card"><div class="card-h">Tasks not done${c.overdue.length ? ` · ${c.overdue.length}` : ''}</div>
+    <div class="card"><div class="card-h">${window.ZadLang === 'ar' ? 'مهام لم تُنجز' : 'Tasks not done'}${c.overdue.length ? ` · ${c.overdue.length}` : ''}</div>
       ${c.overdue.length ? c.overdue.map(task).join('') : '<p class="muted fine">No missed tasks. ✓</p>'}
       ${c.today.length ? `<div class="card-h" style="margin-top:12px">Still open today</div>${c.today.map(task).join('')}` : ''}
     </div>
 
-    <div class="card"><div class="card-h">Recordings not transcribed${c.recs.length ? ` · ${c.recs.length}` : ''}</div>
+    <div class="card"><div class="card-h">${window.ZadLang === 'ar' ? 'تسجيلات لم تُكتب' : 'Recordings not transcribed'}${c.recs.length ? ` · ${c.recs.length}` : ''}</div>
       ${c.recs.length ? c.recs.map(r => `<div class="pd-row"><span><b dir="auto">${esc(r.name)}</b><small class="muted">${r.status === 'working' ? 'Transcribing now…' : r.status === 'cut' ? 'Recording cut off' : r.status === 'failed' ? 'Stopped before the end' : 'Not transcribed yet'}</small></span></div>`).join('') + '<button type="button" class="ghost small" data-go="recordings">Open Recordings</button>'
         : '<p class="muted fine">All recordings are transcribed. ✓</p>'}
     </div>

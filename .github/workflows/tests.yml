@@ -55,6 +55,8 @@ jobs:
           python3 tests/offline_wait_test.py http://localhost:8765/
           python3 tests/calendar_test.py http://localhost:8765/
           python3 tests/habits_test.py http://localhost:8765/
+          python3 tests/checkin_test.py http://localhost:8765/
+          python3 tests/everything_test.py http://localhost:8765/
           python3 tests/mp4fix_test.py http://localhost:8765/
           python3 tests/keep_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)

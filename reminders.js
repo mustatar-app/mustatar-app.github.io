@@ -169,7 +169,7 @@ async function render() {
     const text = $('#rm-text').value.trim(), b = $('#rm-tr'); if (!text) { $('#rm-text').focus(); return; }
     b.disabled = true; b.textContent = '⏳ Translating…';
     try {
-      const r = await J.callServer({ json: false, maxTokens: 800, system: 'Translate this Islamic text (Quran, hadith or words of the scholars) into clear English. Give the meaning faithfully and add nothing. Return only the translation.', user: text });
+      const r = await J.callServer({ assistant: true, json: false, maxTokens: 800, system: 'Translate this Islamic text (Quran, hadith or words of the scholars) into clear English. Give the meaning faithfully and add nothing. Return only the translation.', user: text });
       $('#rm-en-in').value = r.text.trim();
     } catch (e) { $('#rm-en-in').placeholder = '✗ ' + J.errText(e); }
     b.disabled = false; b.textContent = '🌐 Translate it for me';

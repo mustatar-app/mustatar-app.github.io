@@ -259,9 +259,9 @@
   <section class="screen" id="screen-studio" hidden></section>
 
   <!-- recordings & meetings, and "left to do" (built by recordings.js and pending.js) -->
-  <section class="screen" id="screen-recordings" hidden data-noi18n></section>
-  <section class="screen" id="screen-pending" hidden data-noi18n></section>
-  <section class="screen" id="screen-inbox" hidden data-noi18n></section>
+  <section class="screen" id="screen-recordings" hidden></section>
+  <section class="screen" id="screen-pending" hidden></section>
+  <section class="screen" id="screen-inbox" hidden></section>
 
   <!-- me: you, your growth tools, your workspace and settings (built by nav.js) -->
   <section class="screen" id="screen-me" hidden data-noi18n></section>
@@ -309,6 +309,7 @@
           <option value="light">Day</option>
         </select>
       </label>
+      <div class="field" id="text-size-f"><span>Text size</span><div class="seg ts-seg" id="text-size" data-noi18n></div><small class="muted ts-prev" id="ts-prev">Mustatar · مستطر — the size of the words in the whole app</small></div>
       <label class="check"><input type="checkbox" id="show-reminder" checked> Show the daily reminder (Quran verse and words of the scholars) on Home</label>
       <label class="field">
         <span>Arabic font in notes</span>
@@ -545,7 +546,7 @@
 <dialog id="out-dialog">
   <div class="row-between"><h2 id="out-title">Text</h2><button type="button" class="ghost small" id="out-close">Close</button></div>
   <textarea id="out-text" rows="14" dir="auto"></textarea>
-  <div class="row-gap" style="margin-top:10px"><button type="button" class="primary" id="out-copy">Copy</button><button type="button" class="ghost" id="out-share">Share</button><button type="button" class="ghost" id="out-email" hidden>Open in email</button></div>
+  <div class="row-gap" style="margin-top:10px"><button type="button" class="primary" id="out-copy">Copy</button><button type="button" class="ghost" id="out-share">Share</button><button type="button" class="ghost" id="out-email" hidden>Open in email</button><button type="button" class="ghost" id="out-drive">Save to Google Drive</button></div>
   <small class="muted" id="out-status"></small>
 </dialog>
 
@@ -612,6 +613,10 @@
 <script src="countdown.js"></script>
 <script src="brief.js"></script>
 <script src="habits.js"></script>
+<script src="checkin.js"></script>
+<script src="search.js"></script>
+<script src="alarm.js"></script>
+<script src="drive.js"></script>
 <script src="phone.js"></script>
 <script src="study.js"></script>
 <script src="reminders.js"></script>

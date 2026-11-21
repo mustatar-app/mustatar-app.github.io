@@ -48,21 +48,50 @@ function check(k) {
   throw Object.assign(new Error(WAIT[k]), { code: 'quota', limit: k });
 }
 
-/* ---------- the plan card on Me ---------- */
+/* ---------- the plan on Me: one short line (like Claude's settings); tap it for usage and the plans ---------- */
+const KEYS = ['rec', 'text', 'yt', 'quiz'];
+const pctOf = (k, u = use()) => Math.min(100, Math.round((u[k] || 0) / limitOf(k) * 100));
+function resetIn(k) {
+  const now = new Date();
+  if (DAILY.has(k)) {
+    const m = Math.max(1, Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now) / 6e4)), h = Math.floor(m / 60), mm = m % 60;
+    return L(`Resets in ${h ? h + ' hr ' : ''}${mm} min`, `يتجدد بعد ${h ? num(h) + ' س ' : ''}${num(mm)} د`);
+  }
+  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return L(`Resets ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`, `يتجدد ${d.toLocaleDateString('ar-SA-u-ca-gregory-nu-arab', { day: 'numeric', month: 'long' })}`);
+}
 function card(el) {
   if (!el) return;
   const p = plan(), u = use();
-  const bar = k => {
-    const lim = limitOf(k), used = u[k] || 0, pct = Math.min(100, Math.round(used / lim * 100));
-    return `<div class="pl-row"><span class="pl-k">${NAMES[k][0]}</span><span class="pl-n">${num(used)} / ${num(lim)}${NAMES[k][1] ? ' ' + NAMES[k][1] : ''}</span>
-      <span class="pl-bar"><i style="width:${pct}%"${pct >= 100 ? ' class="full"' : ''}></i></span></div>`;
-  };
-  el.innerHTML = p === 'owner'
-    ? `<div class="pl-card"><div class="pl-top"><b>${L('Owner', 'المالك')}</b><span class="muted">${L('no limits on this phone', 'بلا حدود على هذا الهاتف')}</span></div></div>`
-    : `<div class="pl-card"><div class="pl-top"><b>${L('Basic', 'الأساسية')}</b><span class="pl-free">${L('Free', 'مجانية')}</span><button type="button" class="link pl-see" id="pl-see">${L('See plans', 'الخطط')}</button></div>
-      ${['rec', 'text', 'yt', 'quiz'].map(bar).join('')}
-      <p class="muted fine">${L('The assistant, notes, calendar, tasks, habits, prayer, reminders, focus and Studio are unlimited. Daily limits reset at midnight, monthly ones on the 1st.', 'المساعد والملاحظات والتقويم والمهام والعادات والصلاة والتذكيرات والتركيز والاستوديو بلا حدود. الحدود اليومية تتجدد منتصف الليل، والشهرية في أول الشهر.')}</p></div>`;
-  const s = $('#pl-see', el); if (s) s.onclick = prices;
+  if (p === 'owner') { el.innerHTML = `<button type="button" class="pl-line" id="pl-open"><span class="pl-name"><b>${L('Owner', 'المالك')}</b><small>${L('No limits on this phone', 'بلا حدود على هذا الهاتف')}</small></span><span class="mx-chev">${AR ? '‹' : '›'}</span></button>`; $('#pl-open', el).onclick = usage; return; }
+  const top = KEYS.map(k => [k, pctOf(k, u)]).sort((a, b) => b[1] - a[1])[0];
+  const full = KEYS.filter(k => pctOf(k, u) >= 100);
+  el.innerHTML = `<button type="button" class="pl-line" id="pl-open">
+      <span class="pl-name"><b>${L('Basic plan', 'الخطة الأساسية')} <span class="pl-free">${L('Free', 'مجانية')}</span></b>
+        <small>${full.length ? L('A limit is reached — tap to see when it comes back', 'وصلت أحد الحدود — اضغط لترى متى يعود') : L(`Usage: ${top[1]}% of your most-used limit`, `الاستخدام: ${num(top[1])}٪ من أكثر حدّ استخدامًا`)}</small>
+        <span class="pl-bar"><i style="width:${top[1]}%"${top[1] >= 100 ? ' class="full"' : ''}></i></span></span>
+      <span class="mx-chev">${AR ? '‹' : '›'}</span></button>`;
+  $('#pl-open', el).onclick = usage;
+}
+
+/* ---------- usage (like Claude's Settings → Usage) and the plans ---------- */
+function usage() {
+  let d = $('#pl-usage');
+  if (!d) { d = document.createElement('dialog'); d.id = 'pl-usage'; d.className = 'pl-dlg'; d.setAttribute('data-noi18n', ''); document.body.appendChild(d); }
+  d.dir = AR ? 'rtl' : 'ltr';
+  const p = plan(), u = use();
+  const row = k => { const pc = pctOf(k, u), used = u[k] || 0, lim = limitOf(k);
+    return `<div class="pu-row"><div class="pu-top"><b>${NAMES[k][0]}</b><span>${num(pc)}${AR ? '٪' : '%'} ${L('used', 'مستخدم')}</span></div>
+      <span class="pl-bar big"><i style="width:${pc}%"${pc >= 100 ? ' class="full"' : ''}></i></span>
+      <div class="pu-sub"><small>${num(used)} / ${num(lim)}${NAMES[k][1] ? ' ' + NAMES[k][1] : ''}</small><small>${resetIn(k)}</small></div></div>`; };
+  d.innerHTML = `<div class="row-between"><b class="card-h" style="margin:0">${L('Plan and usage', 'الخطة والاستخدام')}</b><button type="button" class="icon-btn" id="pu-x" aria-label="${L('Close', 'إغلاق')}">✕</button></div>
+    <div class="pu-plan"><span class="pu-av">${p === 'owner' ? '★' : 'B'}</span><span><b>${p === 'owner' ? L('Owner', 'المالك') : L('Basic plan', 'الخطة الأساسية')}</b><small>${p === 'owner' ? L('No limits on this phone', 'بلا حدود على هذا الهاتف') : L('Free — no card needed', 'مجانية — بلا بطاقة')}</small></span></div>
+    ${p === 'owner' ? '' : `<div class="pu-h">${L('Usage limits', 'حدود الاستخدام')}</div>${KEYS.map(row).join('')}`}
+    <div class="pu-free"><b>${L('Always unlimited', 'دائمًا بلا حدود')}</b><span>${L('Assistant chat, notes you write, calendar, tasks, habits, prayer times, reminders, focus and Studio.', 'محادثة المساعد، والملاحظات التي تكتبها، والتقويم، والمهام، والعادات، وأوقات الصلاة، والتذكيرات، والتركيز، والاستوديو.')}</span></div>
+    <button type="button" class="primary pu-up" id="pu-plans">${L('See all plans', 'اعرض كل الخطط')}</button>`;
+  $('#pu-x', d).onclick = () => d.close();
+  $('#pu-plans', d).onclick = () => { d.close(); prices(); };
+  if (!d.open) d.showModal();
 }
 
 /* ---------- the plans page ---------- */
@@ -84,5 +113,5 @@ function prices() {
   d.showModal();
 }
 
-window.JundPlan = { check, add, left, plan, card, prices, LIMITS };
+window.JundPlan = { check, add, left, plan, card, prices, usage, LIMITS };
 })();

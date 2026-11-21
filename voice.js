@@ -284,5 +284,5 @@ function forLesson(l) {
 }
 function general() { open({ onSave: turns => window.JundAssistant?.addTalk?.(turns) }); }
 
-window.JundVoice = { open, forLesson, general, onLesson };
+window.JundVoice = { open, forLesson, general, onLesson, say: (t, lang) => new Promise(res => say(t, lang || sentLang(t), res)), stop: stopSpeaking };
 })();

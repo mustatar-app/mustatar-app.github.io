@@ -260,6 +260,8 @@ function paintFitCard() {
 const FOLDERS = {
   rec: { start: 'Recordings/Voice Recorder', ic: '🎙', en: ['Recordings', 'new recording', 'new recordings', 'Make notes'], ar: ['التسجيلات', 'تسجيل جديد', 'تسجيلات جديدة', 'اصنع ملاحظات'], want: /^(audio|video)\// },
   shots: { start: 'DCIM/Screenshots', ic: '🖼', en: ['Screenshots', 'new screenshot', 'new screenshots', 'Save to My notes'], ar: ['لقطات الشاشة', 'لقطة جديدة', 'لقطات جديدة', 'احفظها في ملاحظاتي'], want: /^image\// },
+  // the phone's own notes app (Samsung Notes, Xiaomi, Huawei…): save notes there as Word or text files into one folder; new ones come into My notes
+  notes: { start: 'Documents', ic: '🗒', en: ['Phone notes folder', 'new note file', 'new note files', 'Bring into My notes'], ar: ['مجلد ملاحظات الهاتف', 'ملف ملاحظة جديد', 'ملفات ملاحظات جديدة', 'انقلها إلى ملاحظاتي'], want: /^(text\/|application\/(vnd\.openxmlformats-officedocument\.wordprocessingml|msword|zip|json))/ },
 };
 const folders = () => store.get('phoneFolders', {});
 const waiting = {};   // new files found in each folder, not yet handled
@@ -290,6 +292,10 @@ async function folderTake(k) {
   f[k].since = Math.max(...list.map(x => x.modified)); store.set('phoneFolders', f); waiting[k] = []; paintFolderCards();
   if (!files.length) return;
   if (k === 'rec') { J.show('new'); await window.JN.addFiles(files); }
+  else if (k === 'notes') {
+    const r = await window.JundImport?.bring(files);
+    window.JundCal?.toast(r?.saved ? t(`✓ ${r.saved} notes brought into My notes`, `✓ نُقلت ${r.saved} ملاحظة إلى ملاحظاتي`) : t('✓ Nothing new in those files', '✓ لا جديد في هذه الملفات'));
+  }
   else {
     window.JundCal?.toast(t('Saving to My notes and reading the words…', 'تُحفظ في ملاحظاتي وتُقرأ كلماتها…'));
     for (const file of files) await window.JundKeep?.capture({ files: [file] });

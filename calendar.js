@@ -179,6 +179,8 @@ function strip() {
   return `<div class="ag-strip">${[...Array(7)].map((_, i) => { const d = addDays(ws, i), n = on(d).filter(e => !isDone(e, d)).length;
     return `<button type="button" class="ag-sd ${d === today() ? 'today' : ''} ${d === agFrom ? 'sel' : ''}" data-sd="${d}"><small>${dayName(d, { weekday: 'narrow' })}</small><b>${parse(d).getDate()}</b><i>${n ? '•'.repeat(Math.min(3, n)) : ''}</i></button>`; }).join('')}</div>`;
 }
+const agOpen = new Set();
+const ar2 = n => window.ZadLang === 'ar' ? String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]) : String(n);
 function renderAgenda() {
   const v = $('#cal-view'), t = today(), late = agFrom === t ? overdue() : [], nodate = events.filter(e => isTask(e) && !e.date && !e.done);
   let html = `<div class="ag-nav"><button type="button" class="icon-btn" data-ag="-7" aria-label="${L('Previous week', 'الأسبوع السابق')}">‹</button><b>${dayName(startOfWeek(agFrom), { month: 'long', year: 'numeric' })}</b>${agFrom !== t ? `<button type="button" class="ghost small" data-ag="today">${L('Today', 'اليوم')}</button>` : ''}<button type="button" class="icon-btn" data-ag="7" aria-label="${L('Next week', 'الأسبوع التالي')}">›</button></div>${strip()}`;
@@ -187,8 +189,14 @@ function renderAgenda() {
     const d = addDays(agFrom, i), items = on(d);
     if (!items.length && i > 0) continue;
     const hj = hijriL(d);
-    html += `<section class="ag-day ${d === t ? 'is-today' : ''}"><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-hj">${esc(hj)}</span></h3>
-      ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</section>`;
+    // today (and the day picked in the strip) is open; every other day is folded to one line — tap it to open
+    const open = d === t || d === agFrom || agOpen.has(d);
+    // the folded line says what is inside: lessons, and (so no task is ever missed) tasks, exams and meetings by name
+    const nLes = items.filter(e => e.type === 'class').length, other = items.filter(e => e.type !== 'class');
+    const sum = [nLes ? L(`${nLes} ${nLes === 1 ? 'lesson' : 'lessons'}`, `${ar2(nLes)} ${nLes === 1 ? 'درس' : nLes === 2 ? 'درسان' : nLes <= 10 ? 'دروس' : 'درسًا'}`) + (items[0].time ? ' · ' + L('from ', 'من ') + clock(items.find(e => e.time)?.time) : '') : '',
+      other.length ? other.slice(0, 2).map(e => (e.done ? '✓ ' : '') + e.title.slice(0, 28)).join(L(', ', '، ')) + (other.length > 2 ? L(` +${other.length - 2}`, ` +${ar2(other.length - 2)}`) : '') : ''].filter(Boolean).join(' · ');
+    html += `<details class="ag-day ${d === t ? 'is-today' : ''}" data-day="${d}" ${open ? 'open' : ''}><summary><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-sum">${esc(sum)}</span><span class="ag-hj">${esc(hj)}</span></h3></summary>
+      ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</details>`;
   }
   html += `<button type="button" class="ghost ag-more" id="ag-more">${L('Show 30 more days', 'اعرض ٣٠ يومًا أخرى')}</button>`;
   if (nodate.length) html += `<button type="button" class="ag-nodate" id="ag-nodate">📌 ${L(`${nodate.length} ${nodate.length === 1 ? 'task has' : 'tasks have'} no date yet — see them in Tasks`, `${nodate.length} من المهام بلا تاريخ — تجدها في «المهام»`)}</button>`;
@@ -197,6 +205,7 @@ function renderAgenda() {
   $$('[data-sd]', v).forEach(b => b.onclick = () => { agFrom = b.dataset.sd; render(); });
   $$('[data-add]', v).forEach(b => b.onclick = () => openDialog(null, b.dataset.add));
   $('#ag-more').onclick = () => { agDays += 30; render(); };
+  $$('details.ag-day', v).forEach(dt => dt.addEventListener('toggle', () => { if (dt.open) agOpen.add(dt.dataset.day); else agOpen.delete(dt.dataset.day); }));
   const mv = $('#ag-move'); if (mv) mv.onclick = () => { for (const e of late) { e.date = t; e.updated = Date.now(); } save(); render(); toast(L(`✓ Moved ${late.length} to today`, `✓ نُقلت ${late.length} إلى اليوم`)); };
   const nd = $('#ag-nodate'); if (nd) nd.onclick = () => { mode = 'tasks'; store.set('calMode2', mode); render(); };
 }
@@ -376,7 +385,9 @@ function toast(t, ms = 3200, act = null) {
   el.querySelector('.tst-t').textContent = s.replace(/^[✓✗⚠]\uFE0F?\s*/, '');
   if (act?.label) { const b = document.createElement('button'); b.type = 'button'; b.className = 'tst-act'; b.textContent = act.label; b.onclick = e => { e.stopPropagation(); hide(); act.fn?.(); }; el.appendChild(b); }
   el.hidden = false; el.classList.remove('out'); void el.offsetWidth; el.classList.add('in');
-  const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 220); };
+  // above any open window too (otherwise a message during a window shows half-hidden under its edge)
+  try { if (!el.hasAttribute('popover')) el.setAttribute('popover', 'manual'); if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); } catch {}
+  const hide = () => { el.classList.remove('in'); el.classList.add('out'); clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('out'); try { el.hidePopover(); } catch {} }, 220); };
   el.onclick = hide;
   let y0 = null;
   el.ontouchstart = e => { y0 = e.touches[0].clientY; };
@@ -428,6 +439,7 @@ function banner() {
   const t = today(), items = on(t).filter(e => !isDone(e, t)), late = overdue();
   if (!items.length && !late.length) { b.hidden = true; return; }
   b.hidden = false;
+  if (window.ZadLang === 'ar') { b.innerHTML = `<b>اليوم:</b> ${items.length ? items.slice(0, 3).map(e => `${e.time ? clock(e.time) + ' ' : ''}<span dir="auto">${esc(e.title)}</span>`).join(' · ') + (items.length > 3 ? ` +${items.length - 3}` : '') : 'لا شيء'}${late.length ? `<br><span style="color:var(--danger)">${late.length} غير منجزة من قبل</span>` : ''} · <button type="button" class="link" id="due-open">افتح التقويم</button>`; $('#due-open').onclick = () => { goToday(); J.show('calendar'); }; return; }
   b.innerHTML = `<b>Today:</b> ${items.length ? items.slice(0, 3).map(e => `${e.time ? hm(e.time) + ' ' : ''}<span dir="auto">${esc(e.title)}</span>`).join(' · ') + (items.length > 3 ? ` +${items.length - 3}` : '') : 'nothing left'}
     ${late.length ? `<br><span style="color:var(--danger)">${late.length} unfinished from earlier</span>` : ''}
     · <button type="button" class="link" id="due-open">Open calendar</button>`;
@@ -456,6 +468,7 @@ function reminderList() {
   if (run && run.end > Date.now()) out.push({ at: run.end, title: 'Focus time done', body: `${run.min} min of ${run.subject}. Take a short break.`, tag: 'focus-' + run.start });
   for (const x of window.JundCount?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const x of window.JundBrief?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // briefs before lessons and meetings
+  for (const x of window.JundCheckin?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });
@@ -472,6 +485,7 @@ function nativeReminders() {
   if (run && run.end > Date.now()) items.push({ id: 'focus-' + run.start, at: run.end, title: L('Focus time done', 'انتهى وقت التركيز'), body: run.subject });
   items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
   items.push(...(window.JundBrief?.alarms?.() || []));   // a short brief before lessons and meetings
+  items.push(...(window.JundCheckin?.alarms?.() || []));   // the evening check-in
   items.push(...(window.JundPhone?.prayerAlarms?.() || []));   // a gentle vibration at prayer times (Android app)
   return items;
 }
@@ -636,11 +650,11 @@ function upcoming(days = 7, max = 8) {
 }
 // every (item, day) between two days from today, repeats included (for the widgets and the phone's calendar)
 function between(a, b) { const out = []; for (let i = a; i <= b; i++) { const d = addDays(today(), i); for (const e of on(d)) out.push({ e, d, done: isDone(e, d), ...dueTime(e, d) }); } return out; }
-window.JundCal = { between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
+window.JundCal = { on, between, pushSync, widgetSync, widgetId, render, onLesson, chooseTasks, merge, goToday, toast, upcoming, save: () => { save(); render(); }, addDays, today, open: (e, d) => openDialog(e ? events.find(x => x.id === e) : null, d || today()), events: () => events, add: e => { const x = { id: newId(), created: Date.now(), updated: Date.now(), repeat: 'none', remind: -1, ...e }; events.push(x); save(); return x; }, remove: id => { const i = events.findIndex(x => x.id === id); if (i >= 0) { events.splice(i, 1); save(); } } };
 banner();
 setTimeout(() => {
   const missed = checkReminders();
-  if (missed.length) toast(`🔔 You missed ${missed.length} ${missed.length === 1 ? 'reminder' : 'reminders'} — see Today`, 6000);
+  if (missed.length) toast(window.ZadLang === 'ar' ? `🔔 فاتتك ${missed.length} من التذكيرات — انظر «اليوم»` : `🔔 You missed ${missed.length} ${missed.length === 1 ? 'reminder' : 'reminders'} — see Today`, 6000);
   weeklyNudge();
 }, 1500);
 setInterval(() => { checkReminders(); weeklyNudge(); }, 30000);

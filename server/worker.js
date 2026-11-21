@@ -484,7 +484,11 @@ export default {
     if (path === '/link') return linkRoute(req, env, h, !!origin && h['Access-Control-Allow-Origin'] === origin);
 
     /* ----- notes shared with friends (share.js) ----- */
-    if (path === '/share' || path.startsWith('/share/')) return shareRoutes(req, env, h, path, json);
+    if (path === '/share' || path.startsWith('/share/')) {
+      // any failure comes back as a clear message (an unexpected crash would reach the app as "could not reach the server")
+      try { return await shareRoutes(req, env, h, path, json); }
+      catch (e) { console.log('share failed', e?.stack || e); return json({ error: 'sharing failed on the server: ' + String(e?.message || e).slice(0, 160), code: 'sharefail' }, 500, h); }
+    }
 
     /* ----- accounts and each person's own private space (space.js) ----- */
     if (path.startsWith('/auth/') || path.startsWith('/space/'))

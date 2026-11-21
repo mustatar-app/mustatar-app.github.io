@@ -262,6 +262,12 @@ async function restore(j) {
 
 /* ---------- the screen: a sheet with the sources, each with its own short steps ---------- */
 const SOURCES = [
+  { id: 'samsung', name: 'Samsung Notes',
+    en: ['Open Samsung Notes and press and hold a note; tick all the notes you want (or "All").', 'Tap Share (or ⋮ → Save as file) and choose Microsoft Word (.docx) or Text file (.txt).', 'To send them straight here: choose Mustatar in the share list. Or save them in one folder (e.g. Documents/Samsung Notes).', 'Here: tap Choose files and pick them. Or in Me → All settings → This phone, choose that folder as your "Phone notes folder": every new note you save there comes into My notes by itself.'],
+    ar: ['افتح Samsung Notes واضغط مطولًا على ملاحظة، ثم حدّد كل الملاحظات التي تريدها (أو «الكل»).', 'اضغط مشاركة (أو ⋮ ← حفظ كملف) واختر Microsoft Word ‏(‎.docx) أو ملف نصي ‏(‎.txt).', 'لإرسالها مباشرة إلى هنا: اختر مستطر في قائمة المشاركة. أو احفظها في مجلد واحد (مثل Documents/Samsung Notes).', 'هنا: اضغط «اختر الملفات» واخترها. أو من «أنا» ← كل الإعدادات ← هذا الهاتف، اختر ذلك المجلد «مجلد ملاحظات الهاتف»: كل ملاحظة جديدة تحفظها فيه تدخل ملاحظاتي تلقائيًا.'] },
+  { id: 'phone', name: t('Other phone notes apps (Xiaomi, Huawei, Oppo, iPhone…)', 'تطبيقات ملاحظات الهاتف الأخرى (شاومي، هواوي، أوبو، آيفون…)'),
+    en: ['Open the note, tap Share, and choose Mustatar — it goes into My notes (text, photos and voice notes).', 'For many notes at once: use the app\'s Export or Save as text, then Choose files here.', 'iPhone Notes: select a note → Share → Mustatar (in the app or the website saved to the home screen).'],
+    ar: ['افتح الملاحظة واضغط مشاركة واختر مستطر — تدخل ملاحظاتي (نص وصور وملاحظات صوتية).', 'لعدة ملاحظات معًا: استخدم «تصدير» أو «حفظ كنص» في ذلك التطبيق، ثم «اختر الملفات» هنا.', 'ملاحظات iPhone: حدّد ملاحظة ← مشاركة ← مستطر (في التطبيق أو الموقع المحفوظ على الشاشة الرئيسية).'] },
   { id: 'keep', name: 'Google Keep', link: 'https://takeout.google.com/settings/takeout/custom/keep',
     en: ['Open the link and sign in.', 'Only "Keep" is ticked: tap Next step, then Create export.', 'When Google emails you, download the .zip.', 'Come back here, tap Choose files, and pick that .zip.'],
     ar: ['افتح الرابط وسجّل الدخول.', 'تأكد أن «Keep» وحده محدد: اضغط الخطوة التالية ثم إنشاء تصدير.', 'عندما يصلك بريد من Google، نزّل ملف ‎.zip.', 'ارجع هنا، واضغط «اختر الملفات»، واختر ملف ‎.zip.'] },

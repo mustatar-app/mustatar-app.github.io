@@ -322,7 +322,7 @@ function fillSubjects() {
   const mineHtml = mine.length ? `<optgroup label="${work ? 'My projects' : 'My subjects'}">${mine.map(n => `<option value="mine:${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>` : '';
   sel.innerHTML = mineHtml + Object.entries(groups).map(([place, list]) =>
     `<optgroup label="${esc(place)}">${list.map(s => `<option value="${s.id}">${esc(s.name)}${s.book ? ' — ' + esc(s.book) : ''}</option>`).join('')}</optgroup>`
-  ).join('') + `<option value="other">${work ? 'New project or area…' : 'Another subject…'}</option>`;
+  ).join('') + `<option value="other">${window.ZadLang === 'ar' ? (work ? 'مشروع أو مجال جديد…' : 'مادة أخرى…') : (work ? 'New project or area…' : 'Another subject…')}</option>`;
   sel.value = store.get('lastSubject', '');
   if (!sel.value) sel.value = sel.options[0]?.value || 'other';
   // words that fit the person: study or work

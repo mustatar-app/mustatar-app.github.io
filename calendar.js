@@ -191,7 +191,10 @@ function renderAgenda() {
     const hj = hijriL(d);
     // today (and the day picked in the strip) is open; every other day is folded to one line — tap it to open
     const open = d === t || d === agFrom || agOpen.has(d);
-    const sum = items.length ? L(`${items.length} ${items.length === 1 ? 'item' : 'items'}`, `${ar2(items.length)} ${items.length === 1 ? 'عنصر' : items.length === 2 ? 'عنصران' : items.length <= 10 ? 'عناصر' : 'عنصرًا'}`) + (items[0].time ? ' · ' + L('from ', 'من ') + clock(items[0].time) : '') : '';
+    // the folded line says what is inside: lessons, and (so no task is ever missed) tasks, exams and meetings by name
+    const nLes = items.filter(e => e.type === 'class').length, other = items.filter(e => e.type !== 'class');
+    const sum = [nLes ? L(`${nLes} ${nLes === 1 ? 'lesson' : 'lessons'}`, `${ar2(nLes)} ${nLes === 1 ? 'درس' : nLes === 2 ? 'درسان' : nLes <= 10 ? 'دروس' : 'درسًا'}`) + (items[0].time ? ' · ' + L('from ', 'من ') + clock(items.find(e => e.time)?.time) : '') : '',
+      other.length ? other.slice(0, 2).map(e => (e.done ? '✓ ' : '') + e.title.slice(0, 28)).join(L(', ', '، ')) + (other.length > 2 ? L(` +${other.length - 2}`, ` +${ar2(other.length - 2)}`) : '') : ''].filter(Boolean).join(' · ');
     html += `<details class="ag-day ${d === t ? 'is-today' : ''}" data-day="${d}" ${open ? 'open' : ''}><summary><h3>${whenL(d)}${d === t || d === addDays(t, 1) ? ` <small>${dayName(d)}</small>` : ''}<span class="ag-sum">${esc(sum)}</span><span class="ag-hj">${esc(hj)}</span></h3></summary>
       ${items.length ? items.map(e => row2(e, d)).join('') : `<div class="ag-free">${L('Nothing planned.', 'لا شيء مخطط.')} <button type="button" class="link" data-add="${d}">${L('Add something', 'أضف شيئًا')}</button></div>`}</details>`;
   }

@@ -91,6 +91,7 @@ function status(t) { const s = $('#ci-st', dlg); if (s) s.textContent = t; }
 /* ---------- the assistant asks out loud ---------- */
 function names(xs) { return xs.map(x => x.title).slice(0, 8).join(AR() ? '، ' : ', '); }
 function ask(force, quiet) {
+  if (!dlg) return;
   const open_ = list.filter(x => !x.st);
   if (!open_.length) { if (force) speak(L('Everything is answered. Tap Save my day.', 'أجبت عن كل شيء. اضغط احفظ يومي.')); return; }
   const tasks = open_.filter(x => x.kind !== 'habit'), habits = open_.filter(x => x.kind === 'habit');

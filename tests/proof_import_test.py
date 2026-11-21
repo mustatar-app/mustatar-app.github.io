@@ -62,7 +62,7 @@ async def main():
         await pg.click('[data-k="bring"]'); await pg.wait_for_timeout(300)
         check(await pg.is_visible("#bring-dialog"), "i2 Me → Bring your work opens the sheet")
         n_src = await pg.evaluate("document.querySelectorAll('.bring-src').length")
-        check(n_src == 6, f"i3 the sheet lists 6 sources with their steps ({n_src})")
+        check(n_src == 8, f"i3 the sheet lists 8 sources (with Samsung Notes and other phone notes) with their steps ({n_src})")
         await pg.set_input_files("#bring-file", [f"{T}/takeout-keep.zip", f"{T}/notion.zip", f"{T}/my.enex", f"{T}/wudu.docx", f"{T}/idea.md"])
         await pg.wait_for_function("/Brought in|Nothing/.test(document.querySelector('#bring-st').innerText)", timeout=20000)
         st = await pg.inner_text("#bring-st")

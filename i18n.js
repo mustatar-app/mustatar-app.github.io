@@ -195,11 +195,14 @@ function tr(s) {
   if (m) return s.replace(t, `يوم ${m[1].replace(wordRe, w => words[w])}. خصّص وقتًا للمذاكرة قبله.`);
   if (t.length <= 60 || /^Today in /.test(t)) {
     const out = s.replace(wordRe, w => words[w]).replace(/(\d+)h (\d+)m/g, '$1س $2د').replace(/,(?=\s*\d)/g, '،');
+    // only when the whole label becomes Arabic (dates, times, counts): a sentence someone wrote is never half-translated
+    // (that turned "increase me in knowledge" into "increase me بعد knowledge")
+    if (!/^Today in /.test(t) && /[A-Za-z]{2,}/.test(out)) return null;
     return out !== s ? out : null;
   }
   return null;
 }
-const SKIP = '.page, #measure, script, style, textarea, .as-log, .lib-item .open, .ev .t, .ev .d, .bcard b, .week-item, .nx b, .rc, .st-lt, .saved-chip, .cap-t, .idea, .rm-en, .rm-verse, .rm-say, [data-noi18n], #hm-recent, .habit, #rec-list b, .st-draft, select#subject, #palette-list .pal-name, .who-g b, .fq, .fa, .qopt, .flash';
+const SKIP = '.page, #measure, script, style, textarea, .sx-sv-t, .ci-t b, .sr-t, .al-t small, .ev-title, .tk-title, .as-log, .lib-item .open, .ev .t, .ev .d, .bcard b, .week-item, .nx b, .rc, .st-lt, .saved-chip, .cap-t, .idea, .rm-en, .rm-verse, .rm-say, [data-noi18n], #hm-recent, .habit, #rec-list b, .st-draft, select#subject, #palette-list .pal-name, .who-g b, .fq, .fa, .qopt, .flash';
 function walk(root) {
   if (root.nodeType === 3) { fix(root); return; }
   if (root.nodeType !== 1 || root.closest?.(SKIP)) return;

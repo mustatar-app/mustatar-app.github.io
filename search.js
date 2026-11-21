@@ -95,7 +95,7 @@ async function run(raw) {
     groups.push([L('Go to', 'انتقل إلى'), places.slice(0, 12).map(p => ({ t: AR() ? p[1] : p[0], i: '↗', go: p[3] }))]);
     paint(body, groups, ''); return;
   }
-  if (places.length) groups.push([L('In the app', 'في التطبيق'), places.slice(0, 8).map(p => ({ t: AR() ? p[1] : p[0], s: AR() ? p[0] : p[1], i: '↗', go: p[3] }))]);
+  if (places.length) groups.push([L('In the app', 'في التطبيق'), places.slice(0, 8).map(p => ({ t: AR() ? p[1] : p[0], i: '↗', go: p[3] }))]);
   const evs = (window.JundCal?.events?.() || []).filter(e => hit(q, e.title, e.notes, e.type, e.project)).slice(0, 8);
   if (evs.length) groups.push([L('Tasks and calendar', 'المهام والتقويم'), evs.map(e => ({ t: e.title, s: [e.date || L('no date', 'بلا تاريخ'), e.time, e.done ? '✓' : ''].filter(Boolean).join(' · '), i: e.done ? '☑' : '☐', go: () => window.JundCal?.open(e.id) }))]);
   const hs = (store.get('habits', []) || []).filter(h => hit(q, h.name, h.target)).slice(0, 6);

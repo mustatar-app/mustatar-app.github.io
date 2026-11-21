@@ -26,6 +26,7 @@
     <path class="in-p" pathLength="100" d="M380 300 H 330 C 290 300 268 276 268 246 C 268 214 292 192 322 192 C 352 192 374 214 374 246 C 374 276 352 300 322 300 H 150 C 128 300 118 318 120 344 L 126 392" fill="none" stroke="#F4F4F6" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
     <circle class="in-glow" cx="442" cy="300" r="70" fill="url(#in-g)"/><circle class="in-d" cx="442" cy="300" r="24" fill="#8CCBFF"/></g></g></svg>
   <div class="in-word"><b>مستطر</b><span>MUSTATAR</span></div>
+  <p class="in-verse" dir="rtl" lang="ar">﴿وَكُلُّ صَغِيرٍ وَكَبِيرٍ مُسْتَطَرٌ﴾</p>
   <p class="in-tag" id="in-tag"></p>
 </div></div>
 <script>
@@ -36,10 +37,10 @@
   if (skip) { el.remove(); return; }
   var first = false; try { first = !localStorage.getItem('jn_introSeen'); localStorage.setItem('jn_introSeen', '1'); } catch (e) {}
   var ar = false; try { ar = JSON.parse(localStorage.getItem('jn_uiLang') || '""') === 'ar' || (!localStorage.getItem('jn_uiLang') && /^ar/i.test(navigator.language)); } catch (e) {}
-  document.getElementById('in-tag').textContent = ar ? 'كل درس واجتماع، مكتوب بطريقتك' : 'Every lesson and meeting, written your way';
+  document.getElementById('in-tag').textContent = ar ? 'القمر: ٥٣' : 'And everything, small and great, is written down.';
   if (first) el.classList.add('long');
   var still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var t = still ? 600 : first ? 2700 : 1750;
+  var t = still ? 1400 : first ? 3200 : 2500;
   function go() { if (!el.parentNode) return; el.classList.add('out'); setTimeout(function () { el.remove(); }, 380); }
   el.addEventListener('pointerdown', go);
   setTimeout(go, t);

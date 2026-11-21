@@ -2234,3 +2234,19 @@ body.sr-open { overflow: hidden; }
   .sr-bar { border-radius: 18px 18px 0 0; }
   .sr-body { flex: 0 1 auto; max-height: 60vh; border-radius: 0 0 18px 18px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
 }
+/* the opening page: minimal — the name, the verse and its meaning, then the buttons */
+.wl .op-mid { align-items: center; text-align: center; gap: 10px; }
+.wl .op-verse { font-family: "Amiri Quran", "Amiri", "Scheherazade New", "Noto Naskh Arabic", serif; font-size: clamp(1.9rem, 8.5vw, 2.6rem); line-height: 1.9; margin: 0 !important; text-align: center; }
+.wl .op-tr { font-family: var(--head); font-size: 1.02rem !important; color: var(--ink-2); font-style: italic; max-width: 22em; }
+.wl .op-ref { font-size: .82rem !important; color: color-mix(in srgb, var(--ink-2) 75%, transparent); letter-spacing: .02em; }
+/* Google's button sits in a frame from Google; on a dark page the browser paints that frame white unless it is told the frame is light */
+.op-google, .op-google iframe { color-scheme: light; background: transparent !important; }
+/* the opening animation: the verse under the name, every time */
+.in-verse { margin: 20px 0 0; font-family: "Amiri Quran", "Amiri", "Scheherazade New", "Noto Naskh Arabic", serif; font-size: clamp(1.4rem, 6.5vw, 1.9rem); line-height: 1.8; color: #f4f4f6; opacity: 0; animation: in-up .6s cubic-bezier(.2, .8, .2, 1) 1.25s forwards; }
+#intro .in-tag { display: block; margin-top: 6px; font-size: .88rem; animation: in-up .6s cubic-bezier(.2, .8, .2, 1) 1.55s forwards; }
+@media (prefers-reduced-motion: reduce) { .in-verse, #intro .in-tag { animation: none; opacity: 1; transform: none; } }
+.wl .op-verse { white-space: nowrap; font-size: clamp(1.5rem, 7.2vw, 2.3rem); }
+.wl .op-skip { color: var(--ink-2) !important; text-decoration: none; font-weight: 500; }
+.wl .op-skip:hover { color: var(--ink) !important; }
+.wl .op-fine { opacity: .7; }
+.wl .op-tr { text-wrap: balance; }

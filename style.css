@@ -2250,3 +2250,17 @@ body.sr-open { overflow: hidden; }
 .wl .op-skip:hover { color: var(--ink) !important; }
 .wl .op-fine { opacity: .7; }
 .wl .op-tr { text-wrap: balance; }
+/* alarm options */
+.al-row.ed { outline: 2px solid var(--accent); }
+.al-edh { display: block; margin-bottom: 8px; }
+.al-more { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.al-more summary { cursor: pointer; font-weight: 600; padding: 6px 0; color: var(--accent); }
+.al-opts { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.al-o { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
+.al-o select { max-width: 55%; }
+.al-vol { flex-direction: column; align-items: stretch; }
+.al-vol span { display: flex; justify-content: space-between; } .al-vol input { width: 100%; }
+.al-snd { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 8px 12px; font: inherit; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-edrow { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.ios-steps { margin: 8px 0 6px; padding-inline-start: 1.3em; line-height: 1.7; }
+.ios-dlg { max-width: 420px; }

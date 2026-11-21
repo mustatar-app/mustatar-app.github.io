@@ -37,7 +37,7 @@ public class MainActivity extends Activity {
     private static final String ORIGIN = "https://mustatar.dawajund.workers.dev";
     private static final String OLD_ORIGIN = "https://mustatar-app.github.io";
     private static final String SHARE_PATH = "/__mustatar_share/";
-    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4, CALENDAR = 5, HEALTH = 6, FOLDER = 7;
+    private static final int PICK = 1, AUDIO = 2, NOTIFY = 3, LOCATION = 4, CALENDAR = 5, HEALTH = 6, FOLDER = 7, SOUND = 8;
     private static final String FILE_PATH = "/__mustatar_file/";
     // files from a folder the person chose (their recordings, their screenshots), handed to the page one by one
     private final java.util.Map<String, String[]> served = new java.util.concurrent.ConcurrentHashMap<>();
@@ -218,8 +218,23 @@ public class MainActivity extends Activity {
                             // which version this app is, so the page can offer a newer one
                             // the alarm clock (AlarmClock.java) and the focus lock
                             case "alarmSet": AlarmClock.replace(this, command.optJSONArray("alarms") == null ? new JSONArray() : command.getJSONArray("alarms")); answer(reply, command.optString("job"), AlarmClock.status(this)); return;
+                            case "alarmStop": AlarmService.stop(this); answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            // choose the alarm sound from the phone's own alarm sounds, ringtones or music
+                            case "alarmSound": {
+                                waitingJob = command.optString("job"); waitingReply = reply;
+                                Intent pick = new Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+                                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALARM | android.media.RingtoneManager.TYPE_RINGTONE)
+                                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Alarm sound · صوت المنبّه");
+                                String cur = command.optString("uri");
+                                if (!cur.isEmpty() && !"default".equals(cur)) pick.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(cur));
+                                try { startActivityForResult(pick, SOUND); }
+                                catch (ActivityNotFoundException e) { waitingJob = null; answer(reply, command.optString("job"), new JSONObject().put("ok", false)); }
+                                return;
+                            }
                             case "alarmStatus": answer(reply, command.optString("job"), AlarmClock.status(this)); return;
-                            case "alarmTest": AlarmClock.ring(this, command.optString("label")); answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
+                            case "alarmTest": AlarmClock.ring(this, command.optString("label"), command.optJSONObject("opts") == null ? new JSONObject() : command.getJSONObject("opts")); answer(reply, command.optString("job"), new JSONObject().put("ok", true)); return;
                             case "alarmPerm": {
                                 Intent go;
                                 if (!ReminderReceiver.exact(this)) go = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName()));
@@ -703,6 +718,20 @@ public class MainActivity extends Activity {
                     answer(reply, job, new JSONObject().put("ok", true).put("uri", tree.toString()).put("name", id.substring(id.indexOf(':') + 1)));
                 }
             } catch (Exception e) { try { answer(reply, job, new JSONObject().put("ok", false).put("error", String.valueOf(e))); } catch (Exception ignored) {} }
+        }
+        if (code == SOUND && waitingJob != null) {
+            String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;
+            waitingJob = null; waitingReply = null;
+            try {
+                Uri u = result == RESULT_OK && data != null ? data.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI) : null;
+                if (u == null) answer(reply, job, new JSONObject().put("ok", false));
+                else {
+                    String name = "";
+                    try { android.media.Ringtone r = android.media.RingtoneManager.getRingtone(this, u); if (r != null) name = r.getTitle(this); } catch (Exception ignored) {}
+                    boolean isDefault = android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI.equals(u) || android.provider.Settings.System.DEFAULT_RINGTONE_URI.equals(u);
+                    answer(reply, job, new JSONObject().put("ok", true).put("uri", isDefault ? "default" : u.toString()).put("name", name));
+                }
+            } catch (Exception e) { try { answer(reply, job, new JSONObject().put("ok", false)); } catch (Exception ignored) {} }
         }
         if (code == HEALTH && waitingJob != null) {
             String job = waitingJob; androidx.webkit.JavaScriptReplyProxy reply = waitingReply;

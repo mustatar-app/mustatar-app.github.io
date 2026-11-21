@@ -36,7 +36,18 @@ function repeatText(a) {
   return a.days.slice().sort().map(x => DAYN()[x]).join(AR() ? '، ' : ', ');
 }
 let native = null;
+// the next week of alarms, for the server to send as notifications when the app is closed (browser / home-screen app)
+function upcoming() {
+  const out = [], until = Date.now() + 7 * 864e5;
+  for (const a of all()) {
+    if (a.on === false) continue;
+    let t = next(a);
+    while (t && t < until && out.length < 60) { out.push({ id: `al-${a.id}-${t}`, at: t, title: '⏰ ' + (a.label || L('Alarm', 'المنبّه')), body: a.time + ' · ' + L('Mustatar alarm', 'منبّه مستطر') }); if (!a.days?.length) break; t = next(a, t + 60e3); }
+  }
+  return out;
+}
 async function sync() {
+  window.JundCal?.pushSync?.();   // browser / home-screen app: the server sends them as notifications
   const list = all().map(a => { const [h, m] = a.time.split(':').map(Number); return { id: a.id, h, m, days: a.days || [], label: a.label || '', on: a.on !== false }; });
   if (N()?.ask) { try { native = await N().ask({ action: 'alarmSet', alarms: list }, 5000); } catch { native = null; } }
   webArm();
@@ -57,7 +68,7 @@ function webRing(a) {
     for (let i = 0; i < 240; i++) beep(ctx.currentTime + i * 0.5 + (i % 4 === 3 ? 0.3 : 0));
   } catch {}
   navigator.vibrate?.([600, 400, 600, 400, 600]);
-  try { if (Notification.permission === 'granted') new Notification('⏰ ' + (a.label || 'Mustatar'), { body: a.time, requireInteraction: true }); } catch {}
+  try { if (Notification.permission === 'granted') new Notification('⏰ ' + (a.label || 'Mustatar'), { body: a.time, requireInteraction: true, tag: `al-${a.id}-${next(a, Date.now() - 120e3)}` }); } catch {}
   const d = document.createElement('dialog'); d.className = 'al-ring'; d.setAttribute('data-noi18n', ''); d.dir = AR() ? 'rtl' : 'ltr';
   d.innerHTML = `<b class="al-big">${a.time}</b><span>⏰ ${esc(a.label || L('Alarm', 'المنبّه'))}</span><button type="button" class="primary" id="al-stop">${L('Stop', 'إيقاف')}</button><button type="button" class="ghost" id="al-snz">${L('Snooze 5 min', 'غفوة ٥ دقائق')}</button>`;
   document.body.appendChild(d); d.showModal();
@@ -66,6 +77,10 @@ function webRing(a) {
   $('#al-snz', d).onclick = () => { stop(); setTimeout(() => webRing(a), 5 * 60e3); };
 }
 
+function askNotify() {
+  if (N()?.ask || !('Notification' in window) || Notification.permission !== 'default') return;
+  Notification.requestPermission().then(p => { if (p === 'granted') window.JundCal?.pushSync?.(); }).catch(() => {});
+}
 function open() {
   let d = $('#al-dlg'); d?.remove();
   d = document.createElement('dialog'); d.id = 'al-dlg'; d.className = 'al-dlg'; d.setAttribute('data-noi18n', ''); d.dir = AR() ? 'rtl' : 'ltr';
@@ -81,7 +96,7 @@ function paint(d) {
     <p class="muted fine" style="margin-top:6px">${soon ? inWords(soon) : L('No alarm is on.', 'لا يوجد منبّه مفعّل.')}</p>
     ${warn ? `<button type="button" class="al-warn" id="al-perm">⚠ ${L('Allow alarms to ring on the lock screen at the exact time — tap to open the setting', 'اسمح للمنبّه أن يرن على شاشة القفل في الوقت الدقيق — اضغط لفتح الإعداد')}</button>` : ''}
     ${N()?.ask && native === false ? `<p class="al-note">${L('This copy of the Android app is too old to ring alarms when it is closed. Update it (Me → A new version), and the alarms below will ring.', 'نسخة تطبيق أندرويد هذه قديمة لا ترن المنبّهات وهو مغلق. حدّثها (أنا ← نسخة جديدة)، وسترن المنبّهات أدناه.')}</p>` : ''}
-    ${!N()?.ask ? `<p class="al-note">${L('In a browser, an alarm rings only while Mustatar is open. In the Mustatar Android app it rings like the phone’s alarm, even when the app is closed.', 'في المتصفح لا يرن المنبّه إلا وتطبيق مستطر مفتوح. في تطبيق مستطر على أندرويد يرن مثل منبّه الهاتف حتى والتطبيق مغلق.')}</p>` : ''}
+    ${!N()?.ask ? `<p class="al-note">${L('Added to the home screen: with notifications allowed, the alarm comes as a notification even when Mustatar is closed, and rings loudly while it is open. In the Mustatar Android app it rings like the phone’s own alarm.', 'من الشاشة الرئيسية: إذا سمحت بالإشعارات يصلك المنبّه إشعارًا حتى ومستطر مغلق، ويرن بصوت عالٍ وهو مفتوح. وفي تطبيق مستطر على أندرويد يرن مثل منبّه الهاتف نفسه.')}</p>` : ''}
     <div class="al-list">${list.map(a => `<div class="al-row ${a.on === false ? 'off' : ''}"><button type="button" class="al-t" data-ed="${esc(a.id)}"><b>${a.time}</b><small>${esc(a.label || '')}${a.label ? ' · ' : ''}${repeatText(a)}</small></button>
       <label class="switch"><input type="checkbox" data-on="${esc(a.id)}" ${a.on === false ? '' : 'checked'}><span></span></label></div>`).join('') || `<p class="muted">${L('No alarms yet.', 'لا منبّهات بعد.')}</p>`}</div>
     <form class="al-form" id="al-form"><div class="al-ft"><input type="time" id="al-time" dir="ltr" required value="${pad((new Date().getHours() + 1) % 24)}:00"><input id="al-label" dir="auto" maxlength="40" placeholder="${L('Name (e.g. Fajr, study)', 'الاسم (مثل: الفجر، المذاكرة)')}"></div>
@@ -95,7 +110,7 @@ function paint(d) {
   $('#al-form', d).onsubmit = e => {
     e.preventDefault(); const t = $('#al-time', d).value; if (!t) return;
     const l = all(); l.push({ id: 'A' + Date.now().toString(36), time: t, days: [...pick].sort(), label: $('#al-label', d).value.trim(), on: true });
-    store.set('alarms', l); sync().then(() => paint(d)); paint(d);
+    store.set('alarms', l); askNotify(); sync().then(() => paint(d)); paint(d);
     toast(L(`✓ Alarm set — ${inWords(next(l.at(-1)))}`, `✓ ضُبط المنبّه — ${inWords(next(l.at(-1)))}`));
   };
   $$('[data-on]', d).forEach(c => c.onchange = () => { const l = all(), a = l.find(x => x.id === c.dataset.on); a.on = c.checked; store.set('alarms', l); sync(); paint(d); });
@@ -156,6 +171,6 @@ function openLock() {
 
 setTimeout(() => { sync(); const l = store.get('focusLock', null); if (l && l.until > Date.now()) { lockTimer = setTimeout(unlock, l.until - Date.now()); paintLock(); } }, 1500);
 setInterval(paintLock, 30e3);
-window.JundAlarm = { open, all, next, sync };
+window.JundAlarm = { open, all, next, sync, upcoming };
 window.JundLock = { open: openLock, lock, unlock };
 })();

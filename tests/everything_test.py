@@ -38,7 +38,7 @@ async def run(b, lang):
     nx = await pg.evaluate("JundAlarm.next(JundAlarm.all()[0])")
     check(nx > 0, f"[{lang}] its next ring time is worked out")
     note = await pg.inner_text("#al-dlg")
-    check(("only while Mustatar is open" in note) if lang == "en" else ("مفتوح" in note), f"[{lang}] in a browser it says honestly it rings only while open")
+    check(("as a notification even when Mustatar is closed" in note) if lang == "en" else ("إشعارًا حتى ومستطر مغلق" in note), f"[{lang}] in a browser it says honestly: a notification when closed, a loud ring while open")
     await pg.evaluate("document.querySelector('#al-dlg').close()")
     # focus lock (browser: explains)
     await pg.evaluate("JundLock.open()"); await pg.wait_for_timeout(200)

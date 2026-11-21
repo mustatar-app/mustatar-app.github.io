@@ -137,7 +137,7 @@ async function writePiece(r, piece) {
 function maybeFinish(r) { if (r.finishing && !r.pending && r.pieces.every(p => p.done)) r.finishing(); }
 // the box shows everything written so far, in order; a "…" while the newest piece is still being written
 function show(r) {
-  const ta = $('#as-text'); if (!ta || r.cancelled) return;
+  const ta = $('#as-text'); if (!ta || r.cancelled || r.quiet) return;
   const words = r.pieces.filter(p => p.text).map(p => p.text).join(' ');
   const waiting = r.pieces.some(p => p.spoke && !p.done);
   ta.value = (r.before + words).replace(/\s+/g, ' ').trimStart() + (waiting ? ' …' : '');
@@ -188,6 +188,7 @@ function stop(andSend) {
   cancelAnimationFrame(r.raf);
   const last = r.cur; r.cur = null;
   r.allDone = new Promise(ok => { if (!r.all) return ok(null); r.all.onstop = () => ok(new Blob(r.allParts, { type: r.all.mimeType || 'audio/webm' })); try { r.all.stop(); } catch { ok(null); } });
+  if (andSend) return stopAndSend(r, last);
   const ta = $('#as-text');
   ta.placeholder = L('Writing what you said…', 'أكتب ما قلته…');
   r.finishing = async () => {
@@ -213,6 +214,44 @@ function stop(andSend) {
   if (last) { last.rec.onstop = () => { closeBar(r); writePiece(r, last); }; try { last.rec.stop(); } catch { closeBar(r); r.finishing?.(); } }
   else { closeBar(r); }
   if (!last) maybeFinish(r);
+}
+/* the send arrow while recording: stop and send in one tap. The whole recording is written at once (with one retry);
+   if writing fails, the voice itself is attached and sent, so nothing said is ever lost. */
+async function stopAndSend(r, last) {
+  r.quiet = true;   // pieces still arriving must not change the box
+  const waitPieces = new Promise(ok => { r.finishing = () => { r.finishing = null; ok(); }; });
+  if (last) { last.rec.onstop = () => writePiece(r, last); try { last.rec.stop(); } catch { last.done = true; } }
+  closeBar(r); maybeFinish(r);
+  const ta = $('#as-text'), sendBtn = $('#as-send');
+  ta.value = r.before.trim(); ta.readOnly = true; ta.placeholder = L('Sending your voice…', 'أرسل صوتك…'); grow(ta);
+  if (sendBtn) sendBtn.disabled = true;
+  const blob = await r.allDone;
+  let text = '', heard = false, failed = false, file = null;
+  if (blob && blob.size > 1500) {
+    file = new File([blob], 'voice.' + (/mp4/.test(blob.type) ? 'm4a' : /ogg/.test(blob.type) ? 'ogg' : 'webm'), { type: blob.type.split(';')[0] });
+    for (let i = 0; i < 2 && !heard; i++) {
+      try {
+        const res = await window.JundAttach.askFile(file, { system: 'You write down speech for a message box. Output ONLY the exact words spoken, in the language(s) spoken (Arabic in Arabic script, English in English), with normal punctuation. No notes, no quotes. If nothing clear was said, output nothing.\n' + vocab(), user: 'Write down everything said in this audio.', maxTokens: 6000 });
+        text = String(res.text || '').trim().replace(/^["“]|["”]$/g, ''); heard = true; failed = false;
+      } catch (e) { failed = true; r.err = e; }
+    }
+  } else {
+    // no whole recording on this phone: use the pieces written while talking
+    await Promise.race([waitPieces, new Promise(ok => setTimeout(ok, 20000))]);
+  }
+  if (!text) text = r.pieces.filter(p => p.text).map(p => p.text).join(' ').trim();
+  ta.readOnly = false; ta.placeholder = L('Message Mustatar…', 'اكتب إلى مستطر…');
+  if (sendBtn) sendBtn.disabled = false;
+  if (text) { ta.value = (r.before + text).trim(); grow(ta); sendBtn?.click(); return; }
+  if (failed && file) {
+    // the words could not be written right now: send the voice itself
+    window.JundAttach?.addHome([file]);
+    ta.value = r.before.trim() || L('(voice message)', '(رسالة صوتية)'); grow(ta);
+    hint(L('Sent your voice as audio (the words could not be written just now).', 'أرسلت صوتك كتسجيل (تعذّرت كتابة الكلمات الآن).'));
+    sendBtn?.click(); return;
+  }
+  ta.value = r.before.trim(); grow(ta); ta.focus();
+  hint(L('I could not hear any words. Try again a little closer to the phone.', 'لم أسمع كلامًا. أعد المحاولة وقرّب الهاتف قليلًا.'));
 }
 function grow(t) { t.style.height = 'auto'; t.style.height = Math.min(180, t.scrollHeight) + 'px'; }
 function hint(t) { const h = $('#as-hint'); if (h) { h.textContent = t; setTimeout(() => { if (h.textContent === t) h.textContent = ''; }, 6000); } }

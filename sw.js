@@ -1,5 +1,5 @@
 // Keeps the app opening without internet, and receives transcripts shared from other apps.
-const CACHE = 'jn-app-v120';
+const CACHE = 'jn-app-v121';
 const FILES = ['./', 'style.css', 'app.js', 'scan-ocr.js', 'prompt.js', 'subjects.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'quran.js', 'local-ai.js', 'ai-worker.js', 'data/quran.json', 'vendor/web-llm.js', 'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'media.js', 'vendor/mp4box.all.min.js', 'calendar.js', 'studio.js', 'assistant.js', 'features.js', 'study.js', 'reminders.js', 'recorder.js', 'rec-worker.js', 'vendor/lame.min.js', 'i18n.js', 'native.js', 'voice.js', 'report.js', 'welcome.js', 'attach.js', 'drawer.js', 'dictate.js', 'mark.js', 'ical.js', 'busy.js', 'inbox.js', 'thumbs.js', 'recordings.js', 'pending.js', 'plan.js', 'nav.js', 'keep.js', 'import.js', 'proof.js', 'countdown.js', 'brief.js', 'habits.js', 'checkin.js', 'search.js', 'alarm.js', 'drive.js', 'bg.js', 'phone.js', 'mp4fix.js', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -61,10 +61,18 @@ self.addEventListener('push', e => {
       const id = await (await c.match('id'))?.text(), base = await (await c.match('server'))?.text();
       if (id && base) due = (await (await fetch(`${base}/push/due?id=${id}`, { cache: 'no-store' })).json()).due || [];
     } catch {}
-    const shown = await self.registration.getNotifications();
-    const fresh = due.filter(d => !shown.some(n => n.tag === d.tag));
-    if (!fresh.length && !due.length) return self.registration.showNotification('Mustatar', { body: 'You have a reminder.', icon: 'icon-192.png', tag: 'daftar' });
-    for (const d of fresh) await self.registration.showNotification(d.title, { body: d.body, tag: d.tag, icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [200, 100, 200] });
+    // what was shown before (even if dismissed) is never shown again
+    const c = await caches.open('jn-push');
+    const seen = new Set(JSON.parse(await (await c.match('seen'))?.text().catch(() => '[]') || '[]'));
+    const fresh = due.filter(d => !seen.has(d.tag));
+    if (!fresh.length) { if (!due.length) return self.registration.showNotification('Mustatar', { body: 'You have a reminder.', icon: 'icon-192.png', tag: 'daftar' }); return; }
+    for (const d of fresh) {
+      const alarm = /^al-/.test(d.tag);
+      await self.registration.showNotification(d.title, { body: d.body, tag: d.tag, icon: 'icon-192.png', badge: 'icon-192.png', renotify: true,
+        requireInteraction: alarm, vibrate: alarm ? [800, 400, 800, 400, 800, 400, 800] : [200, 100, 200] });
+      seen.add(d.tag);
+    }
+    await c.put('seen', new Response(JSON.stringify([...seen].slice(-300))));
   })());
 });
 

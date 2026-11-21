@@ -37,21 +37,22 @@ function items(d = today()) {
 }
 
 /* ---------- the window ---------- */
-let list = [], dlg = null, rec = null, round = 0;
-function open(d = today()) {
-  list = items(d); round = 0;
+let list = [], dlg = null, rec = null, round = 0, mode = 'cards', ci = 0;
+function open(d = today(), how) {
+  list = items(d); round = 0; ci = list.findIndex(x => !x.st); if (ci < 0) ci = list.length; mode = how || store.get('checkinMode', 'cards');
   dlg?.remove();
   dlg = document.createElement('dialog'); dlg.className = 'ci-dlg'; dlg.dir = AR() ? 'rtl' : 'ltr'; dlg.setAttribute('data-noi18n', ''); dlg.dataset.day = d;
   document.body.appendChild(dlg);
-  dlg.addEventListener('close', () => { stopRec(true); window.JundVoice?.stop?.(); dlg?.remove(); dlg = null; });
+  const me = dlg; me.addEventListener('close', () => { me.remove(); if (dlg === me) { stopRec(true); window.JundVoice?.stop?.(); dlg = null; } });
   paint(); dlg.showModal();
-  if (list.length && store.get('checkinSpeak', true)) setTimeout(() => ask(), 450);
+  if (list.length && store.get('checkinSpeak', true)) setTimeout(() => mode === 'cards' ? askCard() : ask(), 450);
 }
 function paint() {
   if (!dlg) return;
+  if (mode === 'cards') return paintCards();
   const d = dlg.dataset.day, n = list.length, done = list.filter(x => x.st === 'done').length, answered = list.filter(x => x.st).length;
   const head = d === today() ? L('How did today go?', 'كيف كان يومك؟') : new Date(d + 'T12:00').toLocaleDateString(AR() ? 'ar-SA-u-ca-gregory' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  dlg.innerHTML = `<div class="ci-top"><div><b>${head}</b><small>${n ? L(`${answered} of ${n} answered · ${done} done`, `أُجيب عن ${answered} من ${n} · أُنجز ${done}`) : ''}</small></div><button type="button" class="icon-btn" id="ci-x" aria-label="${L('Close', 'إغلاق')}">✕</button></div>
+  dlg.innerHTML = `<div class="ci-top"><div><b>${head}</b><small>${n ? L(`${answered} of ${n} answered · ${done} done`, `أُجيب عن ${answered} من ${n} · أُنجز ${done}`) : ''}</small></div><span class="row-gap">${n ? `<button type="button" class="ghost small" id="cc-cards">${L('Cards', 'بطاقات')}</button>` : ''}<button type="button" class="icon-btn" id="ci-x" aria-label="${L('Close', 'إغلاق')}">✕</button></span></div>
     ${n ? `<div class="ci-voice">
       <button type="button" class="ci-mic ${rec ? 'on' : ''}" id="ci-mic" aria-label="${rec ? L('Stop', 'إيقاف') : L('Talk', 'تكلّم')}">${rec ? '■' : '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}</button>
       <div class="ci-say"><b id="ci-q">${rec ? L('Listening… tap ■ when you finish', 'أستمع… اضغط ■ عندما تنتهي') : round ? L('Tell me about the ones still open', 'أخبرني عن التي بقيت') : L('Tap and tell me what you did', 'اضغط وأخبرني بما فعلت')}</b>
@@ -70,6 +71,7 @@ function paint() {
     : `<p class="muted">${L('Nothing was planned today — no tasks, lessons or habits. Add some for tomorrow from the Calendar or the Habit tracker.', 'لم يكن لديك شيء مخطط اليوم — لا مهام ولا دروس ولا عادات. أضف للغد من التقويم أو متابعة العادات.')}</p>`}`;
   $('#ci-x', dlg).onclick = () => dlg.close();
   if (!n) return;
+  $('#cc-cards', dlg).onclick = () => { stopRec(true); mode = 'cards'; store.set('checkinMode', 'cards'); ci = Math.max(0, list.findIndex(x => !x.st)); if (ci < 0) ci = list.length; paint(); askCard(); };
   $('#ci-mic', dlg).onclick = () => rec ? stopRec(false) : startRec();
   $('#ci-read', dlg).onclick = () => ask(true);
   const ta = $('#ci-text', dlg), ap = $('#ci-apply', dlg);
@@ -87,6 +89,87 @@ function paint() {
 // repaint without losing what is typed in the big box
 function paintKeep() { const t = $('#ci-text', dlg)?.value || '', y = $('.ci-list', dlg)?.scrollTop || 0; paint(); const ta = $('#ci-text', dlg); if (ta) { ta.value = t; $('#ci-apply', dlg).hidden = !t.trim(); } const l = $('.ci-list', dlg); if (l) l.scrollTop = y; }
 function status(t) { const s = $('#ci-st', dlg); if (s) s.textContent = t; }
+
+/* ---------- محاسبة النفس: one card at a time, read out loud, answered by voice ---------- */
+function question(x) {
+  const q = AR() ? (x.kind === 'habit' ? `هل أنجزت «${x.title}» اليوم؟` : x.kind === 'class' || x.kind === 'meeting' ? `هل حضرت «${x.title}»؟` : `هل أنجزت «${x.title}»؟`)
+    : (x.kind === 'habit' ? `Did you do “${x.title}” today?` : x.kind === 'class' || x.kind === 'meeting' ? `Did you attend “${x.title}”?` : `Did you finish “${x.title}”?`);
+  return q;
+}
+function paintCards() {
+  const n = list.length, done = list.filter(x => x.st === 'done').length;
+  if (!n) { mode = 'list'; return paint(); }
+  const end = ci >= n, x = list[Math.min(ci, n - 1)];
+  const micSvg = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+  dlg.classList.add('cards');
+  dlg.innerHTML = `<div class="ci-top"><div><b>${L('Self-review', 'محاسبة النفس')}</b><small>${end ? L(`${done} of ${n} done`, `أُنجز ${done} من ${n}`) : L(`${ci + 1} of ${n}`, `${ci + 1} من ${n}`)}</small></div>
+      <span class="row-gap"><button type="button" class="ghost small" id="cc-list">${L('List', 'قائمة')}</button><button type="button" class="icon-btn" id="ci-x" aria-label="${L('Close', 'إغلاق')}">✕</button></span></div>
+    <div class="cc-bar"><i style="width:${Math.round(Math.min(ci, n) / n * 100)}%"></i></div>
+    ${end ? `<div class="cc-card cc-end">
+        <b class="cc-q">${done === n ? L('All done — well done!', 'أنجزت كل شيء — بارك الله فيك!') : L(`${done} of ${n} done today`, `أنجزت ${done} من ${n} اليوم`)}</b>
+        <div class="cc-sum">${list.map((y, i) => `<button type="button" class="cc-li ${y.st}" data-go="${i}"><span>${y.st === 'done' ? '✓' : y.st === 'part' ? '◐' : y.st === 'not' ? '✕' : '–'}</span><b dir="auto">${esc(y.title)}</b>${y.note ? `<small dir="auto">${esc(y.note)}</small>` : ''}</button>`).join('')}</div>
+        <label class="check ci-move"><input type="checkbox" id="ci-move" ${store.get('checkinMove', true) ? 'checked' : ''}> ${L('Move unfinished tasks to tomorrow', 'انقل المهام غير المنجزة إلى الغد')}</label>
+        <button type="button" class="primary ci-save" id="ci-save">${L('Save my day', 'احفظ يومي')}</button>
+        <label class="ci-when"><span>${L('Ask me every evening at', 'اسألني كل مساء الساعة')}</span><input type="time" id="ci-time" value="${at()}"></label></div>`
+    : `<div class="cc-card ${x.st}">
+        <small class="cc-k">${typeL(x.kind)}${x.time ? ' · ' + x.time : ''}${x.target ? ' · ' + esc(x.target) : ''}${x.late ? ' · ' + L('late', 'متأخرة') : ''}</small>
+        <b class="cc-q" dir="auto">${esc(question(x))}</b>
+        <button type="button" class="ci-mic cc-mic ${rec ? 'on' : ''}" id="ci-mic" aria-label="${rec ? L('Stop', 'إيقاف') : L('Answer by voice', 'أجب بصوتك')}">${rec ? '■' : micSvg}</button>
+        <small class="cc-hint" id="ci-st">${rec ? L('Listening… just answer', 'أستمع… أجب فقط') : L('Say “yes”, “no, because…”, or “half”', 'قل: «نعم» — أو «لا، لأن…» — أو «نصفها»')}</small>
+        ${x.note ? `<small class="cc-note" dir="auto">“${esc(x.note)}”</small>` : ''}
+        <div class="ci-ch cc-ch"><button type="button" data-s="done" class="${x.st === 'done' ? 'on' : ''}">✓ ${L('Yes', 'نعم')}</button><button type="button" data-s="part" class="${x.st === 'part' ? 'on' : ''}">◐ ${L('Partly', 'جزئيًا')}</button><button type="button" data-s="not" class="${x.st === 'not' ? 'on' : ''}">✕ ${L('No', 'لا')}</button></div>
+        <div class="cc-nav"><button type="button" class="link small" id="cc-back" ${ci ? '' : 'hidden'}>${AR() ? '→' : '←'} ${L('Back', 'السابق')}</button><button type="button" class="link small" id="cc-skip">${L('Skip', 'تخطَّ')} ${AR() ? '←' : '→'}</button></div>
+      </div>`}`;
+  $('#ci-x', dlg).onclick = () => dlg.close();
+  $('#cc-list', dlg).onclick = () => { stopRec(true); window.JundVoice?.stop?.(); mode = 'list'; store.set('checkinMode', 'list'); dlg.classList.remove('cards'); paint(); };
+  if (end) {
+    $$('[data-go]', dlg).forEach(b => b.onclick = () => { ci = Number(b.dataset.go); paint(); askCard(); });
+    $('#ci-move', dlg).onchange = e => store.set('checkinMove', e.target.checked);
+    $('#ci-save', dlg).onclick = saveDay;
+    $('#ci-time', dlg).onchange = e => { if (e.target.value) { store.set('checkinTime', e.target.value); C()?.pushSync?.(); C()?.toast?.(L('✓ The evening reminder is set', '✓ ضُبط تذكير المساء')); } };
+    return;
+  }
+  $('#ci-mic', dlg).onclick = () => rec ? stopRec(false) : startRec();
+  $$('[data-s]', dlg).forEach(b => b.onclick = () => { stopRec(true); window.JundVoice?.stop?.(); setCard(b.dataset.s, x.note); });
+  $('#cc-skip', dlg).onclick = () => { stopRec(true); window.JundVoice?.stop?.(); ci++; paint(); askCard(); };
+  const bk = $('#cc-back', dlg); if (bk) bk.onclick = () => { stopRec(true); window.JundVoice?.stop?.(); ci = Math.max(0, ci - 1); paint(); };
+}
+function setCard(st, note) {
+  const x = list[ci]; if (!x) return;
+  x.st = st; x.note = note || ''; x.by = 'card';
+  const card = $('.cc-card', dlg); card?.classList.add('flash', st);
+  setTimeout(() => { ci++; if (dlg) { paint(); askCard(); } }, 650);
+}
+// reads the question out loud, then listens for the answer by itself
+async function askCard() {
+  if (!dlg || mode !== 'cards') return;
+  const x = list[ci];
+  if (!x) { if (store.get('checkinSpeak', true)) speak(L('That is all. Tap Save my day.', 'هذا كل شيء. اضغط احفظ يومي.')); return; }
+  if (!store.get('checkinSpeak', true)) return;
+  const at0 = ci;
+  try { await window.JundVoice?.say?.(question(x), AR() ? 'ar' : 'en'); } catch {}
+  if (dlg && mode === 'cards' && ci === at0 && !rec && store.get('checkinAutoListen', true)) startRec();
+}
+// "yes" / "no, I was tired" / "half of it": understood on the phone when clear, by the AI otherwise
+async function answerCard(said) {
+  const t = String(said).trim(), n = t.replace(/[.!؟?,،]/g, ' ').trim().toLowerCase();
+  const yes = /^(نعم|ايوه|أيوه|ايوا|إيه|ايه|اي|أجل|بلى|تم|نعم تم|أنجزت|انجزت|خلصت|خلصتها|حضرت|الحمد لله|طبعا|yes|yeah|yep|yup|done|sure|i did|of course|finished)(?=[\s]|$)/i;
+  const part = /(نصف|نص|بعض|جزء|جزئي|شوي|قليل|half|partly|part of|some of|a bit|started)/i;
+  const no = /^((لا|لأ|no|nope)(?=[\s،,.!]|$)|ما |مو |لم |not\b|didn'?t|did not|i didn'?t|missed|فاتتني|فاتني)/i;
+  const reason = t.replace(/^(\s*(لا|لأ|no|nope|نعم|yes)[\s،,.:-]*)/i, '').replace(/^(لأن|لان|because|cause)\s*/i, '').trim();
+  if (part.test(n)) return setCard('part', reason.length > 2 ? reason.slice(0, 200) : '');
+  if (no.test(n)) return setCard('not', reason.length > 2 && !no.test(reason) ? reason.slice(0, 200) : t.length > 4 ? t.slice(0, 200) : '');
+  if (yes.test(n)) return setCard('done', reason.length > 6 && !yes.test(reason) ? reason.slice(0, 200) : '');
+  status(L('Understanding…', 'أفهم…'));
+  try {
+    const r = await J.callServer({ assistant: true, json: true, maxTokens: 200,
+      system: 'The person answered whether they did one thing today. Return JSON only: {"s":"done|part|not|unclear","note":"their remark or reason, short, in their language, or empty"}',
+      user: `QUESTION: ${question(list[ci])}\nANSWER: ${t}` });
+    const j = J.parseJSON(r.text) || {};
+    if (['done', 'part', 'not'].includes(j.s)) return setCard(j.s, String(j.note || '').slice(0, 200));
+  } catch {}
+  status(L(`I heard: “${t.slice(0, 60)}” — tap Yes, Partly or No.`, `سمعت: «${t.slice(0, 60)}» — اضغط نعم أو جزئيًا أو لا.`));
+}
 
 /* ---------- the assistant asks out loud ---------- */
 function names(xs) { return xs.map(x => x.title).slice(0, 8).join(AR() ? '، ' : ', '); }
@@ -114,7 +197,26 @@ async function startRec() {
   mr.ondataavailable = e => { if (e.data?.size) parts.push(e.data); };
   rec = { mr, stream, parts, at: Date.now() };
   mr.start(1000); paintKeep();
-  rec.limit = setTimeout(() => stopRec(false), 3 * 60e3);   // three minutes at most
+  rec.limit = setTimeout(() => stopRec(false), mode === 'cards' ? 20e3 : 3 * 60e3);   // a card answer is short; the whole day at most 3 minutes
+  if (mode === 'cards') listenForSilence(rec);
+}
+// on a card: stop by itself when you stop talking (about 1½ seconds of quiet after you spoke)
+function listenForSilence(r) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)(), src = ctx.createMediaStreamSource(r.stream), an = ctx.createAnalyser();
+    an.fftSize = 1024; src.connect(an); const buf = new Uint8Array(an.fftSize);
+    let spoke = 0, quietSince = 0;
+    const tick = () => {
+      if (rec !== r) { ctx.close().catch(() => {}); return; }
+      an.getByteTimeDomainData(buf); let sum = 0; for (const v of buf) sum += (v - 128) ** 2;
+      const rms = Math.sqrt(sum / buf.length), now = Date.now();
+      if (rms > 6) { spoke = spoke || now; quietSince = 0; } else if (spoke && !quietSince) quietSince = now;
+      if (spoke && quietSince && now - quietSince > 1500 && now - spoke > 500) { ctx.close().catch(() => {}); stopRec(false); return; }
+      if (!spoke && now - r.at > 7000) { ctx.close().catch(() => {}); stopRec(true); paintKeep(); status(L('I did not hear you — tap the microphone and answer.', 'لم أسمعك — اضغط الميكروفون وأجب.')); return; }
+      setTimeout(tick, 120);
+    };
+    tick();
+  } catch {}
 }
 function stopRec(cancel) {
   const r = rec; if (!r) return; rec = null; clearTimeout(r.limit);
@@ -122,7 +224,7 @@ function stopRec(cancel) {
     r.stream.getTracks().forEach(t => t.stop());
     if (cancel || !dlg) return;
     paintKeep();
-    if (Date.now() - r.at < 900) { status(L('That was too short — tap and talk.', 'كان قصيرًا جدًا — اضغط وتكلّم.')); return; }
+    if (Date.now() - r.at < (mode === 'cards' ? 500 : 900)) { status(L('That was too short — tap and talk.', 'كان قصيرًا جدًا — اضغط وتكلّم.')); return; }
     const blob = new Blob(r.parts, { type: r.mr.mimeType || 'audio/webm' });
     const file = new File([blob], 'day.' + (/mp4/.test(blob.type) ? 'm4a' : /ogg/.test(blob.type) ? 'ogg' : 'webm'), { type: blob.type.split(';')[0] });
     status(L('Writing down what you said…', 'أكتب ما قلته…'));
@@ -132,6 +234,7 @@ function stopRec(cancel) {
         user: 'Write down what is said. Words likely to come up: ' + list.map(x => x.title).join(', ').slice(0, 600) });
       const said = res.text.trim().replace(/^["“]|["”]$/g, '');
       if (!said) { status(L('I heard nothing clear. Try again, a little closer.', 'لم أسمع شيئًا واضحًا. حاول مرة أخرى بقرب أكثر.')); return; }
+      if (mode === 'cards') { await answerCard(said); return; }
       const ta = $('#ci-text', dlg); if (ta) ta.value = said;
       await understand(said);
     } catch (e) { status('✗ ' + J.errText(e)); }
@@ -199,7 +302,7 @@ function saveDay() {
 }
 
 /* ---------- on Today in the evening, and a reminder ---------- */
-const at = () => store.get('checkinTime', '21:00');
+const at = () => store.get('checkinTime', '21:30');
 function paintToday() {
   const sec = $('#screen-assistant .hm-sec') || $('#screen-assistant .home-head');
   let card = $('#hm-checkin');
@@ -208,7 +311,7 @@ function paintToday() {
   if (!show) { card?.remove(); return; }
   if (!card) { card = document.createElement('button'); card.type = 'button'; card.id = 'hm-checkin'; card.className = 'ci-card'; sec?.before(card); }
   card.setAttribute('data-noi18n', ''); card.dir = AR() ? 'rtl' : 'ltr';
-  card.innerHTML = `<span class="ci-card-ic">🎙️</span><span><b>${L('How did today go?', 'كيف كان يومك؟')}</b><small>${L(`Tell me by voice — ${n} things to tick, about 2 minutes`, `أخبرني بصوتك — ${n} أشياء للتعليم، نحو دقيقتين`)}</small></span>`;
+  card.innerHTML = `<span class="ci-card-ic">🎙️</span><span><b>${L('Self-review', 'محاسبة النفس')}</b><small>${L(`${n} questions · answer by voice`, `${n} أسئلة · أجب بصوتك`)}</small></span>`;
   card.onclick = () => open();
 }
 // the evening reminder (the Android app shows it even when Mustatar is closed)
@@ -218,7 +321,7 @@ function alarms() {
   for (let i = 0; i < 7; i++) {
     const d = addDays(today(), i), when = new Date(`${d}T${pad(hh)}:${pad(mm)}`).getTime();
     if (when < Date.now() - 60e3 || store.get('checkins', {})[d]) continue;
-    out.push({ id: 'checkin-' + d, kind: 'checkin', view: 'checkin', at: when, title: L('How did today go? 🎙️', 'كيف كان يومك؟ 🎙️'), body: L('Two minutes: tell Mustatar what you did, and why for what you did not.', 'دقيقتان: أخبر مستطر بما أنجزت، وبسبب ما لم تنجزه.') });
+    out.push({ id: 'checkin-' + d, kind: 'checkin', view: 'checkin', at: when, title: L('Self-review 🎙️', 'محاسبة النفس 🎙️'), body: L('Did you do today’s tasks and habits? Answer card by card, by voice.', 'هل أنجزت مهام اليوم وعاداته؟ أجب بطاقة بطاقة، بصوتك.') });
   }
   return out;
 }
@@ -231,5 +334,5 @@ function recent(days = 14) {
 window.addEventListener('mustatar-screen', () => { if (!$('#screen-assistant')?.hidden) paintToday(); });
 setTimeout(paintToday, 1500);
 setInterval(paintToday, 10 * 60e3);
-window.JundCheckin = { open, items, alarms, recent, paintToday };
+window.JundCheckin = { open, items, alarms, recent, paintToday, answer: t => answerCard(t) };
 })();

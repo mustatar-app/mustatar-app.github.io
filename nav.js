@@ -126,7 +126,7 @@ function me() {
     <div id="me-plan"></div>
     <div class="mx-h">${L('Growth', 'النموّ')}</div>
     <div class="mx-group">
-      ${row('checkin', L('Evening check-in', 'مراجعة آخر اليوم'), L('Tell the app by voice what you did today', 'أخبر التطبيق بصوتك بما أنجزت اليوم'))}
+      ${row('checkin', L('Self-review', 'محاسبة النفس'), L('Every evening, card by card, by voice', 'كل مساء، بطاقة بطاقة، بصوتك'))}
       ${row('habit', L('Habits', 'العادات'), '', habits || '')}
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}

@@ -273,12 +273,19 @@ function paintToday(box) {
   // once a week the coach studies the record by itself (quietly, only with enough days ticked)
   const ticks = list.reduce((n, h) => n + Object.keys(h.days || {}).length, 0);
   if (navigator.onLine && ticks >= 10 && (!c || Date.now() - c.at > 7 * 864e5) && Date.now() - store.get('coachTry', 0) > 12 * 36e5 && !navigator.webdriver) { store.set('coachTry', Date.now()); analyse(true); }
-  box.innerHTML = `<div class="hb-today"><div class="hb-th"><b>${L('Habits today', 'عادات اليوم')}</b><small>${done}/${list.length}</small><button type="button" class="link small" id="hb-open">${L('Tracker', 'المتابعة')} ›</button></div>
-    <div class="hb-chips">${list.map((h, i) => `<button type="button" class="hb-chip ${h.days?.[t] ? 'on' : ''}" data-h="${esc(h.id)}" style="--c:${colorOf(h, i)}" dir="auto"><i>${h.days?.[t] ? '✓' : ''}</i>${esc(h.name)}</button>`).join('')}</div>
+  const open = !!window.__hbOpen, nextUp = list.find(h => !h.days?.[t]);
+  box.innerHTML = `<div class="hb-today${open ? ' open' : ''}"><button type="button" class="tl-fold hb-fold${open ? ' open' : ''}" id="hb-fold" aria-expanded="${open}">
+      <b>${L('Your habits', 'عاداتك')}</b><span class="tl-cnt">${done}/${list.length}</span>
+      <span class="tl-nxt" dir="auto">${open ? '' : nextUp ? esc(nextUp.name) : L('All done ✓', 'أنجزتها كلها ✓')}</span>
+      <svg class="tl-chev" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <div class="hb-body"${open ? '' : ' hidden'}><div class="hb-chips">${list.map((h, i) => `<button type="button" class="hb-chip ${h.days?.[t] ? 'on' : ''}" data-h="${esc(h.id)}" style="--c:${colorOf(h, i)}" dir="auto"><i>${h.days?.[t] ? '✓' : ''}</i>${esc(h.name)}</button>`).join('')}</div>
     ${nudge ? `<p class="hb-tnudge" dir="auto">💡 ${nudge}</p>` : ''}
-    ${c && !c.seen ? `<button type="button" class="hb-tcoach" id="hb-tcoach">🧭 <span dir="auto"><b>${L('Your coach studied your week', 'مدرّبك درس أسبوعك')}</b><small>${esc(String(c.summary || '').slice(0, 140))}</small></span></button>` : ''}</div>`;
+    ${c && !c.seen ? `<button type="button" class="hb-tcoach" id="hb-tcoach">🧭 <span dir="auto"><b>${L('Your coach studied your week', 'مدرّبك درس أسبوعك')}</b><small>${esc(String(c.summary || '').slice(0, 140))}</small></span></button>` : ''}
+    <button type="button" class="link small" id="hb-open">${L('Open the tracker', 'افتح متابعة العادات')} ›</button></div></div>`;
   $$('[data-h]', box).forEach(b => b.onclick = () => { const l = all(), h = l.find(x => x.id === b.dataset.h); h.days ||= {}; h.miss ||= {}; if (h.days[t]) delete h.days[t]; else { h.days[t] = true; delete h.miss[t]; } save(l); });
   $('#hb-open', box).onclick = () => J.show('habits');
+  $('#hb-fold', box).onclick = () => { window.__hbOpen = !window.__hbOpen; paintToday(box); };
+  if (window.JundHomeShow && !window.JundHomeShow().habits && wrap) wrap.hidden = true;
   const tc = $('#hb-tcoach', box); if (tc) tc.onclick = () => { store.set('coach', { ...store.get('coach', {}), seen: true }); J.show('habits'); setTimeout(() => $('#hb-coach')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150); };
 }
 

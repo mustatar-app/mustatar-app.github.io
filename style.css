@@ -2110,3 +2110,50 @@ body.sr-open { overflow: hidden; }
 .switch input:checked + span::before { transform: translateX(18px); }
 [dir="rtl"] .switch input:checked + span::before { transform: translateX(-18px); }
 .dv-sec { margin: 14px 0; } .dv-sec ol { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.6; font-size: .9rem; }
+/* Today: the schedule folds into one line under the prayer card (arrow down opens, up closes) */
+.tl-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.tl-fold b { font-weight: 600; font-size: .95rem; white-space: nowrap; }
+.tl-cnt { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 99px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-size: .78rem; font-weight: 700; }
+.tl-nxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: .85rem; }
+.tl-chev { flex: 0 0 auto; color: var(--ink-2); transition: transform .18s; }
+.tl-fold.open .tl-chev { transform: rotate(180deg); }
+.tl-fold.open { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+.tl-fold + .tl { margin-top: 6px; }
+.tl[hidden] { display: none !important; }
+/* prayers on the line: finished = faded, coming = dark, the next one = lit */
+#screen-assistant .dc-mark.p.past i { background: color-mix(in srgb, var(--ink-2) 35%, transparent); border-color: transparent; }
+#screen-assistant .dc-mark.p.past small { color: var(--ink-2); opacity: .45; }
+#screen-assistant .dc-mark.p.past small em { display: none; }
+#screen-assistant .dc-mark.p:not(.past):not(.next) small { color: var(--ink); font-weight: 600; }
+#screen-assistant .dc-mark.p:not(.past):not(.next) i { border-color: var(--ink); }
+#screen-assistant .dc-mark.p.next i { width: 12px; height: 12px; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); animation: npGlow 2.4s ease-in-out infinite; }
+#screen-assistant .dc-mark.p.next small { color: var(--accent); font-weight: 700; padding: 1px 7px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+@keyframes npGlow { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent); } }
+@media (prefers-reduced-motion: reduce) { #screen-assistant .dc-mark.p.next i { animation: none; } }
+/* محاسبة النفس: one card at a time */
+.ci-dlg.cards { max-width: 440px; }
+.cc-bar { height: 4px; border-radius: 4px; background: var(--line); margin: 12px 0 14px; overflow: hidden; }
+.cc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+.cc-card { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 22px 16px 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); text-align: center; transition: border-color .2s, background .2s; }
+.cc-card.flash.done { border-color: #3FBF7F; background: color-mix(in srgb, #3FBF7F 12%, var(--surface)); }
+.cc-card.flash.not { border-color: #E5484D; background: color-mix(in srgb, #E5484D 10%, var(--surface)); }
+.cc-card.flash.part { border-color: #E0A43A; background: color-mix(in srgb, #E0A43A 12%, var(--surface)); }
+.cc-k { color: var(--ink-2); font-size: .8rem; }
+.cc-q { font-size: 1.3rem; line-height: 1.45; font-weight: 700; }
+.cc-mic { width: 84px; height: 84px; }
+.cc-hint { color: var(--ink-2); font-size: .84rem; min-height: 1.2em; }
+.cc-note { color: var(--ink); font-size: .86rem; }
+.cc-ch { width: 100%; }
+.cc-ch button { min-height: 46px; font-size: .95rem; }
+.cc-nav { display: flex; justify-content: space-between; width: 100%; }
+.cc-end { align-items: stretch; text-align: start; }
+.cc-end .cc-q { text-align: center; }
+.cc-sum { display: flex; flex-direction: column; gap: 6px; }
+.cc-li { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; align-items: start; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; text-align: start; }
+.cc-li span { font-weight: 700; } .cc-li.done span { color: #3FBF7F; } .cc-li.not span { color: #E5484D; } .cc-li.part span { color: #E0A43A; }
+.cc-li small { grid-column: 2; color: var(--ink-2); font-size: .8rem; }
+.hs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-top: 6px; }
+.hb-fold { margin-top: 0; }
+.hb-body { margin-top: 10px; }
+.hb-body .link { margin-top: 8px; }
+#hm-habits .hb-today { width: 100%; flex: 1 1 100%; } #hm-habits:has(.hb-today) { display: block; }

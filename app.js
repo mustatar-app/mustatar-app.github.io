@@ -3306,6 +3306,15 @@ function applyTextSize() {
   box.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { store.set('textSize', b.dataset.ts); applyTextSize(); });
 }
 applyTextSize();
+// what the Today screen shows (each part can be turned off; the schedule and habits stay folded to one line until opened)
+function paintHomeShow() {
+  const box = $('#home-show'); if (!box) return;
+  const A = window.ZadLang === 'ar', cur = { prayer: true, sched: true, habits: true, count: true, ...(store.get('homeShow', {}) || {}) };
+  const parts = [['prayer', 'Prayer times line', 'خط أوقات الصلاة'], ['sched', 'Your schedule', 'جدولك'], ['habits', 'Your habits', 'عاداتك'], ['count', 'Countdown', 'العدّ التنازلي']];
+  box.innerHTML = parts.map(([k, en, ar]) => `<label class="check"><input type="checkbox" data-hs="${k}" ${cur[k] ? 'checked' : ''}> ${A ? ar : en}</label>`).join('');
+  box.querySelectorAll('[data-hs]').forEach(c => c.onchange = () => { const v = { ...cur, ...(store.get('homeShow', {}) || {}) }; v[c.dataset.hs] = c.checked; store.set('homeShow', v); window.JundAssistant?.home?.(); window.JundFeatures?.renderHabits?.(); });
+}
+paintHomeShow();
 // the Android app tells the phone's text size (it no longer enlarges the page by itself, so screens do not break)
 window.addEventListener('mustatar-native-ready', applyTextSize);
 setTimeout(async () => { try { const r = await window.JundNative?.ask?.({ action: 'appInfo' }, 3000); if (r?.fontScale) { store.set('phoneFontScale', r.fontScale); applyTextSize(); } } catch {} }, 1200);

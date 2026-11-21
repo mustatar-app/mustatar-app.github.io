@@ -25,6 +25,8 @@ async def run(b, lang):
     pg = await c.new_page(); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
     await pg.goto(BASE); await pg.wait_for_timeout(1300)
     # Today: quick ticks and the link to the tracker
+    check(await pg.evaluate("document.querySelector('#hm-habits .hb-body').hidden"), f"[{lang}] on Today, habits are one folded line")
+    await pg.click("#hb-fold"); await pg.wait_for_timeout(200)
     chips = await pg.evaluate("document.querySelectorAll('#hm-habits .hb-chip').length")
     check(chips == 10, f"[{lang}] Today shows each habit as a quick tick ({chips})")
     await pg.click("#hm-habits .hb-chip >> nth=0"); await pg.wait_for_timeout(200)

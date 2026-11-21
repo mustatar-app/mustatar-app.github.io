@@ -10,6 +10,7 @@ if (lang !== 'ar') return;
 document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
 
 const T = {
+"On the Today screen": "في شاشة «اليوم»",
 "Save to Google Drive": "احفظ في Google Drive",
 "Text size": "حجم النص", "Mustatar · مستطر — the size of the words in the whole app": "مستطر — حجم الكلمات في التطبيق كله",
 "Reminders": "التذكيرات",

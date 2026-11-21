@@ -3382,19 +3382,38 @@ applyFont();
 
 /* ---------- text shared from another app (Samsung recorder → Share) ---------- */
 if (window.MustatarAndroid) {
-  window.JundNativeShare = async (text, path, name) => {
+  window.JundNativeShare = async (text, path, name, more) => {
     show('assistant'); window.JundAttach?.homeSetup();
-    let file = null;
-    if (path && /^\/__mustatar_share\/[0-9a-f-]{36}$/.test(path)) {
+    const fetchOne = async (p, n) => {
+      if (!p || !/^\/__mustatar_share\/[0-9a-f-]{36}$/.test(p)) return null;
       try {
-        const response = await fetch(path, { cache: 'no-store' });
+        const response = await fetch(p, { cache: 'no-store' });
         if (!response.ok) throw new Error('Shared file is unavailable');
         const blob = await response.blob();
-        file = new File([blob], name, { type: blob.type });
-      } catch { window.JundCal?.toast('Could not open the shared file. Please add it using +.'); }
-      finally { window.MustatarAndroid.postMessage(JSON.stringify({ action: 'shareDone', path })); }
+        return new File([blob], n || 'Shared file', { type: blob.type });
+      } catch { return null; }
+      finally { window.MustatarAndroid.postMessage(JSON.stringify({ action: 'shareDone', path: p })); }
+    };
+    const files = [];
+    const first = await fetchOne(path, name); if (first) files.push(first);
+    for (const [p, n] of (Array.isArray(more) ? more : [])) { const f = await fetchOne(p, n); if (f) files.push(f); }
+    if (path && !files.length) { window.JundCal?.toast(window.ZadLang === 'ar' ? 'تعذّر فتح الملف المُرسَل. أضفه من زر +.' : 'Could not open the shared file. Please add it using +.'); return; }
+    // notes from another notes app (Samsung Notes as Word or text, Keep, Evernote…): straight into My notes, all at once
+    const noteLike = f => /\.(docx|txt|md|markdown|html?|enex|zip|json)$/i.test(f.name) || /wordprocessingml|msword|^text\/(plain|markdown|html)/.test(f.type);
+    if (files.length && files.every(noteLike) && (files.length > 1 || /\.docx$|wordprocessingml|msword/i.test(files[0].name + files[0].type)) && window.JundImport) {
+      const A = window.ZadLang === 'ar';
+      try {
+        const r = await window.JundImport.bring(files);
+        const n = r?.saved || 0, had = r?.already || 0;
+        window.JundKeep?.open();
+        window.JundCal?.toast(n ? (A ? `✓ دخلت ${ar(n)} ملاحظة إلى ملاحظاتي` : `✓ ${n} notes added to My notes`)
+          : had ? (A ? 'هذه الملاحظات موجودة في ملاحظاتي من قبل.' : 'These notes are already in My notes.')
+          : (A ? 'لم أجد كلامًا في هذه الملفات.' : 'No text found in these files.'), 5000);
+      } catch { window.JundCal?.toast(A ? 'تعذّرت قراءة الملفات.' : 'Could not read the files.'); }
+      return;
     }
-    sharedChoice(text || '', file);
+    if (files.length > 1) { window.JundAttach?.addHome(files); if (text) { const input = $('#as-text'); if (input) { input.value = text; input.dispatchEvent(new Event('input')); } } return; }
+    sharedChoice(text || '', files[0] || null);
   };
   document.addEventListener('DOMContentLoaded', () => window.MustatarAndroid.postMessage(JSON.stringify({ action: 'ready' })), { once: true });
 }

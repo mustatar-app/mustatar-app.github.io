@@ -49,6 +49,8 @@ public class MainActivity extends Activity {
     private GeolocationPermissions.Callback locationCallback;
     private String locationOrigin;
     private volatile SharedFile shared;
+    // the second and later files when several are shared at once
+    private final java.util.List<SharedFile> sharedMore = new java.util.concurrent.CopyOnWriteArrayList<>();
     private String sharedText;
     private boolean sharePending;
     private boolean ready;
@@ -181,6 +183,7 @@ public class MainActivity extends Activity {
                             case "shareDone":
                                 SharedFile file = shared;
                                 if (file != null && (SHARE_PATH + file.token).equals(command.optString("path"))) shared = null;
+                                for (SharedFile m : sharedMore) if ((SHARE_PATH + m.token).equals(command.optString("path"))) sharedMore.remove(m);
                                 break;
                             case "sync": ReminderReceiver.replace(this, command.getJSONArray("items")); break;
                             case "permissions": notificationPermissions(); break;
@@ -472,11 +475,26 @@ public class MainActivity extends Activity {
             }
         }
         if (first && testHome != null) { getSharedPreferences("mustatar", MODE_PRIVATE).edit().putBoolean("moved", true).apply(); web.loadUrl(testHome.toString() + "/"); return; }
-        if (Intent.ACTION_SEND.equals(intent.getAction())) {
-            sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
-            Uri stream = intent.getParcelableExtra(Intent.EXTRA_STREAM);
-            if (stream == null && intent.getClipData() != null) stream = intent.getClipData().getItemAt(0).getUri();
-            shared = stream != null && "content".equals(stream.getScheme()) ? new SharedFile(stream, intent.getType()) : null;
+        if (Intent.ACTION_SEND.equals(intent.getAction()) || Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+            CharSequence tx = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            sharedText = tx == null ? null : tx.toString();
+            java.util.List<Uri> streams = new java.util.ArrayList<>();
+            if (Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+                java.util.ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (list != null) streams.addAll(list);
+            } else {
+                Uri one = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (one != null) streams.add(one);
+            }
+            if (streams.isEmpty() && intent.getClipData() != null)
+                for (int i = 0; i < intent.getClipData().getItemCount(); i++) { Uri u = intent.getClipData().getItemAt(i).getUri(); if (u != null) streams.add(u); }
+            sharedMore.clear(); shared = null;
+            for (Uri u : streams) {
+                if (u == null || !"content".equals(u.getScheme())) continue;
+                if (sharedMore.size() >= 50) break;
+                SharedFile f = new SharedFile(u, intent.getType());
+                if (shared == null) shared = f; else sharedMore.add(f);
+            }
             sharePending = true;
             deliverShare();
         }
@@ -581,8 +599,14 @@ public class MainActivity extends Activity {
         sharePending = false;
         web.evaluateJavascript("window.JundNativeShare?.(" + JSONObject.quote(sharedText) + ","
             + (file == null ? "null" : JSONObject.quote(SHARE_PATH + file.token)) + ","
-            + (file == null ? "null" : JSONObject.quote(file.name)) + ")", null);
+            + (file == null ? "null" : JSONObject.quote(file.name)) + "," + moreJson() + ")", null);
         sharedText = null;
+    }
+
+    private String moreJson() {
+        org.json.JSONArray a = new org.json.JSONArray();
+        for (SharedFile m : sharedMore) a.put(new org.json.JSONArray().put(SHARE_PATH + m.token).put(m.name));
+        return a.toString();
     }
 
     private WebResourceResponse sharedResponse(Uri url) {
@@ -597,7 +621,9 @@ public class MainActivity extends Activity {
             return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.emptyMap(), null);
         }
         SharedFile file = shared;
-        if (file == null || !local(url) || !(SHARE_PATH + file.token).equals(url.getPath())) return null;
+        if (file != null && !(SHARE_PATH + file.token).equals(url.getPath())) file = null;
+        if (file == null) for (SharedFile m : sharedMore) if ((SHARE_PATH + m.token).equals(url.getPath())) { file = m; break; }
+        if (file == null || !local(url)) return null;
         try {
             java.io.InputStream input = getContentResolver().openInputStream(file.uri);
             if (input != null) return new WebResourceResponse(file.type, null, 200, "OK",
@@ -616,7 +642,10 @@ public class MainActivity extends Activity {
             try (Cursor c = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
                 if (c != null && c.moveToFirst()) display = c.getString(0);
             } catch (Exception ignored) {}
-            type = mime == null ? "application/octet-stream" : mime;
+            String own = null;
+            try { own = getContentResolver().getType(uri); } catch (Exception ignored) {}
+            // each file's own type (several shared at once arrive as "*/*")
+            type = own != null ? own : mime == null || mime.contains("*") ? "application/octet-stream" : mime;
             name = display == null ? ("application/pdf".equals(type) ? "Shared.pdf" : "Shared file") : display;
         }
     }

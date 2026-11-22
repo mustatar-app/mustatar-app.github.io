@@ -21,6 +21,26 @@ export const CF_FREE_NEURONS = 10000;              // Cloudflare's free AI allow
 export const CF_DEFAULT_LIMIT = 9500;              // the brake: stop a little before it
 export const NEURONS = { in: 9091 / 1e6, out: 27273 / 1e6, audioMin: 46.63 };   // Gemma 4 per token, Whisper per minute (Cloudflare's price list)
 
+// Claude (paid, prepaid credit): the assistant's brain when the owner has added ANTHROPIC_API_KEY. Any failure
+// (no credit left, busy, down) falls back to the free models, so the app keeps working.
+export const claudeKey = env => String(env.ANTHROPIC_API_KEY || '').trim();
+const CLAUDE_MODEL = 'claude-haiku-5-5';
+async function claudeWrite(env, { system, user, images, wantJson, maxTokens }) {
+  const content = images?.length
+    ? [...images.flatMap(im => [...(im.label ? [{ type: 'text', text: im.label }] : []), { type: 'image', source: { type: 'base64', media_type: im.mime, data: im.data } }]), { type: 'text', text: user }]
+    : user;
+  const sys = system + (wantJson ? '\n\nOutput only the JSON object — no words before or after it, no code fences.' : '');
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', signal: AbortSignal.timeout(90000),
+    headers: { 'content-type': 'application/json', 'x-api-key': claudeKey(env), 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: env.CLAUDE_MODEL || CLAUDE_MODEL, max_tokens: Math.max(256, Math.min(Number(maxTokens) || 4000, 8000)), ...(sys ? { system: sys } : {}), messages: [{ role: 'user', content }] }),
+  });
+  if (!r.ok) return { ok: false, status: r.status, detail: (await r.text().catch(() => '')).slice(0, 300) };
+  const j = await r.json().catch(() => ({}));
+  let text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  if (wantJson) { const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a >= 0 && b > a) text = text.slice(a, b + 1); }
+  return { ok: true, text, finish: j.stop_reason === 'max_tokens' ? 'MAX_TOKENS' : 'STOP', usage: j.usage || {} };
+}
 export const groqKey = env => String(env.GROQ_API_KEY || env.GROQ_FREE_API_KEY || '').trim();
 export const ready = env => !!(env.AI || groqKey(env));
 export const estTokens = s => Math.ceil(String(s || '').length / 3);
@@ -306,6 +326,18 @@ export async function talk(env, ctx, h, { system = '', user = '', images = [], j
   const inTok = estTokens(system) + estTokens(user) + images.length * 1100;
   const streaming = stream && !formatResult;
   const order = prefer === 'groq' ? ['groq', 'cf'] : ['cf', 'groq'];
+  // the assistant's jobs (chat, plans, check-in, translations) go to Claude first when its key is there
+  if (prefer === 'groq' && claudeKey(env) && !env.CLAUDE_OFF) {
+    try {
+      const c = await claudeWrite(env, { system, user, images, wantJson, maxTokens });
+      if (c.ok && c.text) {
+        meter(env, ctx, { 'claude.in': Number(c.usage.input_tokens) || inTok, 'claude.out': Number(c.usage.output_tokens) || estTokens(c.text), 'write.claude': 1 });
+        const ok = formatResult ? formatResult(c.text) : c.text;
+        if (ok) return modelResponse(h, CLAUDE_MODEL, prefix + (formatResult ? ok : c.text), c.finish);
+      }
+      tally.no('claude', { status: c.status || 502 });
+    } catch { tally.no('claude', { status: 504 }); }
+  }
   for (const source of order) {
     if (source === 'cf' && env.AI) {
       const b = await brakeState(env);
@@ -400,7 +432,7 @@ export async function meterReport(env, days = 14) {
   return {
     rows: r.rows || [], brake: { cfLimit: Number(r.brake?.cfLimit) || Number(env.CF_DAILY_NEURONS) || CF_DEFAULT_LIMIT, paid: r.brake?.paid === true },
     free: { cfNeurons: CF_FREE_NEURONS, groqAudioSec: 28800, groqTokens: 200000 },
-    sources: { cloudflare: !!env.AI, groq: !!groqKey(env) },
+    sources: { cloudflare: !!env.AI, groq: !!groqKey(env), claude: !!claudeKey(env) },
   };
 }
 export async function setBrake(env, brake) {

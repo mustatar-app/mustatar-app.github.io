@@ -79,9 +79,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GROQ: ${{ secrets.GROQ_API_KEY }}
           GEMINI: ${{ secrets.GEMINI_API_KEY }}
+          CLAUDE: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          GROQ=$(printf %s "$GROQ" | tr -d '[:space:]'); GEMINI=$(printf %s "$GEMINI" | tr -d '[:space:]')   # a pasted key may end with a new line
-          jq -n --arg g "$GROQ" --arg m "$GEMINI" '{} + (if $g != "" then {GROQ_API_KEY: $g} else {} end) + (if $m != "" then {GEMINI_API_KEY: $m} else {} end)' > keys.json
+          GROQ=$(printf %s "$GROQ" | tr -d '[:space:]'); GEMINI=$(printf %s "$GEMINI" | tr -d '[:space:]'); CLAUDE=$(printf %s "$CLAUDE" | tr -d '[:space:]')   # a pasted key may end with a new line
+          jq -n --arg g "$GROQ" --arg m "$GEMINI" --arg c "$CLAUDE" '{} + (if $g != "" then {GROQ_API_KEY: $g} else {} end) + (if $m != "" then {GEMINI_API_KEY: $m} else {} end) + (if $c != "" then {ANTHROPIC_API_KEY: $c} else {} end)' > keys.json
           echo "Keys handed over: $(jq -r 'keys | join(", ")' keys.json)"
           if [ "$(jq length keys.json)" -gt 0 ]; then npx --yes wrangler@4.163.0 secret bulk keys.json; fi
           rm -f keys.json

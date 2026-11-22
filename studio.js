@@ -935,6 +935,22 @@ async function videoAudio(file, from, to) {
   for (let i = 0; i < pcm.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
   return new Blob([out], { type: 'audio/wav' });
 }
+/* The sound of the chosen part, in pieces the server can hear. Phones often cannot "decode" a whole video in the
+   browser (that was the "decoding failed" error), so first the sound is lifted straight out of the file, the same way
+   recordings are prepared for notes (no decoding); decoding is only a fallback; the last resort sends the file itself. */
+async function soundParts(file, from, to) {
+  const keep = p => (p.end == null || p.end > from) && (p.at < (to || Infinity));
+  try {
+    const r = await window.JundMedia?.prepare(file, null, null, { pieceSec: 60 });
+    if (r?.pieces?.length) {
+      const parts = r.pieces.map(p => ({ blob: p.blob, mime: p.mime || 'audio/mp4', at: Number(p.start) || 0, end: p.end })).filter(keep);
+      if (parts.length) return parts;
+    }
+  } catch {}
+  try { return [{ blob: await videoAudio(file, from, to), mime: 'audio/wav', at: from }]; } catch {}
+  if (file.size <= 95 * 1024 * 1024) return [{ blob: file, mime: file.type || 'video/mp4', at: 0 }];
+  throw new Error(L('This video is too big to read here. Trim it shorter, or save it as a smaller video, then try again.', 'هذا الفيديو كبير جدًا. قصّه أقصر أو احفظه بحجم أصغر ثم حاول مرة أخرى.'));
+}
 // long pieces are cut into short lines that fit on the screen, timed by their length
 function cutCues(segs, field) {
   const out = [];
@@ -975,13 +991,23 @@ function subsSheet() {
     try {
       if (!subs?.segs) {
         st(L('Taking the sound out of the video…', 'أُخرج الصوت من الفيديو…'));
-        const wav = await videoAudio(bg.file, trim.start, trim.end);
-        st(L('Listening and writing what is said…', 'أسمع وأكتب ما قيل…'));
-        const res = await J.serverFetch(`/transcribe?timed=1&mime=audio/wav&langs=${encodeURIComponent(J.speechLangs?.() || 'ar,en')}`, { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
-        if (!res.ok) throw new Error(J.errText?.({ code: (await res.json().catch(() => ({}))).code }) || 'server');
-        const j = await res.json();
-        if (!j.segments?.length) throw new Error(L('No words were heard in this part.', 'لم يُسمع كلام في هذا الجزء.'));
-        subs = { segs: j.segments.map(x => ({ s: x.s + trim.start, e: x.e + trim.start, t: x.t })), text: j.text, lang: j.lang || J.langOf(j.text) };
+        const parts = await soundParts(bg.file, trim.start, trim.end);
+        const segs = []; let lang = '';
+        for (let i = 0; i < parts.length; i++) {
+          st(L(`Listening and writing what is said… ${i + 1}/${parts.length}`, `أسمع وأكتب ما قيل… ${i + 1}/${parts.length}`));
+          const pt = parts[i];
+          const res = await J.serverFetch(`/transcribe?timed=1&mime=${encodeURIComponent(pt.mime)}&langs=${encodeURIComponent(J.speechLangs?.() || 'ar,en')}`, { method: 'POST', headers: { 'content-type': pt.mime }, body: pt.blob });
+          if (!res.ok) throw new Error(J.errText?.({ code: (await res.json().catch(() => ({}))).code }) || L('The server could not hear it. Try again.', 'تعذّر على الخادم سماعه. حاول مرة أخرى.'));
+          const j = await res.json();
+          lang ||= j.lang || '';
+          for (const x of j.segments || []) {
+            const s0 = x.s + pt.at, e0 = x.e + pt.at;
+            if (e0 > trim.start && s0 < (trim.end || Infinity)) segs.push({ s: Math.max(trim.start, s0), e: Math.min(trim.end || e0, e0), t: x.t });
+          }
+        }
+        if (!segs.length) throw new Error(L('No words were heard in this part.', 'لم يُسمع كلام في هذا الجزء.'));
+        const text = segs.map(x => x.t).join(' ');
+        subs = { segs, text, lang: lang || J.langOf(text) };
       }
       const want = pick === 'orig' ? null : pick === 'both' ? (subs.lang === 'ar' ? 'en' : 'ar') : pick;
       if (want && want === subs.lang) { subs.mode = 'orig'; }

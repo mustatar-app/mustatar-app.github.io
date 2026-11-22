@@ -109,8 +109,9 @@ jobs:
         run: |
           URL=$(sed -E 's/.*"url":"([^"]+)".*/\1/' server.json); O=https://mustatar.dawajund.workers.dev
           sleep 5
-          curl -sS -X POST "$URL/write" -H "origin: $O" -H 'content-type: application/json' \
-            -d '{"system":"Answer in one short sentence.","user":"Say hello in Arabic.","json":false,"assistant":true,"maxTokens":200}' | head -c 600; echo
+          # x-model says which AI answered (claude-haiku-… once ANTHROPIC_API_KEY is added)
+          curl -sS -D - -X POST "$URL/write" -H "origin: $O" -H 'content-type: application/json' \
+            -d '{"system":"Answer in one short sentence.","user":"Say hello in Arabic.","json":false,"assistant":true,"maxTokens":200}' | grep -iE '^x-model|data:' | head -c 600; echo
           sudo apt-get install -y -qq espeak-ng ffmpeg > /dev/null 2>&1 || true
           if command -v espeak-ng > /dev/null; then
             espeak-ng -v en -w t.wav "Good morning. This is a short test of the meeting notes." && ffmpeg -loglevel error -i t.wav -b:a 64k t.mp3

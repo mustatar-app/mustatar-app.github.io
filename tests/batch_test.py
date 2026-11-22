@@ -9,7 +9,7 @@ def ok(c, m):
     if not c: fails.append(m)
 async def ctx(b, lang, extra=''):
     c = await b.new_context(viewport={'width': 412, 'height': 915}, is_mobile=True, has_touch=True, service_workers='block')
-    await c.add_init_script(f"localStorage.setItem('jn_uiLang', JSON.stringify('{lang}'));localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');{extra}")
+    await c.add_init_script(f"localStorage.setItem('jn_uiLang', JSON.stringify('{lang}'));localStorage.setItem('jn_welcomed','true');localStorage.setItem('jn_opened','true');{{ const d = new Date(); d.setDate(d.getDate() - d.getDay()); const p = n => String(n).padStart(2, '0'); localStorage.setItem('jn_reviewSeen', JSON.stringify(`${{d.getFullYear()}}-${{p(d.getMonth() + 1)}}-${{p(d.getDate())}}`)); }}{extra}")
     await c.route('**/api.aladhan.com/**', lambda r: r.abort())
     return c
 async def main():

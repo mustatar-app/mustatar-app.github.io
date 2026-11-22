@@ -103,7 +103,7 @@ function card(g) {
     <button type="button" class="gl-head" data-toggle>
       <span class="gl-area">${AREA_IC[g.area] || '🎯'}</span>
       <span class="gl-ttl"><b dir="auto">${esc(g.title)}</b><small>${[AREAS()[g.area], due, QUAD()[q][0]].filter(Boolean).join(' · ')}</small></span>
-      <span class="gl-pct">${num(Math.round(p * 100))}٪</span>
+      <span class="gl-pct">${num(Math.round(p * 100))}${AR() ? '٪' : '%'}</span>
     </button>
     <div class="gl-bar q-${q}"><i style="width:${Math.round(p * 100)}%"></i></div>
     ${open ? `<div class="gl-more">

@@ -528,6 +528,7 @@ function initSettings() {
   $('#ui-lang').onchange = () => { store.set('uiLang', $('#ui-lang').value); location.reload(); };
   $('#theme').value = store.get('theme', 'auto');
   $('#theme').onchange = () => { store.set('theme', $('#theme').value); applyTheme(); };
+  paintFonts();
   $('#lang-default').value = store.get('langDefault', 'auto');
   $('#lang-default').onchange = () => { store.set('langDefault', $('#lang-default').value); $('#lang').value = $('#lang-default').value; };
   $('#lang').value = store.get('langDefault', 'auto');
@@ -3322,12 +3323,44 @@ function applyTheme() {
   // a wallpaper decides day or night so words stay readable on it
   const wall = store.get('appBg', '');
   if (wall === 'nightsky') t = 'navy'; else if (wall === 'desert') t = 'light';
+  const glass = /^glass/.test(t) || wall === 'nightsky' || wall === 'desert';
+  if (t === 'glass') t = 'navy'; else if (t === 'glass-light') t = 'light';
   document.documentElement.dataset.theme = t;
+  if (glass) document.documentElement.dataset.glass = /^glass/.test(pick) ? 'own' : 'wall'; else delete document.documentElement.dataset.glass;
   $('meta[name="theme-color"]')?.setAttribute('content', t === 'light' ? '#FFFFFF' : '#0C0C0E');
 }
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => { if (store.get('theme', 'auto') === 'auto') applyTheme(); });
 applyTheme();
 window.JundApplyTheme = applyTheme;
+/* the app's font: a few clear Arabic + English typefaces to choose from (loaded only when chosen) */
+const UI_FONTS = [
+  ['plex', 'IBM Plex Sans Arabic', 'IBM Plex Sans Arabic:wght@400;500;600;700', 'Readex Pro'],
+  ['tajawal', 'Tajawal', 'Tajawal:wght@400;500;700', 'Tajawal'],
+  ['cairo', 'Cairo', 'Cairo:wght@400;500;600;700', 'Cairo'],
+  ['almarai', 'Almarai', 'Almarai:wght@400;700', 'Almarai'],
+  ['kufi', 'Noto Kufi Arabic', 'Noto Kufi Arabic:wght@400;500;600;700', 'Noto Kufi Arabic'],
+  ['rubik', 'Rubik', 'Rubik:wght@400;500;600;700', 'Rubik'],
+  ['naskh', 'Noto Naskh Arabic', 'Noto Naskh Arabic:wght@400;500;600;700', 'Noto Naskh Arabic'],
+];
+function applyUiFont() {
+  const f = UI_FONTS.find(x => x[0] === store.get('uiFont', 'plex')) || UI_FONTS[0];
+  const root = document.documentElement.style;
+  if (f[0] === 'plex') { root.removeProperty('--ui'); root.removeProperty('--head'); return; }
+  const id = 'font-' + f[0];
+  if (!document.getElementById(id)) { const l = document.createElement('link'); l.id = id; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=' + f[2].replace(/ /g, '+') + '&display=swap'; document.head.appendChild(l); }
+  root.setProperty('--ui', `'${f[1]}', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`);
+  root.setProperty('--head', `'${f[3]}', '${f[1]}', system-ui, sans-serif`);
+}
+applyUiFont();
+function paintFonts() {
+  const box = $('#ui-font'); if (!box) return;
+  const cur = store.get('uiFont', 'plex');
+  box.innerHTML = UI_FONTS.map(f => `<button type="button" class="font-b ${f[0] === cur ? 'on' : ''}" data-font="${f[0]}"><b style="font-family:'${f[1]}'">مستطر Aa</b><small>${f[1]}</small></button>`).join('');
+  // a preview of each needs the font: load them while the settings are open
+  for (const f of UI_FONTS.slice(1)) { const id = 'font-' + f[0]; if (!document.getElementById(id)) { const l = document.createElement('link'); l.id = id; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=' + f[2].replace(/ /g, '+') + '&display=swap'; document.head.appendChild(l); } }
+  box.querySelectorAll('[data-font]').forEach(b => b.onclick = () => { store.set('uiFont', b.dataset.font); applyUiFont(); paintFonts(); });
+}
+window.JundFonts = { applyUiFont, paintFonts };
 /* text size: bigger or smaller words in the whole app (for people who need large text, or like it small);
    "Phone" follows the phone's own text size (the Android app passes it in), kept within what the screens can hold */
 const TEXT_SIZES = [['phone', 'Phone', 'الهاتف', 0], ['s', 'A−', 'أ−', 0.9], ['m', 'A', 'أ', 1], ['l', 'A+', 'أ+', 1.15], ['xl', 'A++', 'أ++', 1.3]];

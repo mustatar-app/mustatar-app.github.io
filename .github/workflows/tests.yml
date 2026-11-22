@@ -62,6 +62,7 @@ jobs:
           python3 tests/share_in_test.py http://localhost:8765/
           python3 tests/voice_send_test.py http://localhost:8765/
           python3 tests/alarm_options_test.py http://localhost:8765/
+          python3 tests/assistant_smart_test.py http://localhost:8765/
           python3 tests/mp4fix_test.py http://localhost:8765/
           python3 tests/keep_test.py http://localhost:8765/
       - name: Accounts and private spaces work (pretend passkey, server on this machine)

@@ -57,22 +57,52 @@ async function pushWidgets(force) {
   window.MustatarAndroid.postMessage(JSON.stringify({ action: 'widget', data }));
 }
 
-/* ---------- 2. a gentle vibration at prayer times ---------- */
+/* ---------- 2. prayer reminders: a few minutes before each prayer (with sound), and at the time itself ----------
+   Works in the Android app and, through notifications, in a browser / home-screen app. */
+const prayerOpts = () => {
+  const o = { before: 10, at: store.get('prayerVibrate', true) ? 'vibrate' : 'off', ...(store.get('prayerAlert', {}) || {}) };
+  return o;
+};
 function prayerAlarms() {
-  if (!APP() || !store.get('prayerVibrate', true)) return [];
+  const o = prayerOpts(); if (!o.before && o.at === 'off') return [];
   const out = [], now = Date.now(), place = store.get('prayerPlace', {})?.name || '';
+  const ar = n => AR() ? String(n).replace(/\d/g, x => '٠١٢٣٤٥٦٧٨٩'[x]) : n;
   for (let i = 0; i < 7; i++) {
     const d = addDays(new Date(), i), k = iso(d), times = window.JundFeatures?.timesFor?.(k);
     if (!times) continue;
     for (const n of FIVE) {
       if (!/^\d\d:\d\d/.test(times[n] || '')) continue;
-      const at = new Date(`${k}T${times[n].slice(0, 5)}`).getTime();
-      if (at < now - 60e3) continue;
-      out.push({ id: `pray-${k}-${n}`, kind: 'prayer', at, title: AR() ? `حان وقت صلاة ${FIVE_AR[n]}` : `It is time for ${n}`, body: [times[n].slice(0, 5), place].filter(Boolean).join(' · ') });
+      const at = new Date(`${k}T${times[n].slice(0, 5)}`).getTime(), hm = times[n].slice(0, 5);
+      if (o.before) {
+        const b = at - o.before * 60e3;
+        if (b >= now - 60e3) out.push({ id: `prb-${k}-${n}`, at: b, view: 'assistant',
+          title: AR() ? `🕌 صلاة ${FIVE_AR[n]} بعد ${ar(o.before)} دقائق` : `🕌 ${n} in ${o.before} minutes`, body: [hm, place].filter(Boolean).join(' · ') });
+      }
+      if (o.at !== 'off' && at >= now - 60e3)
+        out.push({ id: `pray-${k}-${n}`, kind: o.at === 'sound' ? undefined : 'prayer', at, view: 'assistant',
+          title: AR() ? `حان وقت صلاة ${FIVE_AR[n]}` : `It is time for ${n}`, body: [hm, place].filter(Boolean).join(' · ') });
     }
   }
   return out;
 }
+// the settings: under Prayer times, for everyone
+function prayerSettings() {
+  const anchor = $('#prayer-status'); if (!anchor || $('#pr-alert')) return;
+  const o = prayerOpts();
+  const box = document.createElement('div'); box.id = 'pr-alert'; box.className = 'pr-alert'; box.setAttribute('data-noi18n', '');
+  const mins = [0, 5, 10, 15, 20, 30];
+  box.innerHTML = `<label class="field"><span>${t('Remind me before each prayer', 'ذكّرني قبل كل صلاة')}</span><select id="pr-before">${mins.map(m => `<option value="${m}" ${m === o.before ? 'selected' : ''}>${m ? t(`${m} minutes before (with sound)`, `قبلها بـ ${m} دقائق (بصوت)`) : t('Off', 'إيقاف')}</option>`).join('')}</select></label>
+    <label class="field"><span>${t('At the prayer time', 'عند دخول الوقت')}</span><select id="pr-at">
+      <option value="vibrate" ${o.at === 'vibrate' ? 'selected' : ''}>${t('Gentle vibration, no sound', 'اهتزاز خفيف بلا صوت')}</option>
+      <option value="sound" ${o.at === 'sound' ? 'selected' : ''}>${t('Notification with sound', 'إشعار بصوت')}</option>
+      <option value="off" ${o.at === 'off' ? 'selected' : ''}>${t('Nothing', 'لا شيء')}</option></select></label>
+    ${APP() ? '' : `<small class="muted">${t('In a browser these come as notifications — allow notifications in Settings.', 'في المتصفح تصل إشعارات — اسمح بالإشعارات من الإعدادات.')}</small>`}`;
+  anchor.after(box);
+  const save = () => { store.set('prayerAlert', { before: Number($('#pr-before').value), at: $('#pr-at').value }); store.set('prayerVibrate', $('#pr-at').value !== 'off'); window.JundCal?.pushSync?.(); };
+  $('#pr-before').onchange = save; $('#pr-at').onchange = save;
+}
+setTimeout(prayerSettings, 800);
+document.addEventListener('click', () => setTimeout(prayerSettings, 50), true);
 
 /* ---------- 3. the phone's calendars, both ways ---------- */
 const cal = () => store.get('phoneCal', { on: false, show: [], write: null });
@@ -331,12 +361,10 @@ function settingsCard() {
   const anchor = $('#widget-connect')?.closest('.card'); if (!anchor) return;
   const c = document.createElement('div'); c.className = 'card'; c.id = 'ph-card'; c.setAttribute('data-noi18n', '');
   c.innerHTML = `<div class="card-h">${t('This phone', 'هذا الجوال')}</div>
-    <label class="check"><input type="checkbox" id="ph-vibe"${store.get('prayerVibrate', true) ? ' checked' : ''}> ${t('At prayer times: a gentle vibration, no sound', 'عند أوقات الصلاة: اهتزاز خفيف، بلا صوت')}</label>
     <div class="ph-sec"><div class="card-h small">${t('Your phone’s calendars', 'تقاويم جوالك')}</div><div id="ph-cal"></div></div>
     <div class="ph-sec"><div class="card-h small">${t('Fitness: steps and sleep', 'اللياقة: الخطوات والنوم')}</div><div id="ph-fit"></div></div>
     <div class="ph-sec"><div class="card-h small">${t('Recordings and screenshots on this phone', 'التسجيلات ولقطات الشاشة في هذا الجوال')}</div><div id="ph-fold"></div></div>`;
   anchor.before(c);
-  $('#ph-vibe').onchange = e => { store.set('prayerVibrate', e.target.checked); window.JundCal?.pushSync?.(); };
   paintCalCard(); paintFitCard(); paintFolders();
 }
 

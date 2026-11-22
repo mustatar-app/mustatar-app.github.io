@@ -507,6 +507,7 @@ function reminderList() {
   for (const x of window.JundBrief?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // briefs before lessons and meetings
   for (const x of window.JundCheckin?.alarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
   for (const x of window.JundAlarm?.upcoming?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });
+  for (const x of window.JundPhone?.prayerAlarms?.() || []) out.push({ at: x.at, title: x.title, body: x.body, tag: x.id });   // before and at prayer times
   for (const h of window.JundFeatures?.habitReminders?.() || []) for (let i = 0; i <= 7; i++) {
     const date = addDays(today(), i), at = new Date(`${date}T${h.time}`).getTime();
     if (at >= Date.now() - 60e3 && !h.skip.includes(date)) out.push({ at, title: h.title, body: h.body, tag: `${h.id}|${date}` });
@@ -524,7 +525,7 @@ function nativeReminders() {
   items.push(...(window.JundCount?.alarms?.() || []));   // running timers ring like the focus timer
   items.push(...(window.JundBrief?.alarms?.() || []));   // a short brief before lessons and meetings
   items.push(...(window.JundCheckin?.alarms?.() || []));   // the evening check-in
-  items.push(...(window.JundPhone?.prayerAlarms?.() || []));   // a gentle vibration at prayer times (Android app)
+  items.push(...(window.JundPhone?.prayerAlarms?.() || []));   // before each prayer (sound) and at the time (vibration or sound)
   return items;
 }
 function nativeMessage(action, details = {}) { android.postMessage(JSON.stringify({ action, ...details })); }

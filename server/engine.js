@@ -213,6 +213,23 @@ async function cfHear(env, audio, mime, language, words = '') {
   } catch (e) { return { ok: false, ...cfProblem(e) }; }
 }
 
+/* Whisper sometimes "hears" a language nobody spoke (Dutch, German… in the middle of Arabic and English speech).
+   Words that are common in those languages and are not English give it away. */
+const FOREIGN = new Set(('ik ben het een niet wat zijn voor maar ook nog wel dat deze geen naar hebt heb wij jij zij jullie ze mij mijn onze hier daar gaat goed dank alstublieft ongezellig gezellig dus omdat want toch even zo ja nee ' +
+  'und ist nicht ich bin der die das ein eine mit auf für sind wir sie aber auch noch schon sehr gut danke bitte ja nein ' +
+  'est les des une pas pour avec mais très bien merci oui non nous vous sont dans sur ' +
+  'el los las una pero muy gracias por para con sí ' +
+  'questo sono della grazie molto ' +
+  'saya tidak dengan untuk yang ini itu ada bisa').split(' '));
+const ENGLISH = new Set(('the a an and or but is are was were be been i you he she it we they me my your our this that these those to of in on at for with from by as not no yes do does did have has had will would can could should ' +
+  'what when where who why how all any some more most so if then than there here just about up down out over after before again also only very give hand staff play back make take get go come see know think want need like time day today tomorrow').split(' '));
+export function foreignScore(text) {
+  const words = String(text || '').toLowerCase().match(/[a-zà-ÿ']+/g) || [];
+  let bad = 0, en = 0;
+  for (const w of words) { if (FOREIGN.has(w) && !ENGLISH.has(w)) bad++; else if (ENGLISH.has(w)) en++; }
+  return { bad, en, foreign: bad >= 2 && bad > en * 0.25 };
+}
+
 // audio: an ArrayBuffer (any size), or a stream (only for pieces too big to keep in memory: Cloudflare alone, no second try).
 // langs: the languages the person speaks. One language: Whisper is told it. Several: Whisper finds it, and if it finds a
 // language the person does not speak (a quiet start can fool it), it hears the piece again in their first language.
@@ -221,9 +238,17 @@ export async function hear(env, ctx, { audio, mime, langs = [], fast = false, pa
   const size = audio instanceof ReadableStream ? Infinity : audio.byteLength;
   const told = langs.length === 1 ? langs[0] : undefined;
   const settle = async (first, again) => {
-    if (told || langs.length < 2 || !first.lang || langs.includes(first.lang)) return first;
-    const second = await again(langs[0]);
-    return second.ok ? second : first;
+    if (!told && langs.length >= 2 && first.lang && !langs.includes(first.lang)) {
+      const second = await again(langs[0]);
+      return second.ok ? second : first;
+    }
+    // words from a language the person does not speak got in: hear it again in their first language, keep the cleaner one
+    const f = foreignScore(first.text);
+    if (!told && f.foreign && !langs.some(l => !['ar', 'en'].includes(l))) {
+      const second = await again(langs[0]);
+      if (second.ok && foreignScore(second.text).bad < f.bad) return second;
+    }
+    return first;
   };
   // Groq refuses raw AAC (the sound taken out of phone videos and M4A files) whatever its name: those go to Cloudflare
   if (groqKey(env) && size <= GROQ_AUDIO_MAX && !GROQ_REFUSES.test(mime)) {

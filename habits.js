@@ -83,7 +83,7 @@ function paint() {
   const top = list.map((h, i) => ({ h, i, r: rate(h, live) })).sort((a, b) => b.r - a.r);
   const nudge = coachLine(list);
   const head = view === 'week' ? L('Last 7 days', 'آخر ٧ أيام') : parse(month + '-01').toLocaleDateString(loc(), { month: 'long', year: 'numeric' });
-  s.innerHTML = `<div class="row-between"><h1 class="screen-title">${L('Habit tracker', 'متابعة العادات')}</h1><button type="button" class="primary" id="hb-add">+ ${L('Habit', 'عادة')}</button></div>
+  s.innerHTML = `<div class="row-between"><h1 class="screen-title">${L('Habit tracker', 'متابعة العادات')}</h1><span class="hb-topbtns"><button type="button" class="ghost small" id="hb-goals">🎯 ${L('Goals', 'الأهداف')}</button><button type="button" class="primary" id="hb-add">+ ${L('Habit', 'عادة')}</button></span></div>
     ${nudge ? `<div class="hb-nudge">💡 <span dir="auto">${nudge}</span></div>` : ''}
     <div class="seg hb-views"><button type="button" data-v="week" class="${view === 'week' ? 'on' : ''}">${L('Week', 'الأسبوع')}</button><button type="button" data-v="month" class="${view === 'month' ? 'on' : ''}">${L('Month', 'الشهر')}</button></div>
     <div class="hb-nav">${view === 'month' ? `<button type="button" class="icon-btn" data-mo="-1" aria-label="${L('Previous month', 'الشهر السابق')}">‹</button>` : ''}<b>${head}</b>${view === 'month' ? `<button type="button" class="icon-btn" data-mo="1" aria-label="${L('Next month', 'الشهر التالي')}">›</button>` : ''}</div>
@@ -120,6 +120,7 @@ const IDEAS = () => AR()
   : [['Wake up early', '5:30 am'], ['Quran reading', '20 min'], ['Morning & evening adhkar', ''], ['Water', '2.5 L'], ['Workout', '20 min'], ['Study', '2 h'], ['Sleep before 10 pm', ''], ['Plan the next day', ''], ['Journal & self-review', ''], ['Learn a language', '20 min'], ['Read a book', '5 pages'], ['No social media', '']];
 function wire(s) {
   $('#hb-add', s).onclick = () => editor();
+  $('#hb-goals', s).onclick = () => window.JundGoals?.open();
   $$('[data-v]', s).forEach(b => b.onclick = () => { view = b.dataset.v; store.set('habitView', view); paint(); });
   $$('[data-mo]', s).forEach(b => b.onclick = () => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + Number(b.dataset.mo), 1); month = iso(d).slice(0, 7); paint(); });
   $$('.hb-c', s).forEach(b => b.onclick = () => cycle(b.dataset.h, b.dataset.d));

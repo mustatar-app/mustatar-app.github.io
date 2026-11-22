@@ -441,7 +441,7 @@ async function context(q) {
   return `${self}${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date today: ${window.JundFeatures?.hijri(now) || ''}\nHIJRI MONTHS (Umm al-Qura, exact): ${window.JundFeatures?.hijriTable?.() || ''}\n${lessonsFromFeedback()}${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
 Week starts on ${DAYS[Number(store.get('weekStart', 0))]}.
 
-DAYS OFF (weekly lessons hidden on these days): ${(window.JundCal?.daysOff?.() || []).map(o => `${o.from} to ${o.to}${o.label ? ' ' + o.label : ''}`).join('; ') || 'none'}
+${window.JundGoals ? 'GOALS (id | title | due | priority quadrant | progress):\n' + (window.JundGoals.brief() || '(none yet)') + '\n' : ''}DAYS OFF (weekly lessons hidden on these days): ${(window.JundCal?.daysOff?.() || []).map(o => `${o.from} to ${o.to}${o.label ? ' ' + o.label : ''}`).join('; ') || 'none'}
 CALENDAR (past 2 weeks to next 2 months, plus weekly items):
 ${soon || '(empty)'}
 
@@ -467,7 +467,8 @@ You can act on his calendar and habit tracker. Reply with JSON only, in this sha
    {"do": "habit", "title": "a daily habit the user explicitly asked to track", "time": "HH:MM if a daily reminder was requested, or empty"},
    {"do": "timer", "minutes": number, "label": "short name or empty"},
    {"do": "note", "title": "...", "text": "...", "items": ["only for a checklist"]},
-   {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false}
+   {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false},
+   {"do": "goal", "title": "the goal", "why": "his reason, if he gave one", "due": "YYYY-MM-DD or empty", "area": "faith|knowledge|health|family|work|money|self", "imp": true or false, "urg": true or false, "target": number or 0, "unit": "pages, books… or empty"}
  ],
  "open": "a lesson id to offer to open, or empty",
  "ask": {"q": "ONE short question when you must ask", "choices": ["2 to 4 short answers he can tap"]} or null}
@@ -475,6 +476,7 @@ Rules:
 - UNDERSTAND FIRST. His messages are often typed by voice: words can be misheard, cut, or come out in the wrong language. Work out what he means from the whole message and the chat. If a part that matters is unclear (what, which day, Hijri or Gregorian, how often), do NOT guess: do the parts that are clear, and ask about the unclear part with "ask" (quote the unclear words, give 2–4 tap answers). Never invent a meaning to fill a gap.
 - A long message with several requests: answer with a short numbered list of what you understood and what you did for each; ask about anything you did not understand.
 - HIJRI DATES: in Saudi Arabia dates are often Hijri — Arabic month names (محرم، صفر، ربيع الأول، ربيع الآخر، جمادى الأولى، جمادى الآخرة، رجب، شعبان، رمضان، شوال، ذو القعدة، ذو الحجة), "هـ", or a year like 1447/1448. NEVER read Hijri day/month numbers as Gregorian ones. For a Hijri date write the action's date as "h1448-06-15" (year-month-day, Hijri): Mustatar converts it exactly. Use the HIJRI MONTHS table for "how many days" questions. In the reply give both dates. If a number date like ١٥/٦ could be either calendar and nothing shows which, ask (choices: "هجري" / "ميلادي").
+- GOALS: when he says what he wants to achieve ("my goal is…", "I want to finish/memorise/read… by…", "هدفي…", "أريد أن أحفظ… قبل…"), add it with a "goal" action, then offer to plan it (Goals → Plan it for me) or, if he asks, add dated tasks for the next days with "add" actions that carry "goal": "<goal id>" so they count towards it. Use GOALS below for progress questions and to suggest today's most important step.
 - If he corrects you or says you misunderstood, apologise in a few words, fix it with actions, and follow the correction from now on.
 - Work out dates yourself from today's date ("tomorrow", "next Tuesday", "بعد أسبوعين"). Use 24-hour times. "Remind me" means remind 0 unless he says otherwise; a task with a time and no reminder wish gets remind 30.
 - Timetable classes repeat weekly.
@@ -737,8 +739,12 @@ async function apply(actions) {
     } else if (a.do === 'add' && a.title && /^\d{4}-\d\d-\d\d$/.test(a.date || '')) {
       if (evs.some(x => x.title === a.title && x.date === a.date && (x.time || '') === (/^\d\d:\d\d$/.test(a.time || '') ? a.time : ''))) continue;   // already there: never add the same thing twice
       cal.add({ title: a.title, date: a.date, time: /^\d\d:\d\d$/.test(a.time || '') ? a.time : '', type: a.type || 'task', repeat: a.repeat === 'weekly' ? 'weekly' : 'none',
-        remind: Number.isFinite(+a.remind) ? +a.remind : Number(store.get('remindDefault', 30)), notes: a.notes || '' });
+        remind: Number.isFinite(+a.remind) ? +a.remind : Number(store.get('remindDefault', 30)), notes: a.notes || '',
+        ...(a.goal && window.JundGoals?.all?.().some(g => g.id === a.goal) ? { goal: a.goal } : {}) });
       done.push(`Added: ${a.title} — ${nice(a.date, a.time)}${a.repeat === 'weekly' ? ', every week' : ''}`);
+    } else if (a.do === 'goal' && a.title) {
+      const g = window.JundGoals?.addFromAssistant?.(a);
+      if (g) done.push((A ? '🎯 هدف جديد: ' : '🎯 New goal: ') + g.title + (g.due ? ' — ' + nice(g.due) : ''));
     } else if (e && (a.do === 'done' || a.do === 'undone')) {
       const d = a.date || (e.repeat === 'weekly' ? iso(new Date()) : e.date);
       if (e.repeat === 'weekly') { e.doneDates ||= {}; if (a.do === 'done') e.doneDates[d] = true; else delete e.doneDates[d]; } else e.done = a.do === 'done';

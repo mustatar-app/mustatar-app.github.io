@@ -10,6 +10,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 const IC = {
+  goal: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',
   rec: '<circle cx="12" cy="12" r="4" fill="#E5484D" stroke="none"/><circle cx="12" cy="12" r="8"/>',
   up: '<path d="M12 15V4m0 0 4 4m-4-4-4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/>',
   scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/>',
@@ -127,6 +128,7 @@ function me() {
     <div class="mx-h">${L('Growth', 'النموّ')}</div>
     <div class="mx-group">
       ${row('checkin', L('Self-review', 'محاسبة النفس'), L('Every evening, card by card, by voice', 'كل مساء، بطاقة بطاقة، بصوتك'))}
+      ${row('goal', L('Goals & priorities', 'الأهداف والأولويات'), '', (window.JundGoals?.all?.().filter(g => g.status !== 'done').length || '') || '')}
       ${row('habit', L('Habits', 'العادات'), '', habits || '')}
       ${row('review', L('Weekly review', 'مراجعة الأسبوع'), '')}
       ${row('focus', L('Focus', 'التركيز'), '')}
@@ -161,6 +163,7 @@ function me() {
     <button type="button" class="link me-all" id="me-all">${L('All settings', 'كل الإعدادات')}</button>`;
   const on = (k, fn) => { const b = $(`[data-k="${k}"]`, sc); if (b) b.onclick = fn; };
   on('habit', () => J.show('habits'));
+  on('goal', () => window.JundGoals?.open());
   on('checkin', () => window.JundCheckin?.open());
   on('alarm', () => window.JundAlarm?.open());
   on('lock', () => window.JundLock?.open());

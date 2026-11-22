@@ -161,7 +161,7 @@ const ghCloud = (() => {
    private database. Changes wait on the phone until they reach the server, so nothing is lost offline,
    and changes made on other devices come down here. The newest change of each item wins. */
 const space = (() => {
-  const DATA_NAMES = ['calendar', 'habits', 'hifz', 'studio', 'captions', 'assistant', 'me'];
+  const DATA_NAMES = ['calendar', 'habits', 'goals', 'hifz', 'studio', 'captions', 'assistant', 'me'];
   const MAX_ITEM = 1_900_000;
   const tok = () => store.get('mstToken', '');
   const pending = () => store.get('mstPending', {});         // id → { kind, updated, deleted }
@@ -364,7 +364,7 @@ function renderPaletteSettings() {
 }
 
 /* ---------- navigation ---------- */
-const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me', 'habits'];
+const SCREENS = ['new', 'result', 'library', 'calendar', 'studio', 'settings', 'assistant', 'recordings', 'pending', 'inbox', 'me', 'habits', 'goals'];
 /* the phone's back button (and the browser's): goes back through the screens like other apps; tabs go back to Today;
    an open sheet or window closes first; on Today, a second press leaves the app */
 const TABS = ['assistant', 'library', 'calendar', 'me'];
@@ -427,7 +427,7 @@ window.JundHardBack = () => {
 function show(name) {
   remember(name); screenNow = name;
   for (const s of SCREENS) { const el = $('#screen-' + s); if (el) el.hidden = s !== name; }
-  const tab = name === 'result' || name === 'new' ? 'library' : name === 'habits' ? 'calendar' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
+  const tab = name === 'result' || name === 'new' ? 'library' : name === 'habits' || name === 'goals' ? 'calendar' : ['settings', 'studio', 'recordings', 'pending', 'inbox'].includes(name) ? 'me' : name;
   document.body.classList.toggle('on-home', name === 'assistant'); document.body.dataset.screen = name;
   noteUse(name);
   window.dispatchEvent(new Event('mustatar-screen'));

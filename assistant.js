@@ -467,7 +467,8 @@ You can act on his calendar and habit tracker. Reply with JSON only, in this sha
    {"do": "habit", "title": "a daily habit the user explicitly asked to track", "time": "HH:MM if a daily reminder was requested, or empty"},
    {"do": "timer", "minutes": number, "label": "short name or empty"},
    {"do": "note", "title": "...", "text": "...", "items": ["only for a checklist"]},
-   {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false}
+   {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false},
+   {"do": "goal", "title": "the goal", "why": "his reason, if he gave one", "due": "YYYY-MM-DD or empty", "area": "faith|knowledge|health|family|work|money|self", "imp": true or false, "urg": true or false, "target": number or 0, "unit": "pages, books… or empty"}
  ],
  "open": "a lesson id to offer to open, or empty",
  "ask": {"q": "ONE short question when you must ask", "choices": ["2 to 4 short answers he can tap"]} or null}
@@ -737,8 +738,12 @@ async function apply(actions) {
     } else if (a.do === 'add' && a.title && /^\d{4}-\d\d-\d\d$/.test(a.date || '')) {
       if (evs.some(x => x.title === a.title && x.date === a.date && (x.time || '') === (/^\d\d:\d\d$/.test(a.time || '') ? a.time : ''))) continue;   // already there: never add the same thing twice
       cal.add({ title: a.title, date: a.date, time: /^\d\d:\d\d$/.test(a.time || '') ? a.time : '', type: a.type || 'task', repeat: a.repeat === 'weekly' ? 'weekly' : 'none',
-        remind: Number.isFinite(+a.remind) ? +a.remind : Number(store.get('remindDefault', 30)), notes: a.notes || '' });
+        remind: Number.isFinite(+a.remind) ? +a.remind : Number(store.get('remindDefault', 30)), notes: a.notes || '',
+        ...(a.goal && window.JundGoals?.all?.().some(g => g.id === a.goal) ? { goal: a.goal } : {}) });
       done.push(`Added: ${a.title} — ${nice(a.date, a.time)}${a.repeat === 'weekly' ? ', every week' : ''}`);
+    } else if (a.do === 'goal' && a.title) {
+      const g = window.JundGoals?.addFromAssistant?.(a);
+      if (g) done.push((A ? '🎯 هدف جديد: ' : '🎯 New goal: ') + g.title + (g.due ? ' — ' + nice(g.due) : ''));
     } else if (e && (a.do === 'done' || a.do === 'undone')) {
       const d = a.date || (e.repeat === 'weekly' ? iso(new Date()) : e.date);
       if (e.repeat === 'weekly') { e.doneDates ||= {}; if (a.do === 'done') e.doneDates[d] = true; else delete e.doneDates[d]; } else e.done = a.do === 'done';

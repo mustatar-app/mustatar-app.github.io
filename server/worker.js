@@ -647,6 +647,8 @@ export default {
       const words = (url.searchParams.get('words') || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 400);
       const heard = await AI.hear(env, ctx, { audio, mime, langs: langList(url.searchParams.get('langs')), words });
       if (!heard.ok) return heard.fail(h);
+      // ?timed=1: the words with their times, for subtitles on a video
+      if (url.searchParams.get('timed') === '1') return json({ text: heard.text || '', segments: heard.segs || [], lang: heard.lang || '', duration: heard.duration || 0 }, 200, h);
       return AI.modelResponse(h, heard.model, heard.text || '[[NOSPEECH]]', 'STOP');
     }
 

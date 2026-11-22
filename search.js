@@ -32,6 +32,7 @@ const PLACES = () => [
   ['Month', 'الشهر', 'month الشهر', calMode('month')],
   ['Add a task or reminder', 'أضف مهمة أو تذكيرًا', 'add task reminder new أضف مهمة تذكير', () => window.JundCal?.open()],
   ['Plan for an exam', 'خطط لاختبار', 'exam test study plan اختبار امتحان مذاكرة', () => { J.show('calendar'); setTimeout(() => $('#plan-exam, [data-plan-exam]')?.click(), 80); }],
+  ['Goals and priorities', 'الأهداف والأولويات', 'goals goal priorities eisenhower plan matrix frog أهداف هدف أولويات خطة مصفوفة', () => window.JundGoals?.open()],
   ['Habit tracker', 'متابعة العادات', 'habits streak tracker العادات سلسلة', () => J.show('habits')],
   ['Your coach: SWOT and gap analysis', 'مدرّبك: تحليل SWOT والفجوة', 'coach swot gap analysis weakness strength مدرب تحليل ضعف قوة فجوة', () => { J.show('habits'); setTimeout(() => $('#hb-coach')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150); }],
   ['Self-review (by voice)', 'محاسبة النفس (بالصوت)', 'check in review day done evening self accountability muhasaba مراجعة اليوم أنجزت محاسبة النفس', () => window.JundCheckin?.open()],

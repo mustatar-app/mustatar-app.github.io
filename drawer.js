@@ -41,6 +41,7 @@ function build() {
         <button type="button" class="dr-item" data-go="keep"><span class="dr-ic">${svg(IC.keep)}</span><span class="dr-t">${L('My notes', 'ملاحظاتي')}</span></button>
         <button type="button" class="dr-item" data-nav-to="recordings"><span class="dr-ic">${svg(IC.rec)}</span><span class="dr-t">${L('Recordings & meetings', 'التسجيلات والاجتماعات')}</span><small id="dr-recs"></small></button>
         <button type="button" class="dr-item" data-nav-to="pending"><span class="dr-ic">${svg(IC.left)}</span><span class="dr-t">${L('Left to do', 'ما تبقّى')}</span><small id="dr-left"></small></button>
+        <button type="button" class="dr-item" data-nav-to="goals"><span class="dr-ic">${svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/>')}</span><span class="dr-t">${L('Goals & priorities', 'الأهداف والأولويات')}</span></button>
         <button type="button" class="dr-item" data-nav-to="habits"><span class="dr-ic">${svg(IC.habit)}</span><span class="dr-t">${L('Habit tracker & coach', 'العادات والمدرّب')}</span><small id="dr-hab"></small></button>
         <button type="button" class="dr-item" id="dr-checkin"><span class="dr-ic">${svg(IC.mic || IC.habit)}</span><span class="dr-t">${L('Self-review', 'محاسبة النفس')}</span></button>
         <button type="button" class="dr-item" data-nav-to="inbox"><span class="dr-ic">${svg(IC.bell)}</span><span class="dr-t">${L('Reminders', 'التذكيرات')}</span></button>

@@ -87,6 +87,7 @@ const IC = {
   ideas: '<path d="M12 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6z"/>', more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   alS: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>', alC: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>', alE: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  cc: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6"/>',
 };
 let editing = null, sheetOpen = null;
 
@@ -118,6 +119,7 @@ function build() {
         <button type="button" class="sx-r" id="st-bg-btn">${ic(IC.bg)}<small>${L('Colour', 'خلفية')}</small></button>
         <button type="button" class="sx-r sx-saved-btn" id="st-saved-btn">${ic(IC.star)}<small>${L('Saved', 'المحفوظة')}</small><i class="sx-n" id="st-saved-n"></i></button>
         <button type="button" class="sx-r" id="st-tr">${ic(IC.tr)}<small>${L('Translate', 'ترجمة')}</small></button>
+        <button type="button" class="sx-r" id="st-subs" hidden>${ic(IC.cc)}<small>${L('Subtitles', 'ترجمة الفيديو')}</small></button>
         <button type="button" class="sx-r" id="st-design">${ic(IC.ideas)}<small>${L('Ideas', 'أفكار')}</small></button>
         <button type="button" class="sx-r" id="st-more">${ic(IC.more)}<small>${L('More', 'المزيد')}</small></button>
       </div>
@@ -227,6 +229,7 @@ function build() {
   $('#st-share').onclick = () => exportIt(true);
   $('#st-ideas').onclick = ideas;
   $('#st-tr').onclick = translate;
+  $('#st-subs').onclick = subsSheet;
   $('#st-design').onclick = () => { openSheet('ideas'); designIdeas(); };
   $('#st-cap-save').onclick = () => { const t = $('#st-cap-new').value.trim(); if (t) { saveCaption(t); $('#st-cap-new').value = ''; } };
   renderCaps();
@@ -326,6 +329,7 @@ function sync() {
   $('#st-undo').disabled = !history.length;
   $('#st-export').textContent = bg.kind === 'video' ? 'Save video' : 'Save image';
   $('#st-trim').hidden = bg.kind !== 'video';
+  $('#st-subs').hidden = bg.kind !== 'video';
   $('#st-hint').hidden = layers.length > 0;
   const n = saved().length, nb = $('#st-saved-n'); if (nb) nb.textContent = n ? (AR ? ar(n) : n) : '';
   if (editing) syncEditor();
@@ -418,7 +422,7 @@ function loadMedia(f) {
       $('#st-t0').value = '0'; $('#st-t1').value = String(v.duration);
       // pick the canvas shape from the video
       const r = v.videoWidth / v.videoHeight; size = r < 0.7 ? 'story' : r < 0.9 ? 'post' : 'square';
-      bg = { kind: 'video', video: v }; sync(); showTrim(); v.currentTime = 0.05;
+      bg = { kind: 'video', video: v, file: f }; subs = null; sync(); showTrim(); v.currentTime = 0.05;
       requestAnimationFrame(() => thumbs(v));
     };
     v.onseeked = () => { draw(); head(); };
@@ -610,6 +614,16 @@ function paint(ctx, W, H, showSel) {
   if (comparing && showSel) return;
   // the text being written is shown in the writing box instead, like Instagram
   for (const l of layers) { if (showSel && l === editing) continue; boxes.set(l.id, drawLayer(ctx, l, W, H, showSel && l === sel)); }
+  if (bg.kind === 'video' && subs?.cues?.length) {
+    const t = bg.video.currentTime, c = subs.cues.find(x => t >= x.s && t < x.e);
+    if (c) {
+      const base = { id: '__sub', look: subs.look || 'soft', color: '#ffffff', size: subs.size || 0.042, align: 'center', x: 0.5, wrap: 0.9 };
+      const a = c.t && subs.mode !== 'tr' ? { ...base, id: '__sub1', text: c.t, font: J.langOf(c.t) === 'ar' ? 'modern' : 'modern', y: subs.y || 0.8 } : null;
+      const b = c.tr && subs.mode !== 'orig' ? { ...base, id: '__sub2', text: c.tr, font: 'modern', size: (subs.size || 0.042) * (a ? 0.85 : 1), y: a ? Math.min(0.95, (subs.y || 0.8) + hOf(a) / 2 + 0.04) : (subs.y || 0.8) } : null;
+      if (a) drawLayer(ctx, a, W, H, false);
+      if (b) drawLayer(ctx, b, W, H, false);
+    }
+  }
 }
 function draw(withFrame = true) {
   const cv = $('#st-canvas'); if (!cv) return;
@@ -661,8 +675,9 @@ function move(e) {
   const p = pt(e), cv = $('#st-canvas'), ox = drag.l.x, oy = drag.l.y;
   drag.l.y = Math.min(0.98, Math.max(0.02, (p.y - drag.dy) / cv.height));
   drag.l.x = Math.min(0.98, Math.max(0.02, (p.x - drag.dx) / cv.width));
-  // its translation moves with it
-  for (const t of layers) if (t.of === drag.l.id) { t.x += drag.l.x - ox; t.y += drag.l.y - oy; }
+  // each text moves on its own: dragging the Arabic leaves its translation where it is, and the other way round.
+  // Once either has been moved by hand, the translation keeps its own place (it is no longer put back under the text).
+  drag.l.free = true; for (const t of layers) if (t.of === drag.l.id) t.free = true;
   const tr = $('#st-trash'); tr.hidden = false; tr.classList.toggle('hot', overTrash(e));
   $('#st-sel').hidden = true;
   draw(false);
@@ -902,6 +917,110 @@ async function exportVideo(share) {
   draw();
 }
 
+/* ---------- video → its words: the script, and subtitles burned into the video (Arabic, English, or both) ---------- */
+let subs = null;   // { mode: 'orig' | 'tr' | 'both', cues: [{ s, e, t, tr }], text, lang }
+// the sound of the chosen part, as a small clear 16 kHz mono WAV (much smaller than the video)
+async function videoAudio(file, from, to) {
+  const buf = await file.arrayBuffer();
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  let audio; try { audio = await ac.decodeAudioData(buf); } finally { try { ac.close(); } catch {} }
+  const rate = 16000, s0 = Math.max(0, from), s1 = Math.min(audio.duration, to || audio.duration), n = Math.ceil((s1 - s0) * rate);
+  if (n < rate * 0.5) throw new Error(L('This part is too short to have words.', 'هذا الجزء قصير جدًا.'));
+  const off = new OfflineAudioContext(1, n, rate), src = off.createBufferSource();
+  src.buffer = audio; src.connect(off.destination); src.start(0, s0, s1 - s0);
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2)), w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); out.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+  out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  return new Blob([out], { type: 'audio/wav' });
+}
+// long pieces are cut into short lines that fit on the screen, timed by their length
+function cutCues(segs, field) {
+  const out = [];
+  for (const g of segs) {
+    const words = String(g[field] || '').split(/\s+/).filter(Boolean), per = J.langOf(g[field] || '') === 'ar' ? 6 : 7;
+    if (words.length <= per + 2) { out.push({ s: g.s, e: g.e, [field]: words.join(' ') }); continue; }
+    const parts = []; for (let i = 0; i < words.length; i += per) parts.push(words.slice(i, i + per).join(' '));
+    const total = parts.reduce((a, p) => a + p.length, 0); let at = g.s;
+    for (const p of parts) { const d = (g.e - g.s) * p.length / total; out.push({ s: at, e: at + d, [field]: p }); at += d; }
+  }
+  return out;
+}
+function subsSheet() {
+  if (bg.kind !== 'video') return;
+  const A = AR, d = document.createElement('dialog'); d.className = 'cf-dlg st-subs-dlg'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  const has = !!subs?.segs;
+  d.innerHTML = `<b class="cf-t">${L('Words of this video', 'كلام هذا الفيديو')}</b>
+    <p class="muted fine">${L('Mustatar listens to the part you kept, writes what is said, and puts it on the video as subtitles. Saving the video keeps them.', 'يسمع مستطر الجزء الذي أبقيته، ويكتب ما قيل، ويضعه على الفيديو ترجمةً مكتوبة. وحين تحفظ الفيديو تبقى عليه.')}</p>
+    <div class="st-subs-opts">
+      <label><input type="radio" name="sm" value="orig" ${!subs || subs.mode === 'orig' ? 'checked' : ''}> ${L('Subtitles in the spoken language', 'بلغة الكلام نفسها')}</label>
+      <label><input type="radio" name="sm" value="ar" ${subs?.mode === 'tr' && subs.to === 'ar' ? 'checked' : ''}> ${L('Arabic subtitles', 'ترجمة عربية')}</label>
+      <label><input type="radio" name="sm" value="en" ${subs?.mode === 'tr' && subs.to === 'en' ? 'checked' : ''}> ${L('English subtitles', 'ترجمة إنجليزية')}</label>
+      <label><input type="radio" name="sm" value="both" ${subs?.mode === 'both' ? 'checked' : ''}> ${L('Both: spoken words + translation', 'الاثنان: الكلام + ترجمته')}</label>
+    </div>
+    <label class="st-subs-row"><span>${L('Look', 'الشكل')}</span><select id="sb-look"><option value="soft">${L('Soft box', 'صندوق شفاف')}</option><option value="box">${L('Strong box', 'صندوق')}</option><option value="classic">${L('Plain with shadow', 'بلا صندوق')}</option></select></label>
+    <label class="st-subs-row"><span>${L('Place', 'المكان')}</span><select id="sb-y"><option value="0.8">${L('Bottom', 'أسفل')}</option><option value="0.5">${L('Middle', 'وسط')}</option><option value="0.18">${L('Top', 'أعلى')}</option></select></label>
+    <div class="st-subs-status muted fine" id="sb-status"></div>
+    <div class="cf-b">${has ? `<button type="button" class="ghost" id="sb-script">${L('Show the script', 'أظهر النص')}</button><button type="button" class="ghost danger" id="sb-off">${L('Remove subtitles', 'احذف الترجمة')}</button>` : `<button type="button" class="ghost" id="sb-x">${L('Cancel', 'إلغاء')}</button>`}<button type="button" class="primary" id="sb-go">${has ? L('Apply', 'طبّق') : L('Make subtitles', 'اصنع الترجمة')}</button></div>`;
+  document.body.appendChild(d); d.showModal(); d.addEventListener('close', () => d.remove());
+  if (subs?.look) d.querySelector('#sb-look').value = subs.look;
+  if (subs?.y) d.querySelector('#sb-y').value = String(subs.y);
+  const st = m => { d.querySelector('#sb-status').textContent = m; };
+  d.querySelector('#sb-x')?.addEventListener('click', () => d.close());
+  d.querySelector('#sb-off')?.addEventListener('click', () => { subs = null; d.close(); draw(); });
+  d.querySelector('#sb-script')?.addEventListener('click', () => { d.close(); scriptSheet(); });
+  d.querySelector('#sb-go').onclick = async () => {
+    const pick = d.querySelector('[name=sm]:checked').value, go = d.querySelector('#sb-go'); go.disabled = true;
+    try {
+      if (!subs?.segs) {
+        st(L('Taking the sound out of the video…', 'أُخرج الصوت من الفيديو…'));
+        const wav = await videoAudio(bg.file, trim.start, trim.end);
+        st(L('Listening and writing what is said…', 'أسمع وأكتب ما قيل…'));
+        const res = await J.serverFetch(`/transcribe?timed=1&mime=audio/wav&langs=${encodeURIComponent(J.speechLangs?.() || 'ar,en')}`, { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
+        if (!res.ok) throw new Error(J.errText?.({ code: (await res.json().catch(() => ({}))).code }) || 'server');
+        const j = await res.json();
+        if (!j.segments?.length) throw new Error(L('No words were heard in this part.', 'لم يُسمع كلام في هذا الجزء.'));
+        subs = { segs: j.segments.map(x => ({ s: x.s + trim.start, e: x.e + trim.start, t: x.t })), text: j.text, lang: j.lang || J.langOf(j.text) };
+      }
+      const want = pick === 'orig' ? null : pick === 'both' ? (subs.lang === 'ar' ? 'en' : 'ar') : pick;
+      if (want && want === subs.lang) { subs.mode = 'orig'; }
+      else if (want) {
+        if (subs.to !== want || !subs.segs.every(x => x.tr)) {
+          st(L('Translating…', 'أترجم…'));
+          const r = await J.callServer({ assistant: true, json: true, maxTokens: 6000,
+            system: `Translate each line into ${want === 'ar' ? 'clear, natural Arabic' : 'clear, natural English'} for video subtitles. Keep the same number of lines, in the same order, one translation per line. Quran verses: give the meaning faithfully. Translate only. Reply with JSON: {"lines": ["…"]}`,
+            user: JSON.stringify({ lines: subs.segs.map(x => x.t) }) });
+          const lines = JSON.parse(r.text).lines;
+          if (!Array.isArray(lines) || lines.length !== subs.segs.length) throw new Error(L('The translation did not come back complete. Try again.', 'لم تكتمل الترجمة. حاول مرة أخرى.'));
+          subs.segs.forEach((x, i) => { x.tr = String(lines[i] || ''); }); subs.to = want;
+        }
+        subs.mode = pick === 'both' ? 'both' : 'tr';
+      } else subs.mode = 'orig';
+      subs.look = d.querySelector('#sb-look').value; subs.y = Number(d.querySelector('#sb-y').value);
+      // the lines on screen: short pieces for one language; whole pieces (two lines) for both
+      subs.cues = subs.mode === 'both' ? subs.segs.map(x => ({ s: x.s, e: x.e, t: x.t, tr: x.tr }))
+        : subs.mode === 'tr' ? cutCues(subs.segs, 'tr') : cutCues(subs.segs, 't');
+      d.close(); bg.video.currentTime = Math.max(trim.start, subs.cues[0]?.s || trim.start); draw();
+      status(L('✓ Subtitles are on the video. Press play to watch, then save the video.', '✓ الترجمة على الفيديو. اضغط تشغيل لتراها، ثم احفظ الفيديو.'));
+    } catch (e) { st('✗ ' + (e.message || e)); go.disabled = false; }
+  };
+}
+// the whole script of the video: read, copy, or keep in My notes
+function scriptSheet() {
+  if (!subs?.segs) return;
+  const A = AR, mm = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const text = subs.segs.map(x => x.t).join(' ');
+  const withTr = subs.segs.some(x => x.tr) ? '\n\n— ' + L('Translation', 'الترجمة') + ' —\n' + subs.segs.map(x => x.tr).join(' ') : '';
+  const d = document.createElement('dialog'); d.className = 'cf-dlg st-subs-dlg'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<b class="cf-t">${L('Script of the video', 'نص الفيديو')}</b><div class="st-script" dir="auto">${subs.segs.map(x => `<p><small>${mm(x.s)}</small> ${esc(x.t)}${x.tr ? `<br><i dir="auto">${esc(x.tr)}</i>` : ''}</p>`).join('')}</div>
+    <div class="cf-b"><button type="button" class="ghost" id="sc-copy">${L('Copy', 'نسخ')}</button><button type="button" class="ghost" id="sc-keep">${L('Save to My notes', 'احفظ في ملاحظاتي')}</button><button type="button" class="primary" id="sc-x">${L('Done', 'تم')}</button></div>`;
+  document.body.appendChild(d); d.showModal(); d.addEventListener('close', () => d.remove());
+  d.querySelector('#sc-x').onclick = () => d.close();
+  d.querySelector('#sc-copy').onclick = async () => { try { await navigator.clipboard.writeText(text + withTr); status(L('✓ Copied', '✓ نُسخ')); } catch {} };
+  d.querySelector('#sc-keep').onclick = async () => { await window.JundKeep?.capture({ title: L('Video script', 'نص فيديو'), text: text + withTr, grab: false }); status(L('✓ Saved in My notes', '✓ حُفظ في ملاحظاتي')); d.close(); };
+}
+
 /* ---------- translation of the text on the picture ---------- */
 // how tall a text is on the picture (0–1 of the height), so the translation sits just under it
 function hOf(l) {
@@ -912,6 +1031,7 @@ function hOf(l) {
 }
 function placeTr(base) {
   for (const t of layers.filter(x => x.of === base.id)) {
+    if (t.free) continue;   // moved by hand: it stays where he put it
     t.size = Math.max(0.032, base.size * 0.55); t.align = base.align; t.x = base.x; t.color = base.color;
     t.y = Math.min(0.94, base.y + hOf(base) / 2 + hOf(t) / 2 + 0.025);
   }
@@ -1021,6 +1141,8 @@ window.JundStudio = {
   ideas,
   load(f) { if (!built) build(); loadFonts(); loadMedia(f); },
   addText(t) { if (!built) build(); loadFonts(); addLayer({ text: t, font: 'naskh', look: 'classic', size: 0.06 }); },
+  video: () => bg.video || null,   // the video on screen (the play button and tests use it)
+  subs: () => subs,
 };
 // pull saved texts kept in the cloud
 J.cloud.getData('studio').then(r => {

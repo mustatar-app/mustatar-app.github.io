@@ -169,6 +169,16 @@ export function tidyTranscript(segments, text, duration = 0) {
   const out = tidySegments(segments, text);
   return duration > 15 && ONLY_FILLER.test(out) ? '' : out;
 }
+// the same cleaning, keeping each piece's time (for subtitles): [{ s: start, e: end, t: words }]
+export function timedSegments(segments) {
+  const out = []; let last = '';
+  for (const s of Array.isArray(segments) ? segments : []) {
+    const t = String(s.text || '').trim();
+    if (!t || (Number(s.no_speech_prob) > 0.6 && Number(s.avg_logprob) < -1) || (t.length < 80 && JUNK.test(t)) || t === last) continue;
+    last = t; out.push({ s: Math.round(Number(s.start) * 100) / 100 || 0, e: Math.round(Number(s.end) * 100) / 100 || 0, t });
+  }
+  return out;
+}
 function tidySegments(segments, text) {
   if (!Array.isArray(segments) || !segments.length) return JUNK.test(text || '') && String(text).length < 80 ? '' : String(text || '').trim();
   let out = '', lastEnd = null, lastText = '', repeats = 0;
@@ -203,13 +213,13 @@ async function groqHear(env, model, audio, mime, language, words = '') {
     return { ok: false, status: r.status, retryAfter: waitFrom(r, t), daily: r.status === 429 && dailyLimit(t), msg: t };
   }
   const j = await r.json().catch(() => ({}));
-  return { ok: true, text: tidyTranscript(j.segments, j.text, Number(j.duration) || 0), lang: langCode(j.language), duration: Number(j.duration) || 0, model };
+  return { ok: true, text: tidyTranscript(j.segments, j.text, Number(j.duration) || 0), segs: timedSegments(j.segments), lang: langCode(j.language), duration: Number(j.duration) || 0, model };
 }
 async function cfHear(env, audio, mime, language, words = '') {
   try {
     const body = audio instanceof ReadableStream ? audio : new Blob([audio]).stream();
     const j = await env.AI.run(MODELS.cfHear, { audio: { body, contentType: mime }, vad_filter: true, ...(language ? { language } : {}), ...(words ? { initial_prompt: words } : {}) });
-    return { ok: true, text: tidyTranscript(j?.segments, j?.text, Number(j?.transcription_info?.duration) || 0), lang: langCode(j?.transcription_info?.language), duration: Number(j?.transcription_info?.duration) || 0, model: MODELS.cfHear };
+    return { ok: true, text: tidyTranscript(j?.segments, j?.text, Number(j?.transcription_info?.duration) || 0), segs: timedSegments(j?.segments), lang: langCode(j?.transcription_info?.language), duration: Number(j?.transcription_info?.duration) || 0, model: MODELS.cfHear };
   } catch (e) { return { ok: false, ...cfProblem(e) }; }
 }
 

@@ -159,6 +159,17 @@ def main():
     check(isinstance(fs, dict) and fs.get("ok") and int(fs.get("nextAt") or 0) > 0, "an alarm set in Mustatar becomes the phone's next alarm")
     nxt = adb("shell", "dumpsys", "alarm")
     check("AlarmClock" in nxt or "sa.jund.notes" in nxt, "the phone's alarm list holds Mustatar's alarm")
+    # the real thing: Mustatar closed, wait for the alarm time, it must ring by itself with its own sound
+    adb("shell", "input", "keyevent", "KEYCODE_HOME"); time.sleep(1)
+    adb("shell", "am", "kill", PKG)
+    wait = max(0, (int(fs.get("nextAt") or 0) / 1000) - time.time()) + 8 if isinstance(fs, dict) else 0
+    print(f"     waiting {int(wait)} s for the alarm with the app closed", flush=True); time.sleep(min(wait, 150))
+    svc = adb("shell", "dumpsys", "activity", "services", "sa.jund.notes.AlarmService")
+    notes = adb("shell", "dumpsys", "notification", "--noredact")
+    check("isForeground=true" in svc and "mustatar-alarm-v2" in notes, "with Mustatar closed, the alarm rings by itself at its time (its own sound, Stop and Snooze)")
+    if "isForeground=true" not in svc: print(adb("shell", "logcat", "-d", "-t", "120", "*:W")[-4000:], flush=True)
+    page = start()
+    page.js("JundNative.ask({ action: 'alarmStop' }, 8000)", timeout=15); time.sleep(1)
     rang = page.js("JundNative.ask({ action: 'alarmTest', label: 'Test', opts: { ring: 2, vol: 80, rise: true, vib: true, snooze: 10 } }, 8000)", timeout=15); time.sleep(3)
     notes = adb("shell", "dumpsys", "notification", "--noredact")
     svc = adb("shell", "dumpsys", "activity", "services", "sa.jund.notes.AlarmService")

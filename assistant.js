@@ -264,9 +264,10 @@ function render() {
   renderHome();
   const box = $('#as-log'); if (!box) return;
   box.innerHTML = log.length ? log.map((m, i) => m.who !== 'me' && m.working && busy ? `<div class="msg ai working" data-i="${i}"><details class="ws"><summary>${window.MustatarMark?.(22, true) || ''}<span class="ws-now"></span><span class="ws-chev">›</span></summary><div class="ws-body">${m.steps ? stepsHtml(m) : ''}</div></details><div class="ws-live" dir="auto">${esc(m.live || '')}</div></div>`
-    : `<div class="msg ${m.who === 'me' ? 'me' : 'ai'}" dir="auto" data-i="${i}">${m.who !== 'me' && m.steps?.length ? `<details class="ws ws-done"><summary><span class="ws-now">${m.steps.length} ${AR_() ? 'خطوات' : m.steps.length > 1 ? 'steps' : 'step'} · ${((m.ms || 0) / 1000).toFixed(1)}s${m.steps.some(x => x.state === 'fail') ? ' · ✗' : ''}</span><span class="ws-chev">›</span></summary><div class="ws-body">${stepsHtml(m)}</div></details>` : ''}${esc(m.text)}${m.done?.length ? `<div class="as-done">${m.done.map(d => `<div dir="auto">✓ ${esc(d)}</div>`).join('')}</div>` : ''}${lessonLinks(m)}${m.retryNotes && i === log.length - 1 ? `<div><button type="button" class="link as-notes-retry">${AR_() ? 'أعد المحاولة' : 'Retry notes'}</button></div>` : ''}</div>`).join('')
+    : `<div class="msg ${m.who === 'me' ? 'me' : 'ai'}" dir="auto" data-i="${i}">${m.quote ? `<div class="as-quote" dir="auto">${esc(m.quote)}</div>` : ''}${m.who !== 'me' && m.steps?.length ? `<details class="ws ws-done"><summary><span class="ws-now">${m.steps.length} ${AR_() ? 'خطوات' : m.steps.length > 1 ? 'steps' : 'step'} · ${((m.ms || 0) / 1000).toFixed(1)}s${m.steps.some(x => x.state === 'fail') ? ' · ✗' : ''}</span><span class="ws-chev">›</span></summary><div class="ws-body">${stepsHtml(m)}</div></details>` : ''}${esc(m.text)}${m.done?.length ? `<div class="as-done">${m.done.map(d => `<div dir="auto">✓ ${esc(d)}</div>`).join('')}</div>` : ''}${lessonLinks(m)}${m.retryNotes && i === log.length - 1 ? `<div><button type="button" class="link as-notes-retry">${AR_() ? 'أعد المحاولة' : 'Retry notes'}</button></div>` : ''}${m.choices?.length && i === log.length - 1 ? `<div class="as-choices">${m.choices.map(c => `<button type="button" class="chip-b" data-choice dir="auto">${esc(c)}</button>`).join('')}</div>` : ''}</div>${msgTools(m, i)}`).join('')
     : '';
   $$('[data-open]', box).forEach(b => b.onclick = async () => { const l = (await J.allLessons()).find(x => x.id === b.dataset.open); if (l) J.openLesson(l); });
+  wireTools(box);
   const retry = $('.as-notes-retry', box);
   if (retry) retry.onclick = () => send({ retryNotes: true });
   const tries = J.me().use === 'work'
@@ -276,6 +277,74 @@ function render() {
   $('#as-try').innerHTML = log.length ? '' : tries.map(t => `<button type="button" class="chip-b" dir="auto">${esc(t)}</button>`).join('');
   $$('#as-try button').forEach(b => b.onclick = () => { $('#as-text').value = b.textContent; send(); });
   if (log.length) box.lastElementChild?.scrollIntoView({ block: 'end' });
+}
+
+/* under each message: copy, reply, and (for answers) 👍 / 👎 */
+let replyTo = null;
+const ICON = {
+  copy: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M9 9h10v11H9zM5 15V4h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  reply: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M10 7 5 12l5 5M5 12h9a5 5 0 0 1 5 5v1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  up: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M7 11v9H4v-9zM7 11l4-7c1.5 0 2.5 1 2.2 2.6L12.6 10H19a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 20H7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  down: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M7 13V4H4v9zM7 13l4 7c1.5 0 2.5-1 2.2-2.6L12.6 14H19a2 2 0 0 0 2-2.3l-1.2-6A2 2 0 0 0 17.8 4H7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+};
+function msgTools(m, i) {
+  if (m.working || !m.text || m.text === '…') return '';
+  const A = AR_(), ai = m.who !== 'me';
+  return `<div class="as-tools-row ${ai ? 'ai' : 'me'}" data-ti="${i}">
+    <button type="button" data-t="copy" aria-label="${A ? 'نسخ' : 'Copy'}" title="${A ? 'نسخ' : 'Copy'}">${ICON.copy}</button>
+    <button type="button" data-t="reply" aria-label="${A ? 'رد على هذه الرسالة' : 'Reply to this'}" title="${A ? 'رد' : 'Reply'}">${ICON.reply}</button>
+    ${ai ? `<button type="button" data-t="up" class="${m.rate > 0 ? 'on' : ''}" aria-label="${A ? 'رد جيد' : 'Good answer'}">${ICON.up}</button>
+    <button type="button" data-t="down" class="${m.rate < 0 ? 'on' : ''}" aria-label="${A ? 'رد غير صحيح' : 'Wrong answer'}">${ICON.down}</button>` : ''}</div>`;
+}
+function paintReplyTo() {
+  let bar = $('#as-replyto');
+  if (!replyTo) { bar?.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'as-replyto'; bar.className = 'as-replyto'; $('.as-input')?.before(bar); }
+  bar.innerHTML = `<span class="as-rt-ic">${ICON.reply}</span><span class="as-rt-t" dir="auto">${esc(replyTo.text.slice(0, 140))}</span><button type="button" aria-label="${AR_() ? 'إلغاء الرد' : 'Cancel reply'}">✕</button>`;
+  bar.querySelector('button').onclick = () => { replyTo = null; paintReplyTo(); };
+}
+function rate(i, v) {
+  const m = log[i]; if (!m) return;
+  const said = m.said || [...log.slice(0, i)].reverse().find(x => x.who === 'me')?.text || '';
+  const list = fb().filter(x => x.reply !== m.text.slice(0, 600));
+  if (m.rate === v) { m.rate = 0; store.set('aiFeedback', list); persist(); render(); return; }
+  m.rate = v;
+  if (v > 0) { list.push({ v: 1, said, reply: m.text.slice(0, 600), at: Date.now() }); store.set('aiFeedback', list.slice(-60)); persist(); render(); window.JundCal?.toast(AR_() ? '👍 شكرًا — سيبقى على هذا الأسلوب' : '👍 Thanks — it will keep doing this'); return; }
+  persist(); render();
+  // 👎: what was wrong? (becomes a rule it follows from now on)
+  const A = AR_();
+  const why = A ? ['لم يفهم كلامي', 'تاريخ أو وقت خطأ', 'فعل شيئًا لم أطلبه', 'لم يسألني وكان عليه أن يسأل', 'كتب بلغة خطأ', 'طويل جدًا'] : ['Misunderstood me', 'Wrong date or time', 'Did something I did not ask', 'Should have asked me first', 'Wrong language', 'Too long'];
+  const d = document.createElement('dialog'); d.className = 'cf-dlg as-fb'; d.dir = A ? 'rtl' : 'ltr'; d.setAttribute('data-noi18n', '');
+  d.innerHTML = `<b class="cf-t">${A ? 'ما الخطأ في هذا الرد؟' : 'What was wrong with this answer?'}</b>
+    <div class="as-fb-c">${why.map(w => `<button type="button" class="chip-b" data-w>${esc(w)}</button>`).join('')}</div>
+    <textarea id="as-fb-n" rows="2" dir="auto" placeholder="${A ? 'ما الصحيح؟ (اختياري)' : 'What would have been right? (optional)'}"></textarea>
+    <div class="cf-b"><button type="button" class="ghost" data-x>${A ? 'تخطَّ' : 'Skip'}</button><button type="button" class="primary" data-s>${A ? 'احفظ وأعد المحاولة' : 'Save and try again'}</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  const picked = new Set();
+  d.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { b.classList.toggle('on'); b.classList.contains('on') ? picked.add(b.textContent) : picked.delete(b.textContent); });
+  const save = again => {
+    const note = d.querySelector('#as-fb-n').value.trim();
+    list.push({ v: -1, said, reply: m.text.slice(0, 600), why: [...picked].join('، '), note, at: Date.now() });
+    store.set('aiFeedback', list.slice(-60));
+    d.close();
+    if (again && said) { $('#as-text').value = said + (note ? `\n(${A ? 'تصحيح' : 'Correction'}: ${note})` : ''); send(); }
+  };
+  d.querySelector('[data-x]').onclick = () => save(false);
+  d.querySelector('[data-s]').onclick = () => save(true);
+  d.addEventListener('close', () => d.remove());
+}
+function wireTools(box) {
+  $$('[data-ti] button', box).forEach(b => b.onclick = async () => {
+    const i = Number(b.closest('[data-ti]').dataset.ti), m = log[i]; if (!m) return;
+    const A = AR_();
+    if (b.dataset.t === 'copy') {
+      try { await navigator.clipboard.writeText(m.text); } catch { const ta = document.createElement('textarea'); ta.value = m.text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      window.JundCal?.toast(A ? '✓ نُسخ' : '✓ Copied', 1500);
+    } else if (b.dataset.t === 'reply') { replyTo = { who: m.who, text: m.text }; paintReplyTo(); $('#as-text')?.focus(); }
+    else if (b.dataset.t === 'up') rate(i, 1);
+    else if (b.dataset.t === 'down') rate(i, -1);
+  });
+  $$('[data-choice]', box).forEach(b => b.onclick = () => { const last = log[log.length - 1]; if (last) last.choices = []; $('#as-text').value = b.textContent; send(); });
 }
 
 function lessonLinks(message) {
@@ -308,6 +377,15 @@ function savedNotePreview(lesson) {
     if (sections.length === 3) break;
   }
   return { title: shorten(lesson.notes?.title || lesson.unit, 150), source: lesson.unit, sections };
+}
+
+/* ---------- learning from his ratings: 👎 with what was wrong becomes a rule it follows; 👍 keeps a good example ---------- */
+const fb = () => store.get('aiFeedback', []);
+function lessonsFromFeedback() {
+  const bad = fb().filter(x => x.v < 0).slice(-15), good = fb().filter(x => x.v > 0 && x.said).slice(-4);
+  if (!bad.length && !good.length) return '';
+  return (bad.length ? `LESSONS FROM HIS RATINGS (he marked these answers wrong — do not repeat these mistakes):\n${bad.map(x => `- When he said «${x.said.slice(0, 160)}», you answered «${x.reply.slice(0, 160)}». Wrong because: ${x.why || 'not said'}${x.note ? ' — ' + x.note.slice(0, 200) : ''}`).join('\n')}\n` : '')
+    + (good.length ? `ANSWERS HE LIKED (same style is good):\n${good.map(x => `- «${x.said.slice(0, 120)}» → «${x.reply.slice(0, 160)}»`).join('\n')}\n` : '');
 }
 
 /* what the assistant is told about you */
@@ -360,7 +438,7 @@ async function context(q) {
     const c = store.get('coach', null); if (c?.summary) self += `\nCOACH'S LAST STUDY (${new Date(c.at).toISOString().slice(0, 10)}): ${c.summary} Weaknesses: ${(c.swot?.weaknesses || []).join('; ')}. Next: ${(c.next || []).join('; ')}`;
     self = `\nHIS RECORD (habits, tasks, notes) — use it to give honest, specific advice; the full SWOT and gap study is in the Habit tracker → Your coach:\n${self}\n`;
   }
-  return `${self}${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date: ${window.JundFeatures?.hijri(now) || ''}\n${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
+  return `${self}${subs ? 'HIS SUBJECTS: ' + subs + '\n' : ''}${pt ? 'PRAYER TIMES TODAY: ' + Object.entries(pt).map(([k, v]) => k + ' ' + v).join(', ') + ' (plan around them)\n' : ''}Hijri date today: ${window.JundFeatures?.hijri(now) || ''}\nHIJRI MONTHS (Umm al-Qura, exact): ${window.JundFeatures?.hijriTable?.() || ''}\n${lessonsFromFeedback()}${window.JundCount ? 'COUNTDOWNS (exact, use these for "how many days until…"): ' + window.JundCount.brief() + '\n' : ''}Today: ${t} (${DAYS[now.getDay()]}), time ${pad(now.getHours())}:${pad(now.getMinutes())}, Saudi Arabia.
 Week starts on ${DAYS[Number(store.get('weekStart', 0))]}.
 
 DAYS OFF (weekly lessons hidden on these days): ${(window.JundCal?.daysOff?.() || []).map(o => `${o.from} to ${o.to}${o.label ? ' ' + o.label : ''}`).join('; ') || 'none'}
@@ -391,8 +469,13 @@ You can act on his calendar and habit tracker. Reply with JSON only, in this sha
    {"do": "note", "title": "...", "text": "...", "items": ["only for a checklist"]},
    {"do": "countdown", "title": "...", "date": "YYYY-MM-DD", "yearly": true or false}
  ],
- "open": "a lesson id to offer to open, or empty"}
+ "open": "a lesson id to offer to open, or empty",
+ "ask": {"q": "ONE short question when you must ask", "choices": ["2 to 4 short answers he can tap"]} or null}
 Rules:
+- UNDERSTAND FIRST. His messages are often typed by voice: words can be misheard, cut, or come out in the wrong language. Work out what he means from the whole message and the chat. If a part that matters is unclear (what, which day, Hijri or Gregorian, how often), do NOT guess: do the parts that are clear, and ask about the unclear part with "ask" (quote the unclear words, give 2–4 tap answers). Never invent a meaning to fill a gap.
+- A long message with several requests: answer with a short numbered list of what you understood and what you did for each; ask about anything you did not understand.
+- HIJRI DATES: in Saudi Arabia dates are often Hijri — Arabic month names (محرم، صفر، ربيع الأول، ربيع الآخر، جمادى الأولى، جمادى الآخرة، رجب، شعبان، رمضان، شوال، ذو القعدة، ذو الحجة), "هـ", or a year like 1447/1448. NEVER read Hijri day/month numbers as Gregorian ones. For a Hijri date write the action's date as "h1448-06-15" (year-month-day, Hijri): Mustatar converts it exactly. Use the HIJRI MONTHS table for "how many days" questions. In the reply give both dates. If a number date like ١٥/٦ could be either calendar and nothing shows which, ask (choices: "هجري" / "ميلادي").
+- If he corrects you or says you misunderstood, apologise in a few words, fix it with actions, and follow the correction from now on.
 - Work out dates yourself from today's date ("tomorrow", "next Tuesday", "بعد أسبوعين"). Use 24-hour times. "Remind me" means remind 0 unless he says otherwise; a task with a time and no reminder wish gets remind 30.
 - Timetable classes repeat weekly.
 - Understand the meaning of the user's Arabic or English request, including casual phrasing. A one-time to-do is a calendar task. A repeated personal practice the user asks to track is a habit. Handle each clearly requested item in one message. If asked to add an undated to-do, put it on today's list without a reminder unless the user requested one. Ask about an ambiguous time or date when guessing would create a wrong reminder.
@@ -409,7 +492,7 @@ Rules:
 - END OF DAY: if he says what he did today ("I finished X, I missed Y because…"), mark the matching calendar items with "done" actions and keep his reason in your reply; for a full evening review by voice, tell him to say "check in" (or "راجع يومي") or tap “How did today go?” on Today.
 - HOLIDAYS / NO LESSONS FOR A WHILE: "I have a holiday until Sunday", "no lessons this week", "إجازة", "لا أريد دروسًا هذا الأسبوع" → ONE action {"do":"off","from":"YYYY-MM-DD","to":"YYYY-MM-DD","title":"إجازة"}. This hides weekly lessons on those days only; NEVER delete weekly lessons for a period. To cancel one weekly lesson on one date only: {"do":"skip","id":"…","date":"YYYY-MM-DD"}.
 - NEVER ask him for ids, codes or which exact items when his meaning is clear (e.g. "all lessons this week"): decide and act; he can undo with one tap. Ask only when two readings would do very different things.
-- Delete only when he clearly asks to remove something for good (a weekly lesson deleted is gone every week). If something is unclear (for example no day was given), ask one short question instead of guessing, with actions empty.
+- Delete only when he clearly asks to remove something for good (a weekly lesson deleted is gone every week). If something is unclear (for example no day was given), ask one short question with "ask" instead of guessing, with no action for that item.
 - For quick questions, keep "reply" short. For "what do I have", list the items with day and time. Use the reply for any draft, translation, explanation, or other requested text.`;
 
 // what the assistant is doing, step by step — shown live like "Running a command ›"; tap to see every step
@@ -521,7 +604,8 @@ async function send({ retryNotes = false } = {}) {
   window.JundPlan?.add('msg');
   busy = true; $('#as-send').disabled = true;
   if (att) recentAttachment = { chatId, files };
-  log.push({ who: 'me', text: (att ? files.map(f => '📎 ' + f.name).join('\n') + '\n' : '') + t });
+  const sentQuote = retryNotes ? null : replyTo; replyTo = null; paintReplyTo();
+  log.push({ who: 'me', text: (att ? files.map(f => '📎 ' + f.name).join('\n') + '\n' : '') + t, ...(sentQuote ? { quote: sentQuote.text.slice(0, 300) } : {}) });
   if (att) window.JundAttach.clearHome();
   if (!retryNotes) { $('#as-text').value = ''; $('#as-text').style.height = 'auto'; }
   const pend = { who: 'ai', text: '…', working: true }; log.push(pend);
@@ -584,7 +668,8 @@ async function send({ retryNotes = false } = {}) {
     const ctx = await context(t);
     const nNotes = (await J.allLessons()).length, nCal = (window.JundCal?.events() || []).length;
     S.ok(st, ar ? `${nCal} موعدًا، ${nNotes} ملاحظات` : `${nCal} calendar items, ${nNotes} notes`);
-    const user = `${ctx}\n\nRECENT CHAT:\n${history || '(start)'}\n\nThe student now says: ${t}`;
+    const quoted = sentQuote ? `\n\nHe is replying to this earlier message (${sentQuote.who === 'me' ? 'his own' : 'yours'}): «${sentQuote.text.slice(0, 1500)}»` : '';
+    const user = `${ctx}\n\nRECENT CHAT:\n${history || '(start)'}${quoted}\n\nThe student now says: ${t}`;
     let r;
     if (att) {
       st = S.start(ar ? `قراءة الملف: ${att.name}` : `Reading the file: ${att.name}`, `${(att.size / 1048576).toFixed(1)} MB`);
@@ -610,6 +695,11 @@ async function send({ retryNotes = false } = {}) {
     if (acts.length && pend.done && pend.done.length < acts.length) pend.text += `
 ⚠ ${pend.done.length} of ${acts.length} changes were made; the rest were skipped or declined.`;
     if (out.open && /^L/.test(out.open)) pend.open = out.open;
+    if (out.ask && typeof out.ask.q === 'string' && out.ask.q.trim()) {
+      if (!pend.text.includes(out.ask.q.trim())) pend.text += '\n\n' + out.ask.q.trim();
+      pend.choices = (Array.isArray(out.ask.choices) ? out.ask.choices : []).filter(c => typeof c === 'string' && c.trim()).slice(0, 4);
+    }
+    pend.said = t;
   } catch (e) {
     if (st && st.state === 'run') S.fail(st, J.errText(e));
     pend.text = '✗ ' + J.errText(e);
@@ -626,6 +716,9 @@ async function send({ retryNotes = false } = {}) {
 
 async function apply(actions) {
   const cal = window.JundCal; if (!cal) return [];
+  // Hijri dates from the assistant ("h1448-06-15") → the exact Gregorian day
+  const fixH = v => { const m = /^h(\d{4})-(\d{1,2})-(\d{1,2})$/i.exec(String(v || '').trim()); return m ? window.JundFeatures?.fromHijri?.(m[1], m[2], m[3]) || v : v; };
+  for (const a of actions) for (const k of ['date', 'from', 'to']) if (a[k]) a[k] = fixH(a[k]);
   const evs = cal.events(), done = [], A = AR_();
   const nice = (d, t) => new Date(d + 'T12:00').toLocaleDateString(A ? 'ar-SA-u-ca-gregory' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + (t ? ' ' + t : '');
   // changes to things already in the calendar (move, delete) are asked ONCE, together, in Mustatar's own window

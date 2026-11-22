@@ -30,6 +30,28 @@ function hijriParts(d) {
   const m = Math.floor((24 * l) / 709);
   return { y: 30 * n + j - 30, m, d: l - Math.floor((709 * m) / 24) };
 }
+// a Hijri date (Umm al-Qura) → the Gregorian day, by walking the calendar (exact, the same table the phone uses)
+function fromHijri(y, m, d) {
+  y = +y; m = +m; d = +d; if (!(y > 1300 && m >= 1 && m <= 12 && d >= 1 && d <= 30)) return '';
+  const base = new Date(); base.setHours(12, 0, 0, 0);
+  const h0 = hijriParts(base), guess = Math.round(((y - h0.y) * 354.37) + ((m - h0.m) * 29.53) + (d - h0.d));
+  for (let off = 0; off <= 6; off++) for (const s of off ? [1, -1] : [1]) {
+    const t = new Date(+base + (guess + s * off) * 864e5), p = hijriParts(t);
+    if (p.y === y && p.m === m && p.d === d) return iso(t);
+  }
+  // day 30 in a 29-day month: the next day (1st of the next month)
+  if (d === 30) { const n = fromHijri(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1); return n; }
+  return '';
+}
+// the coming months, for the assistant: where each Hijri month starts
+function hijriTable(months = 14) {
+  const out = [], now = hijriParts(new Date());
+  for (let i = -1; i < months; i++) {
+    let y = now.y, m = now.m + i; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; }
+    const g = fromHijri(y, m, 1); if (g) out.push(`${y}-${String(m).padStart(2, '0')} (${HIJRI_MONTHS[m - 1]}) starts ${g}`);
+  }
+  return out.join('; ');
+}
 function hijri(d = new Date(), short = false) {
   try { const h = hijriParts(d); return short ? String(h.d) : `${h.d} ${HIJRI_MONTHS[h.m - 1]} ${h.y} AH`; } catch { return ''; }
 }
@@ -388,7 +410,7 @@ setInterval(() => { const r = store.get('focusRun'); if (r && Date.now() >= r.en
 
 /* ---------- start ---------- */
 function addHabit() { if (window.JundHabits) { window.JundHabits.open(); setTimeout(() => document.getElementById('hb-add')?.click(), 120); return; } document.body.classList.add('habit-adding'); window.JN.show('assistant'); renderHabits(); setTimeout(() => { const i = $('#habit-new'); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 150); }
-window.JundFeatures = { renderHabits, addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
+window.JundFeatures = { fromHijri, hijriTable, hijriParts, renderHabits, addHabit, createHabit, habitReminders, write, lessonText, home, onLesson, review, decorateCalendar, cleanCalendarExtras, openFocus, record: () => window.JundRecorder?.start(), hijri, hijriParts, timesFor, nextPrayer, prayerLine };
 // prayer place setting
 function placeSetting() {
   const sel = $('#prayer-place'); if (!sel) return;

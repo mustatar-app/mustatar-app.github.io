@@ -2213,8 +2213,7 @@ body.sr-open { overflow: hidden; }
 /* frosted glass over a wallpaper (from the "slop dashboard to product" reel): cards become translucent and blur the picture */
 :root[data-app-bg="desert"], :root[data-app-bg="nightsky"] { --glass: 1; }
 :root[data-app-bg="desert"] #app-bg-layer, :root[data-app-bg="nightsky"] #app-bg-layer { opacity: 1; }
-:root[data-app-bg="desert"] :is(.card, .hm-card, .tl-fold, .lb-card:not([data-c]), .lb-card[data-c=""], .kp-card[data-c=""], .mx-group, .pl-line, .settings-sec, .ci-card, .as-dock .as-input, .dr-panel, .tabbar),
-:root[data-app-bg="nightsky"] :is(.card, .hm-card, .tl-fold, .lb-card:not([data-c]), .lb-card[data-c=""], .kp-card[data-c=""], .mx-group, .pl-line, .settings-sec, .ci-card, .as-dock .as-input, .dr-panel, .tabbar) {
+:root[data-glass] :is(.card, .hm-card, .tl-fold, .lb-card:not([data-c]), .lb-card[data-c=""], .kp-card[data-c=""], .mx-group, .pl-line, .settings-sec, .ci-card, .as-dock .as-input, .dr-panel, .tabbar) {
   background: color-mix(in srgb, var(--surface) 70%, transparent) !important; -webkit-backdrop-filter: blur(16px) saturate(1.25); backdrop-filter: blur(16px) saturate(1.25); border-color: color-mix(in srgb, #fff 22%, transparent) !important; }
 /* the main button feels like a win when you hover it (computers) */
 @media (hover: hover) {
@@ -2225,8 +2224,8 @@ body.sr-open { overflow: hidden; }
 /* the ⌘K palette: "most used" actions first */
 .sr-kbd { margin-inline-start: auto; font-size: .72rem; color: var(--ink-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 /* wallpapers: the composer's white fade and the home tiles join the glass */
-:root[data-app-bg="desert"] .as-dock, :root[data-app-bg="nightsky"] .as-dock { background: none !important; }
-:root[data-app-bg="desert"] .hm-tiles > *, :root[data-app-bg="nightsky"] .hm-tiles > * { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+:root[data-glass] .as-dock { background: none !important; }
+:root[data-glass] .hm-tiles > * { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 /* on a computer the palette floats in the middle like a desktop app's ⌘K, instead of covering the screen */
 @media (min-width: 900px) {
   .sr { inset: 0; background: color-mix(in srgb, #000 28%, transparent); align-items: center; padding-top: 12vh; }
@@ -2264,3 +2263,41 @@ body.sr-open { overflow: hidden; }
 .al-edrow { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .ios-steps { margin: 8px 0 6px; padding-inline-start: 1.3em; line-height: 1.7; }
 .ios-dlg { max-width: 420px; }
+/* chat: copy, reply, 👍/👎 under messages; replying to a message; tap answers to a question */
+.as-log .msg { -webkit-user-select: text; user-select: text; }
+.as-tools-row { display: flex; gap: 2px; margin: -2px 4px 6px; opacity: .55; transition: opacity .15s; }
+.as-tools-row.me { align-self: flex-end; }
+.as-tools-row.ai { align-self: flex-start; }
+.as-tools-row:hover, .as-tools-row:focus-within { opacity: 1; }
+.as-tools-row button { border: 0; background: none; color: var(--ink-2); padding: 6px; border-radius: 8px; display: grid; place-items: center; min-width: 32px; min-height: 32px; }
+.as-tools-row button:hover { background: var(--surface-2); color: var(--ink); }
+.as-tools-row button.on { color: var(--accent); opacity: 1; }
+.as-quote { border-inline-start: 3px solid var(--accent); padding: 4px 8px; margin-bottom: 6px; font-size: .82rem; opacity: .8; background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+.as-replyto { display: flex; align-items: center; gap: 8px; margin: 0 4px 6px; padding: 7px 10px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); font-size: .85rem; }
+.as-replyto .as-rt-ic { color: var(--accent); display: grid; }
+.as-replyto .as-rt-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.as-replyto button { border: 0; background: none; color: var(--ink-2); font-size: 1rem; padding: 2px 6px; }
+.as-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; white-space: normal; }
+.as-fb .as-fb-c { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.as-fb .chip-b.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.as-fb textarea { width: 100%; box-sizing: border-box; }
+
+/* Glass theme: a soft coloured backdrop, and every card is frosted glass over it */
+:root[data-glass="own"] body { background:
+  radial-gradient(60vmax 50vmax at 85% -5%, color-mix(in srgb, #7B5CFF 45%, transparent), transparent 70%),
+  radial-gradient(55vmax 45vmax at -10% 35%, color-mix(in srgb, #1FB6FF 38%, transparent), transparent 70%),
+  radial-gradient(60vmax 50vmax at 70% 105%, color-mix(in srgb, #FF6FA8 30%, transparent), transparent 70%),
+  var(--bg) fixed; background-attachment: fixed; }
+:root[data-glass="own"][data-theme="light"] body { background:
+  radial-gradient(60vmax 50vmax at 85% -5%, #d9d0ff, transparent 70%), radial-gradient(55vmax 45vmax at -10% 35%, #c9ecff, transparent 70%),
+  radial-gradient(60vmax 50vmax at 70% 105%, #ffd6e6, transparent 70%), #f6f7fb fixed; }
+:root[data-glass="own"] .screen, :root[data-glass="own"] main { background: transparent !important; }
+:root[data-glass] :is(.card, .hm-card, .tl-fold, .settings-sec, .ci-card, .as-dock .as-input, .msg.ai, .msg.me, .chip-b, .tabbar, header.top, .kp-card[data-c=""], .lb-card:not([data-c])) {
+  background: color-mix(in srgb, var(--surface) 58%, transparent) !important; -webkit-backdrop-filter: blur(18px) saturate(1.35); backdrop-filter: blur(18px) saturate(1.35);
+  border-color: color-mix(in srgb, #fff 18%, transparent) !important; box-shadow: 0 8px 30px rgb(0 0 0 / .12), inset 0 1px 0 rgb(255 255 255 / .08); }
+:root[data-glass][data-theme="light"] :is(.card, .hm-card, .tl-fold, .settings-sec, .as-dock .as-input, .msg.ai, .msg.me, .tabbar) { background: color-mix(in srgb, #fff 55%, transparent) !important; border-color: color-mix(in srgb, #fff 70%, transparent) !important; }
+.font-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.font-b { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.font-b b { font-size: 1.15rem; font-weight: 600; }
+.font-b small { color: var(--ink-2); font-size: .72rem; }
+.font-b.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
